@@ -12,7 +12,7 @@ use wcore::{InMemory, Memory};
 /// Determines the model provider, memory backend, and compaction/flush prompts.
 /// No instances are created — methods are called as `H::compact()`.
 pub trait Hook {
-    /// The model provider for this hook (DD#70).
+    /// The model provider for this hook.
     type Model: Model + Send + Sync;
 
     /// The memory backend for this hook.

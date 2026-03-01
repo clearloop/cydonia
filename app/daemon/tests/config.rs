@@ -1,4 +1,4 @@
-//! Daemon configuration tests (DD#67).
+//! Daemon configuration tests.
 
 use walrus_daemon::DaemonConfig;
 

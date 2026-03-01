@@ -1,4 +1,4 @@
-//! Shared OpenAI-compatible request body (DD#58, DD#71).
+//! Shared OpenAI-compatible request body.
 //!
 //! Superset of the fields used by DeepSeek, OpenAI, and Mistral. Fields
 //! use `Option` + `skip_serializing_if` so provider-specific extras (like

@@ -3,7 +3,7 @@
 //!
 //! Merges all provider backends (DeepSeek, OpenAI, Claude, Local) with the
 //! `Provider` enum, `ProviderManager`, and `ProviderConfig` into a single crate.
-//! Config uses flat `ProviderConfig` with model-prefix kind detection (DD#67).
+//! Config uses flat `ProviderConfig` with model-prefix kind detection.
 
 pub mod config;
 pub mod http;

@@ -23,7 +23,7 @@ pub struct Agent {
     pub tools: SmallVec<[CompactString; 8]>,
     /// Skill tags for matching agent capabilities to skills.
     pub skill_tags: SmallVec<[CompactString; 4]>,
-    /// Model to use from the registry. None = registry's active/default (DD#68).
+    /// Model to use from the registry. None = registry's active/default.
     pub model: Option<CompactString>,
 }
 
@@ -60,7 +60,7 @@ impl Agent {
         self
     }
 
-    /// Set the model to use from the registry (DD#68).
+    /// Set the model to use from the registry.
     pub fn model(mut self, name: impl Into<CompactString>) -> Self {
         self.model = Some(name.into());
         self

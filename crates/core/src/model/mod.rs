@@ -1,4 +1,4 @@
-//! Unified LLM interface types and traits (DD#69, DD#70).
+//! Unified LLM interface types and traits.
 //!
 //! Provides the shared types used across all LLM providers:
 //! `Message`, `Response`, `StreamChunk`, `Tool`, `Request`, and the `Model` trait.
@@ -22,14 +22,14 @@ mod response;
 mod stream;
 mod tool;
 
-/// Unified LLM provider trait (DD#70).
+/// Unified LLM provider trait.
 ///
 /// Abstracts any LLM provider — single-backend (DeepSeek, Claude) or
 /// multi-model registry (ProviderManager). All implementations take
 /// `&Request` directly; no associated config type.
 ///
 /// Constructors are inherent methods on each provider — never called
-/// polymorphically (DD#57).
+/// polymorphically.
 pub trait Model: Sized + Clone {
     /// Send a chat completion request.
     fn send(&self, request: &Request) -> impl Future<Output = Result<Response>> + Send;

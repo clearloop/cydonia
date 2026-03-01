@@ -1,7 +1,7 @@
 //! Default context limits for known model families.
 //!
 //! Provides a static map from model ID prefixes to context window sizes.
-//! Used by the model registry for per-model context limit resolution (DD#68).
+//! Used by the model registry for per-model context limit resolution.
 
 /// Returns the default context limit (in tokens) for a known model ID.
 ///

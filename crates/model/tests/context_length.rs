@@ -1,4 +1,4 @@
-//! Tests for `Provider::context_length()` (DD#68, P18-04).
+//! Tests for `Provider::context_length()`.
 
 use walrus_model::{Provider, ProviderConfig, build_provider};
 

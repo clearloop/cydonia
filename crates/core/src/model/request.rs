@@ -1,4 +1,4 @@
-//! Chat request type (DD#69).
+//! Chat request type.
 
 use crate::model::{Message, Tool, ToolChoice};
 use compact_str::CompactString;

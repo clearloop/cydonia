@@ -1,5 +1,5 @@
 //! `ProviderManager` — concurrent-safe named provider registry with model
-//! routing and active-provider swapping (DD#65, DD#67, DD#70).
+//! routing and active-provider swapping.
 
 use crate::{Provider, ProviderConfig, build_provider};
 use anyhow::{Result, bail};
@@ -165,7 +165,7 @@ impl ProviderManager {
             .ok_or_else(|| anyhow::anyhow!("model '{}' not found in registry", model))
     }
 
-    /// Resolve the context limit for a model (DD#68).
+    /// Resolve the context limit for a model.
     ///
     /// Resolution chain: provider reports limit → static map → 8192 default.
     pub fn context_limit(&self, model: &str) -> usize {

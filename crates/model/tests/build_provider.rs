@@ -1,4 +1,4 @@
-//! Tests for `build_provider()` factory (DD#67).
+//! Tests for `build_provider()` factory.
 
 use walrus_model::{Provider, ProviderConfig, build_provider};
 

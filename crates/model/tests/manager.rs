@@ -1,4 +1,4 @@
-//! Tests for `ProviderManager` (DD#67, DD#68, DD#70).
+//! Tests for `ProviderManager`.
 
 use walrus_model::{ProviderConfig, ProviderManager};
 use wcore::model::{Model, Request};
@@ -141,7 +141,7 @@ async fn empty_configs_fails() {
     );
 }
 
-// --- P18-05: Routing tests (DD#68) ---
+// --- Routing tests ---
 
 #[tokio::test]
 async fn send_unknown_model_errors() {

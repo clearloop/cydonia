@@ -1,6 +1,6 @@
 //! Walrus Telegram channel adapter.
 //!
-//! Connects agents to Telegram via the Bot API using reqwest directly (DD#2).
+//! Connects agents to Telegram via the Bot API using reqwest directly.
 //! Implements the [`Channel`] trait from walrus-core.
 
 use anyhow::Result;

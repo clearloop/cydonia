@@ -1,4 +1,4 @@
-//! Tests for `ProviderConfig` (DD#67).
+//! Tests for `ProviderConfig`.
 
 use walrus_model::{ProviderConfig, ProviderKind};
 

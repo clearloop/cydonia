@@ -1,4 +1,4 @@
-//! Provider implementation (DD#67, DD#70).
+//! Provider implementation.
 //!
 //! Unified `Provider` enum with enum dispatch over concrete backends.
 //! `build_provider()` matches on `ProviderKind` detected from the model name.

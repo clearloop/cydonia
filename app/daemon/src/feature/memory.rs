@@ -1,7 +1,7 @@
 //! Memory backend enum for static dispatch over memory implementations.
 //!
 //! Wraps [`InMemory`] and [`SqliteMemory<NoEmbedder>`] with Memory trait
-//! delegation, following the Provider enum pattern (DD#22).
+//! delegation, following the Provider enum pattern.
 
 use anyhow::Result;
 use memory::SqliteMemory;

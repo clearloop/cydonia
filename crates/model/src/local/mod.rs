@@ -1,4 +1,4 @@
-//! Local LLM provider via mistralrs (DD#67).
+//! Local LLM provider via mistralrs.
 //!
 //! Wraps `mistralrs::Model` for native on-device inference.
 //! No HTTP transport — inference runs in-process.

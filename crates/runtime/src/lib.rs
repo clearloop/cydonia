@@ -95,7 +95,7 @@ impl<H: Hook + 'static> Runtime<H> {
             sessions: BTreeMap::new(),
         };
 
-        // Auto-register the "remember" tool (DD#23).
+        // Auto-register the "remember" tool.
         let mem = memory;
         let schema = serde_json::json!({
             "type": "object",
@@ -204,7 +204,7 @@ impl<H: Hook + 'static> Runtime<H> {
         self.tools.insert(name, (tool, handler));
     }
 
-    /// Context window limit for a specific model (DD#68).
+    /// Context window limit for a specific model.
     pub fn context_limit(&self, model: &str) -> usize {
         self.provider.context_limit(model)
     }
@@ -216,7 +216,7 @@ impl<H: Hook + 'static> Runtime<H> {
 
     /// Resolve tool schemas and handlers for the given tool names.
     ///
-    /// Supports glob prefixes (DD#21): a name ending in `*` expands against
+    /// Supports glob prefixes: a name ending in `*` expands against
     /// all registered tool names by prefix match. No-match globs are logged.
     pub fn resolve_tools(&self, names: &[CompactString]) -> Vec<(Tool, Handler)> {
         let mut resolved = Vec::new();
@@ -368,7 +368,7 @@ impl<H: Hook + 'static> Runtime<H> {
 
     // --- Private helpers ---
 
-    /// Resolve the model name for an agent (DD#68).
+    /// Resolve the model name for an agent.
     ///
     /// Uses the agent's model field if set, otherwise the provider's active model.
     fn resolve_model(&self, agent: &Agent) -> CompactString {

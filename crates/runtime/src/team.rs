@@ -52,7 +52,7 @@ pub fn build_team<H: Hook + 'static>(
             (t, h)
         };
 
-        // Resolve model for this worker (DD#68).
+        // Resolve model for this worker.
         let model = worker
             .model
             .clone()
