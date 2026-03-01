@@ -30,6 +30,3 @@ cron = { workspace = true }
 chrono = { workspace = true }
 rmcp = { workspace = true }
 dirs = { workspace = true }
-
-[dev-dependencies]
-tempfile = { workspace = true }
