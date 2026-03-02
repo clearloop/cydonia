@@ -56,5 +56,5 @@ async fn main() {
     println!("  'Search for Rust programming on Wikipedia'");
     println!("(type 'exit' to quit)");
     println!("---");
-    common::repl(&mut runtime, "assistant").await;
+    common::repl(&runtime, "assistant").await;
 }

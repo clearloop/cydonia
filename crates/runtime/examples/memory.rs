@@ -50,5 +50,5 @@ async fn main() {
     }
     println!();
 
-    common::repl_with_memory(&mut runtime, "assistant").await;
+    common::repl_with_memory(&runtime, "assistant").await;
 }

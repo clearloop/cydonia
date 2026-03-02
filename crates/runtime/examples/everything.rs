@@ -73,5 +73,5 @@ async fn main() {
     println!("Everything REPL — leader + analyst team, tools, memory, skills");
     println!("(type 'exit' to quit)");
     println!("---");
-    common::repl(&mut runtime, "leader").await;
+    common::repl(&runtime, "leader").await;
 }

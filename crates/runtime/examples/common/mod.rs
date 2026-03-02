@@ -48,7 +48,7 @@ pub fn build_runtime() -> Runtime<ExampleHook> {
 }
 
 /// Simple REPL loop: read lines from stdin, stream to agent.
-pub async fn repl<H: Hook + 'static>(runtime: &mut Runtime<H>, agent: &str) {
+pub async fn repl<H: Hook + 'static>(runtime: &Runtime<H>, agent: &str) {
     use futures_util::StreamExt;
     use std::io::{BufRead, Write};
 
@@ -75,7 +75,7 @@ pub async fn repl<H: Hook + 'static>(runtime: &mut Runtime<H>, agent: &str) {
 }
 
 /// REPL loop that prints memory entries after each exchange.
-pub async fn repl_with_memory<H: Hook + 'static>(runtime: &mut Runtime<H>, agent: &str) {
+pub async fn repl_with_memory<H: Hook + 'static>(runtime: &Runtime<H>, agent: &str) {
     use futures_util::StreamExt;
     use std::io::{BufRead, Write};
 

@@ -1,13 +1,10 @@
 //! Unix domain socket server — accept loop and per-connection message handler.
 
 use crate::gateway::Gateway;
-use compact_str::CompactString;
 use memory::Memory;
 use protocol::codec::{self, FrameError};
 use protocol::{AgentSummary, ClientMessage, ServerMessage};
 use runtime::Hook;
-use std::collections::BTreeMap;
-use std::sync::Arc;
 use tokio::net::UnixListener;
 use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::sync::{mpsc, oneshot};
@@ -74,8 +71,6 @@ async fn receiver_loop<H: Hook + 'static>(
     tx: mpsc::UnboundedSender<ServerMessage>,
     state: Gateway<H>,
 ) {
-    let mut session_histories: BTreeMap<CompactString, Vec<Message>> = BTreeMap::new();
-
     loop {
         let client_msg: ClientMessage = match codec::read_message(&mut reader).await {
             Ok(msg) => msg,
@@ -88,17 +83,10 @@ async fn receiver_loop<H: Hook + 'static>(
 
         match client_msg {
             ClientMessage::Send { agent, content } => {
-                let history = session_histories.entry(agent.clone()).or_default();
-                match state
-                    .runtime
-                    .send_stateless(&agent, history, &content)
-                    .await
-                {
+                match state.runtime.send_to(&agent, Message::user(&content)).await {
                     Ok(response) => {
-                        let _ = tx.send(ServerMessage::Response {
-                            agent,
-                            content: response,
-                        });
+                        let content = response.content().cloned().unwrap_or_default();
+                        let _ = tx.send(ServerMessage::Response { agent, content });
                     }
                     Err(e) => {
                         let _ = tx.send(ServerMessage::Error {
@@ -114,54 +102,26 @@ async fn receiver_loop<H: Hook + 'static>(
                     agent: agent.clone(),
                 });
 
-                let history = session_histories.entry(agent.clone()).or_default();
-                let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel();
-                let msgs = std::mem::take(history);
-                let runtime = Arc::clone(&state.runtime);
-                let agent_name = agent.clone();
-                let content_owned = content.clone();
+                {
+                    let stream = state.runtime.stream_to(&agent, Message::user(&content));
+                    futures_util::pin_mut!(stream);
 
-                // Spawn agent execution so events flow concurrently.
-                let handle = tokio::spawn(async move {
-                    runtime
-                        .stream_stateless(&agent_name, msgs, &content_owned, event_tx)
-                        .await
-                });
-
-                // Drain events in the foreground for real-time streaming.
-                while let Some(event) = event_rx.recv().await {
-                    match event {
-                        wcore::AgentEvent::TextDelta(text) => {
-                            let _ = tx.send(ServerMessage::StreamChunk { content: text });
+                    while let Some(event) = futures_util::StreamExt::next(&mut stream).await {
+                        match event {
+                            wcore::AgentEvent::TextDelta(text) => {
+                                let _ = tx.send(ServerMessage::StreamChunk { content: text });
+                            }
+                            wcore::AgentEvent::Done(_) => break,
+                            _ => {}
                         }
-                        wcore::AgentEvent::Done(_) => break,
-                        _ => {}
                     }
                 }
 
-                // Collect updated history from the spawned task.
-                match handle.await {
-                    Ok(Ok(updated_msgs)) => {
-                        *history = updated_msgs;
-                    }
-                    Ok(Err(e)) => {
-                        let _ = tx.send(ServerMessage::Error {
-                            code: 500,
-                            message: format!("stream error: {e}"),
-                        });
-                    }
-                    Err(e) => {
-                        let _ = tx.send(ServerMessage::Error {
-                            code: 500,
-                            message: format!("stream task panicked: {e}"),
-                        });
-                    }
-                }
                 let _ = tx.send(ServerMessage::StreamEnd { agent });
             }
 
             ClientMessage::ClearSession { agent } => {
-                session_histories.remove(&agent);
+                state.runtime.clear_session(&agent).await;
                 let _ = tx.send(ServerMessage::SessionCleared { agent });
             }
 

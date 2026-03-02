@@ -19,6 +19,7 @@ memory = { workspace = true }
 channel = { workspace = true }
 protocol = { workspace = true }
 compact_str = { workspace = true }
+futures-util = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 toml = { workspace = true }

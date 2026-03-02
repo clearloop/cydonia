@@ -49,5 +49,5 @@ async fn main() {
     println!("  'What day of the week is it today?'");
     println!("(type 'exit' to quit)");
     println!("---");
-    common::repl(&mut runtime, "assistant").await;
+    common::repl(&runtime, "assistant").await;
 }

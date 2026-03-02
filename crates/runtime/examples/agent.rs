@@ -28,5 +28,5 @@ async fn main() {
 
     println!("Agent REPL (type 'exit' to quit)");
     println!("---");
-    common::repl(&mut runtime, "assistant").await;
+    common::repl(&runtime, "assistant").await;
 }

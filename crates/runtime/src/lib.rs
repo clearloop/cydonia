@@ -19,6 +19,7 @@ use anyhow::Result;
 use compact_str::CompactString;
 use futures_core::Stream;
 use std::{collections::BTreeMap, future::Future, pin::Pin, sync::Arc};
+use tokio::sync::RwLock;
 use wcore::AgentEvent;
 use wcore::model::Model;
 
@@ -68,7 +69,7 @@ pub struct Runtime<H: Hook> {
     mcp: Option<Arc<McpBridge>>,
     tools: BTreeMap<CompactString, (Tool, Handler)>,
     agents: BTreeMap<CompactString, AgentConfig>,
-    sessions: BTreeMap<CompactString, Session>,
+    sessions: RwLock<BTreeMap<CompactString, Session>>,
 }
 
 impl<H: Hook + 'static> Runtime<H> {
@@ -83,7 +84,7 @@ impl<H: Hook + 'static> Runtime<H> {
             mcp: None,
             tools: BTreeMap::new(),
             agents: BTreeMap::new(),
-            sessions: BTreeMap::new(),
+            sessions: RwLock::new(BTreeMap::new()),
         }
     }
 
@@ -165,8 +166,8 @@ impl<H: Hook + 'static> Runtime<H> {
     }
 
     /// Clear the session for a named agent, resetting conversation history.
-    pub fn clear_session(&mut self, agent: &str) {
-        self.sessions.remove(agent);
+    pub async fn clear_session(&self, agent: &str) {
+        self.sessions.write().await.remove(agent);
     }
 
     /// Resolve tool schemas and handlers for the given tool names.
@@ -271,14 +272,21 @@ impl<H: Hook + 'static> Runtime<H> {
     ///
     /// Creates an ephemeral Agent, runs it with a RuntimeDispatcher,
     /// and returns the final response. Events are emitted via Hook::on_event().
-    pub async fn send_to(&mut self, agent: &str, message: Message) -> Result<Response> {
+    pub async fn send_to(&self, agent: &str, message: Message) -> Result<Response> {
         let agent_config = self
             .agents
             .get(agent)
             .ok_or_else(|| anyhow::anyhow!("agent '{agent}' not registered"))?
             .clone();
         let key = CompactString::from(agent);
-        let mut session = self.sessions.remove(&key).unwrap_or_else(Session::new);
+
+        let mut session = {
+            self.sessions
+                .write()
+                .await
+                .remove(&key)
+                .unwrap_or_else(Session::new)
+        };
         session.messages.push(message);
 
         let dispatcher = self.build_dispatcher(&agent_config);
@@ -293,7 +301,10 @@ impl<H: Hook + 'static> Runtime<H> {
 
         let agent_response = agent_instance.run(&self.provider, &dispatcher).await;
         let messages = agent_instance.messages().to_vec();
-        self.sessions.insert(key, Session { messages });
+        self.sessions
+            .write()
+            .await
+            .insert(key, Session { messages });
 
         agent_response
             .steps
@@ -306,7 +317,7 @@ impl<H: Hook + 'static> Runtime<H> {
     ///
     /// Creates an ephemeral Agent and yields AgentEvents as a stream.
     pub fn stream_to<'a>(
-        &'a mut self,
+        &'a self,
         agent: &'a str,
         message: Message,
     ) -> impl Stream<Item = AgentEvent> + 'a {
@@ -326,7 +337,10 @@ impl<H: Hook + 'static> Runtime<H> {
                 }
             };
             let key = CompactString::from(agent);
-            let mut session = self.sessions.remove(&key).unwrap_or_else(Session::new);
+
+            let mut session = {
+                self.sessions.write().await.remove(&key).unwrap_or_else(Session::new)
+            };
             session.messages.push(message);
 
             let dispatcher = self.build_dispatcher(&agent_config);
@@ -343,84 +357,7 @@ impl<H: Hook + 'static> Runtime<H> {
             }
 
             let messages = agent_instance.messages().to_vec();
-            self.sessions.insert(key, Session { messages });
+            self.sessions.write().await.insert(key, Session { messages });
         }
-    }
-
-    /// Stateless send: run the agent with externally managed history.
-    ///
-    /// Unlike [`send_to`](Self::send_to), this takes `&self` (no session mutation)
-    /// and accepts the caller's message history directly.
-    pub async fn send_stateless(
-        &self,
-        agent: &str,
-        messages: &mut Vec<Message>,
-        content: &str,
-    ) -> Result<String> {
-        let agent_config = self
-            .agents
-            .get(agent)
-            .ok_or_else(|| anyhow::anyhow!("agent '{agent}' not registered"))?
-            .clone();
-
-        messages.push(Message::user(content));
-
-        let dispatcher = self.build_dispatcher(&agent_config);
-        let (mut agent_instance, mut rx) = self.create_agent(&agent_config, messages.clone());
-
-        // Spawn event drain task.
-        tokio::spawn(async move {
-            while let Some(event) = rx.recv().await {
-                H::on_event(&event);
-            }
-        });
-
-        let agent_response = agent_instance.run(&self.provider, &dispatcher).await;
-
-        // Copy the agent's history back to the caller.
-        *messages = agent_instance.messages().to_vec();
-
-        Ok(agent_response.final_response.unwrap_or_default())
-    }
-
-    /// Stateless stream: run agent and emit events through a channel.
-    ///
-    /// Like [`send_stateless`](Self::send_stateless) but emits [`AgentEvent`]s
-    /// through the provided channel for real-time forwarding. Returns the
-    /// updated message history after the agent run completes.
-    ///
-    /// Callers should drain the receiver concurrently (e.g. in a separate task
-    /// or via `tokio::spawn`) to achieve true streaming to clients.
-    pub async fn stream_stateless(
-        &self,
-        agent: &str,
-        mut messages: Vec<Message>,
-        content: &str,
-        event_tx: tokio::sync::mpsc::UnboundedSender<AgentEvent>,
-    ) -> Result<Vec<Message>> {
-        let agent_config = self
-            .agents
-            .get(agent)
-            .ok_or_else(|| anyhow::anyhow!("agent '{agent}' not registered"))?
-            .clone();
-
-        messages.push(Message::user(content));
-
-        let dispatcher = self.build_dispatcher(&agent_config);
-        let (mut agent_instance, _rx) = self.create_agent(&agent_config, messages);
-
-        {
-            let stream = agent_instance.run_stream(&self.provider, &dispatcher);
-            futures_util::pin_mut!(stream);
-
-            while let Some(event) = futures_util::StreamExt::next(&mut stream).await {
-                H::on_event(&event);
-                if event_tx.send(event).is_err() {
-                    break;
-                }
-            }
-        }
-
-        Ok(agent_instance.messages().to_vec())
     }
 }

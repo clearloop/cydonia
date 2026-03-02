@@ -76,8 +76,8 @@ async fn main() {
         );
 
         // Clear sessions so each question is independent.
-        runtime.clear_session("default");
-        runtime.clear_session("concise");
+        runtime.clear_session("default").await;
+        runtime.clear_session("concise").await;
 
         println!();
     }
