@@ -28,7 +28,7 @@ async fn main() {
         .set("learning", "Currently learning Rust, focus on async.");
 
     runtime.add_agent(
-        Agent::new("assistant")
+        AgentConfig::new("assistant")
             .system_prompt(
                 "You are a helpful assistant. Use any stored memory about the user \
                  to personalize your responses. When the user shares new information \

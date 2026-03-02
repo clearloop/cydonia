@@ -4,9 +4,8 @@
 //! delegation, following the Provider enum pattern.
 
 use anyhow::Result;
-use memory::SqliteMemory;
+use memory::{InMemory, Memory, MemoryEntry, NoEmbedder, RecallOptions, SqliteMemory};
 use std::future::Future;
-use wcore::{InMemory, Memory, MemoryEntry, NoEmbedder, RecallOptions};
 
 /// Memory backend selected from configuration.
 ///

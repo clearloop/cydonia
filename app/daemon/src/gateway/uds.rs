@@ -2,14 +2,15 @@
 
 use crate::gateway::Gateway;
 use compact_str::CompactString;
+use memory::Memory;
 use protocol::codec::{self, FrameError};
 use protocol::{AgentSummary, ClientMessage, ServerMessage};
 use runtime::Hook;
 use std::collections::BTreeMap;
+use std::sync::Arc;
 use tokio::net::UnixListener;
 use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::sync::{mpsc, oneshot};
-use wcore::Memory;
 use wcore::model::Message;
 
 /// Accept connections on the given `UnixListener` until shutdown is signalled.
@@ -114,22 +115,49 @@ async fn receiver_loop<H: Hook + 'static>(
                 });
 
                 let history = session_histories.entry(agent.clone()).or_default();
-                match state
-                    .runtime
-                    .send_stateless(&agent, history, &content)
-                    .await
-                {
-                    Ok(response) => {
-                        let _ = tx.send(ServerMessage::StreamChunk { content: response });
-                        let _ = tx.send(ServerMessage::StreamEnd { agent });
+                let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel();
+                let msgs = std::mem::take(history);
+                let runtime = Arc::clone(&state.runtime);
+                let agent_name = agent.clone();
+                let content_owned = content.clone();
+
+                // Spawn agent execution so events flow concurrently.
+                let handle = tokio::spawn(async move {
+                    runtime
+                        .stream_stateless(&agent_name, msgs, &content_owned, event_tx)
+                        .await
+                });
+
+                // Drain events in the foreground for real-time streaming.
+                while let Some(event) = event_rx.recv().await {
+                    match event {
+                        wcore::AgentEvent::TextDelta(text) => {
+                            let _ = tx.send(ServerMessage::StreamChunk { content: text });
+                        }
+                        wcore::AgentEvent::Done(_) => break,
+                        _ => {}
                     }
-                    Err(e) => {
+                }
+
+                // Collect updated history from the spawned task.
+                match handle.await {
+                    Ok(Ok(updated_msgs)) => {
+                        *history = updated_msgs;
+                    }
+                    Ok(Err(e)) => {
                         let _ = tx.send(ServerMessage::Error {
                             code: 500,
                             message: format!("stream error: {e}"),
                         });
                     }
+                    Err(e) => {
+                        let _ = tx.send(ServerMessage::Error {
+                            code: 500,
+                            message: format!("stream task panicked: {e}"),
+                        });
+                    }
                 }
+                let _ = tx.send(ServerMessage::StreamEnd { agent });
             }
 
             ClientMessage::ClearSession { agent } => {

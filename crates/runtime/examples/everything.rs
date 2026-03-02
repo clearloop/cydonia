@@ -58,11 +58,11 @@ async fn main() {
         .set("preference", "User prefers direct answers with examples.");
 
     // 4. Build a team: leader delegates to analyst worker.
-    let leader = Agent::new("leader")
+    let leader = AgentConfig::new("leader")
         .system_prompt("You are a team leader. Delegate research to the analyst.")
         .skill_tag("style")
         .tool("current_time");
-    let analyst = Agent::new("analyst")
+    let analyst = AgentConfig::new("analyst")
         .description("Research analyst — answers factual questions.")
         .system_prompt("You are a research analyst. Provide well-reasoned answers.")
         .tool("current_time");

@@ -11,6 +11,7 @@ keywords.workspace = true
 
 [dependencies]
 wcore.workspace = true
+memory.workspace = true
 
 # crates-io dependencies
 anyhow.workspace = true

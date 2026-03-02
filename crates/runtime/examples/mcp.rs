@@ -43,7 +43,7 @@ async fn main() {
         .expect("failed to register MCP tools");
 
     runtime.add_agent(
-        Agent::new("assistant")
+        AgentConfig::new("assistant")
             .system_prompt(
                 "You are a helpful web browsing assistant. Use Playwright tools \
                  to navigate pages, interact with elements, and read page content.",

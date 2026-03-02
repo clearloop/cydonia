@@ -6028,6 +6028,7 @@ dependencies = [
  "serde",
  "serde_json",
  "smallvec 1.15.1",
+ "tokio",
  "tracing",
 ]
 
@@ -6048,6 +6049,7 @@ dependencies = [
  "toml 0.8.23",
  "tracing",
  "tracing-subscriber",
+ "walrus-channel",
  "walrus-core",
  "walrus-memory",
  "walrus-model",
@@ -6116,6 +6118,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "walrus-core",
+ "walrus-memory",
  "walrus-model",
 ]
 

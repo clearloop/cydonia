@@ -16,6 +16,7 @@ runtime = { workspace = true }
 wcore = { workspace = true }
 model = { workspace = true }
 memory = { workspace = true }
+channel = { workspace = true }
 protocol = { workspace = true }
 compact_str = { workspace = true }
 serde = { workspace = true }
