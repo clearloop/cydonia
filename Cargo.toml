@@ -57,3 +57,16 @@ rustyline = "15"
 crossterm = "0.29"
 dirs = "6"
 mistralrs = { version = "0.7", default-features = false }
+
+[workspace.metadata.conta]
+packages = [
+    "core",
+    "model",
+    "memory",
+    "channel",
+    "runtime",
+    "protocol",
+    "client",
+    "daemon",
+    "cli",
+]
