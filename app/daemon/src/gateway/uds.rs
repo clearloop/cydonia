@@ -6,10 +6,6 @@ use protocol::api::Server;
 use protocol::codec::{self, FrameError};
 use protocol::message::client::ClientMessage;
 use protocol::message::server::ServerMessage;
-use protocol::message::{
-    AgentInfoRequest, ClearSessionRequest, DownloadRequest, GetMemoryRequest, McpAddRequest,
-    McpRemoveRequest, SendRequest, StreamRequest,
-};
 use tokio::net::UnixListener;
 use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::sync::{mpsc, oneshot};
@@ -69,16 +65,6 @@ async fn sender_loop(mut writer: OwnedWriteHalf, mut rx: mpsc::UnboundedReceiver
     }
 }
 
-/// Convert a Server trait result into a ServerMessage.
-fn result_to_msg<T: Into<ServerMessage>>(
-    result: Result<T, protocol::error::ProtocolError>,
-) -> ServerMessage {
-    match result {
-        Ok(resp) => resp.into(),
-        Err(e) => e.into(),
-    }
-}
-
 /// Reads client messages from the socket and dispatches them via Server trait.
 async fn receiver_loop(
     mut reader: OwnedReadHalf,
@@ -95,97 +81,10 @@ async fn receiver_loop(
             }
         };
 
-        match client_msg {
-            ClientMessage::Send { agent, content } => {
-                let msg = result_to_msg(state.send(SendRequest { agent, content }).await);
-                let _ = tx.send(msg);
-            }
-
-            ClientMessage::Stream { agent, content } => {
-                let stream = state.stream(StreamRequest { agent, content });
-                futures_util::pin_mut!(stream);
-                while let Some(result) = stream.next().await {
-                    let msg = result_to_msg(result);
-                    let _ = tx.send(msg);
-                }
-            }
-
-            ClientMessage::ClearSession { agent } => {
-                let msg = result_to_msg(state.clear_session(ClearSessionRequest { agent }).await);
-                let _ = tx.send(msg);
-            }
-
-            ClientMessage::ListAgents => {
-                let msg = result_to_msg(state.list_agents().await);
-                let _ = tx.send(msg);
-            }
-
-            ClientMessage::AgentInfo { agent } => {
-                let msg = result_to_msg(state.agent_info(AgentInfoRequest { agent }).await);
-                let _ = tx.send(msg);
-            }
-
-            ClientMessage::ListMemory => {
-                let msg = result_to_msg(state.list_memory().await);
-                let _ = tx.send(msg);
-            }
-
-            ClientMessage::GetMemory { key } => {
-                let msg = result_to_msg(state.get_memory(GetMemoryRequest { key }).await);
-                let _ = tx.send(msg);
-            }
-
-            ClientMessage::Download { model } => {
-                let stream = state.download(DownloadRequest { model });
-                futures_util::pin_mut!(stream);
-                while let Some(result) = stream.next().await {
-                    let msg = result_to_msg(result);
-                    let _ = tx.send(msg);
-                }
-            }
-
-            ClientMessage::ReloadSkills => {
-                let msg = result_to_msg(state.reload_skills().await);
-                let _ = tx.send(msg);
-            }
-
-            ClientMessage::McpAdd {
-                name,
-                command,
-                args,
-                env,
-            } => {
-                let msg = result_to_msg(
-                    state
-                        .mcp_add(McpAddRequest {
-                            name,
-                            command,
-                            args,
-                            env,
-                        })
-                        .await,
-                );
-                let _ = tx.send(msg);
-            }
-
-            ClientMessage::McpRemove { name } => {
-                let msg = result_to_msg(state.mcp_remove(McpRemoveRequest { name }).await);
-                let _ = tx.send(msg);
-            }
-
-            ClientMessage::McpReload => {
-                let msg = result_to_msg(state.mcp_reload().await);
-                let _ = tx.send(msg);
-            }
-
-            ClientMessage::McpList => {
-                let msg = result_to_msg(state.mcp_list().await);
-                let _ = tx.send(msg);
-            }
-
-            ClientMessage::Ping => {
-                let _ = tx.send(ServerMessage::Pong);
-            }
+        let stream = state.dispatch(client_msg);
+        tokio::pin!(stream);
+        while let Some(server_msg) = stream.next().await {
+            let _ = tx.send(server_msg);
         }
     }
 }

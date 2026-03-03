@@ -6709,6 +6709,7 @@ dependencies = [
  "compact_str 0.8.1",
  "dirs",
  "futures-core",
+ "futures-util",
  "serde",
  "serde_json",
  "tokio",
