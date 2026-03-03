@@ -17,6 +17,7 @@ use std::future::Future;
 mod embedder;
 mod mem;
 mod sqlite;
+pub mod tools;
 mod utils;
 
 pub use embedder::{Embedder, NoEmbedder};

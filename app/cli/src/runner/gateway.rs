@@ -6,7 +6,6 @@ use compact_str::CompactString;
 use futures_core::Stream;
 use futures_util::StreamExt;
 use protocol::api::Client;
-use protocol::error::ProtocolError;
 use protocol::message::{
     AgentDetail, AgentInfoRequest, AgentSummary, DownloadEvent, DownloadRequest, GetMemoryRequest,
     SendRequest, StreamEvent, StreamRequest,
@@ -32,7 +31,7 @@ impl GatewayRunner {
 
     /// List all registered agents.
     pub async fn list_agents(&mut self) -> Result<Vec<AgentSummary>> {
-        let resp = self.connection.list_agents().await.map_err(anyhow_from)?;
+        let resp = self.connection.list_agents().await?;
         Ok(resp.agents)
     }
 
@@ -43,12 +42,11 @@ impl GatewayRunner {
                 agent: CompactString::from(agent),
             })
             .await
-            .map_err(anyhow_from)
     }
 
     /// List all memory entries.
     pub async fn list_memory(&mut self) -> Result<Vec<(String, String)>> {
-        let resp = self.connection.list_memory().await.map_err(anyhow_from)?;
+        let resp = self.connection.list_memory().await?;
         Ok(resp.entries)
     }
 
@@ -57,11 +55,9 @@ impl GatewayRunner {
         &mut self,
         model: &str,
     ) -> impl Stream<Item = Result<DownloadEvent>> + '_ {
-        self.connection
-            .download(DownloadRequest {
-                model: CompactString::from(model),
-            })
-            .map(|r| r.map_err(anyhow_from))
+        self.connection.download(DownloadRequest {
+            model: CompactString::from(model),
+        })
     }
 
     /// Get a specific memory entry by key.
@@ -71,8 +67,7 @@ impl GatewayRunner {
             .get_memory(GetMemoryRequest {
                 key: key.to_string(),
             })
-            .await
-            .map_err(anyhow_from)?;
+            .await?;
         Ok(resp.value)
     }
 }
@@ -85,8 +80,7 @@ impl Runner for GatewayRunner {
                 agent: CompactString::from(agent),
                 content: content.to_string(),
             })
-            .await
-            .map_err(anyhow_from)?;
+            .await?;
         Ok(resp.content)
     }
 
@@ -105,13 +99,8 @@ impl Runner for GatewayRunner {
                     Ok(StreamEvent::Chunk { content }) => Some(Ok(content)),
                     Ok(StreamEvent::Start { .. }) => None,
                     Ok(StreamEvent::End { .. }) => None,
-                    Err(e) => Some(Err(anyhow_from(e))),
+                    Err(e) => Some(Err(e)),
                 }
             })
     }
-}
-
-/// Convert a `ProtocolError` into `anyhow::Error`.
-fn anyhow_from(e: ProtocolError) -> anyhow::Error {
-    anyhow::anyhow!("{e}")
 }

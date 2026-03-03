@@ -14,13 +14,15 @@ keywords = ["llm", "agent", "ai"]
 wcore = { path = "crates/core", package = "walrus-core", version = "0.0.1" }
 model = { path = "crates/model", package = "walrus-model", version = "0.0.1" }
 runtime = { path = "crates/runtime", package = "walrus-runtime", version = "0.0.1" }
-memory = { path = "crates/memory", package = "walrus-memory", version = "0.0.1" }
-skill = { path = "crates/skill", package = "walrus-skill", version = "0.0.1" }
-mcp = { path = "crates/mcp", package = "walrus-mcp", version = "0.0.1" }
+memory = { path = "hook/memory", package = "walrus-memory", version = "0.0.1" }
+skill = { path = "hook/skill", package = "walrus-skill", version = "0.0.1" }
+mcp = { path = "hook/mcp", package = "walrus-mcp", version = "0.0.1" }
+wcron = { path = "hook/cron", package = "walrus-cron", version = "0.0.1" }
 channel = { path = "protocol/channel", package = "walrus-pchannel", version = "0.0.1" }
 protocol = { path = "app/protocol", package = "walrus-protocol", version = "0.0.1" }
 socket = { path = "protocol/socket", package = "walrus-socket", version = "0.0.1" }
 telegram = { path = "channel/telegram", package = "walrus-telegram", version = "0.0.1" }
+channel_router = { path = "channel/router", package = "walrus-channel-router", version = "0.0.1" }
 daemon = { path = "app/daemon", package = "walrus-daemon", version = "0.0.1" }
 cli = { path = "app/cli", package = "walrus-cli", version = "0.0.1" }
 

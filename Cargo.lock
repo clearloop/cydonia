@@ -6591,6 +6591,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "walrus-channel-router"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "compact_str 0.8.1",
+ "serde",
+ "tokio",
+ "tracing",
+ "walrus-pchannel",
+ "walrus-telegram",
+]
+
+[[package]]
 name = "walrus-cli"
 version = "0.0.1"
 dependencies = [
@@ -6626,14 +6639,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "walrus-cron"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "compact_str 0.8.1",
+ "cron",
+ "futures-core",
+ "futures-util",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "walrus-core",
+ "walrus-protocol",
+ "walrus-runtime",
+]
+
+[[package]]
 name = "walrus-daemon"
 version = "0.0.1"
 dependencies = [
  "anyhow",
  "async-stream",
- "chrono",
  "compact_str 0.8.1",
- "cron",
  "dirs",
  "futures-core",
  "futures-util",
@@ -6644,7 +6674,9 @@ dependencies = [
  "toml 0.8.23",
  "tracing",
  "tracing-subscriber",
+ "walrus-channel-router",
  "walrus-core",
+ "walrus-cron",
  "walrus-mcp",
  "walrus-memory",
  "walrus-model",
@@ -6653,7 +6685,6 @@ dependencies = [
  "walrus-runtime",
  "walrus-skill",
  "walrus-socket",
- "walrus-telegram",
 ]
 
 [[package]]
@@ -6719,6 +6750,7 @@ dependencies = [
 name = "walrus-protocol"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
  "async-stream",
  "compact_str 0.8.1",
  "futures-core",

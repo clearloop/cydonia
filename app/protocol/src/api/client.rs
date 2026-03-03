@@ -1,6 +1,5 @@
 //! Client trait — transport primitives plus typed provided methods.
 
-use crate::error::ProtocolError;
 use crate::message::client::ClientMessage;
 use crate::message::server::ServerMessage;
 use crate::message::{
@@ -9,6 +8,7 @@ use crate::message::{
     McpServerList, MemoryEntry, MemoryList, SendRequest, SendResponse, SessionCleared,
     SkillsReloaded, StreamEvent, StreamRequest,
 };
+use anyhow::Result;
 use futures_core::Stream;
 use futures_util::StreamExt;
 
@@ -23,7 +23,7 @@ pub trait Client: Send {
     fn request(
         &mut self,
         msg: ClientMessage,
-    ) -> impl std::future::Future<Output = Result<ServerMessage, ProtocolError>> + Send;
+    ) -> impl std::future::Future<Output = Result<ServerMessage>> + Send;
 
     /// Send a `ClientMessage` and receive a stream of `ServerMessage`s.
     ///
@@ -34,13 +34,13 @@ pub trait Client: Send {
     fn request_stream(
         &mut self,
         msg: ClientMessage,
-    ) -> impl Stream<Item = Result<ServerMessage, ProtocolError>> + Send + '_;
+    ) -> impl Stream<Item = Result<ServerMessage>> + Send + '_;
 
     /// Send a message to an agent and receive a complete response.
     fn send(
         &mut self,
         req: SendRequest,
-    ) -> impl std::future::Future<Output = Result<SendResponse, ProtocolError>> + Send {
+    ) -> impl std::future::Future<Output = Result<SendResponse>> + Send {
         async move { SendResponse::try_from(self.request(req.into()).await?) }
     }
 
@@ -48,7 +48,7 @@ pub trait Client: Send {
     fn stream(
         &mut self,
         req: StreamRequest,
-    ) -> impl Stream<Item = Result<StreamEvent, ProtocolError>> + Send + '_ {
+    ) -> impl Stream<Item = Result<StreamEvent>> + Send + '_ {
         self.request_stream(req.into())
             .scan(false, |done, r| {
                 if *done {
@@ -66,14 +66,12 @@ pub trait Client: Send {
     fn clear_session(
         &mut self,
         req: ClearSessionRequest,
-    ) -> impl std::future::Future<Output = Result<SessionCleared, ProtocolError>> + Send {
+    ) -> impl std::future::Future<Output = Result<SessionCleared>> + Send {
         async move { SessionCleared::try_from(self.request(req.into()).await?) }
     }
 
     /// List all registered agents.
-    fn list_agents(
-        &mut self,
-    ) -> impl std::future::Future<Output = Result<AgentList, ProtocolError>> + Send {
+    fn list_agents(&mut self) -> impl std::future::Future<Output = Result<AgentList>> + Send {
         async move { AgentList::try_from(self.request(ClientMessage::ListAgents).await?) }
     }
 
@@ -81,14 +79,12 @@ pub trait Client: Send {
     fn agent_info(
         &mut self,
         req: AgentInfoRequest,
-    ) -> impl std::future::Future<Output = Result<AgentDetail, ProtocolError>> + Send {
+    ) -> impl std::future::Future<Output = Result<AgentDetail>> + Send {
         async move { AgentDetail::try_from(self.request(req.into()).await?) }
     }
 
     /// List all memory entries.
-    fn list_memory(
-        &mut self,
-    ) -> impl std::future::Future<Output = Result<MemoryList, ProtocolError>> + Send {
+    fn list_memory(&mut self) -> impl std::future::Future<Output = Result<MemoryList>> + Send {
         async move { MemoryList::try_from(self.request(ClientMessage::ListMemory).await?) }
     }
 
@@ -96,7 +92,7 @@ pub trait Client: Send {
     fn get_memory(
         &mut self,
         req: GetMemoryRequest,
-    ) -> impl std::future::Future<Output = Result<MemoryEntry, ProtocolError>> + Send {
+    ) -> impl std::future::Future<Output = Result<MemoryEntry>> + Send {
         async move { MemoryEntry::try_from(self.request(req.into()).await?) }
     }
 
@@ -104,7 +100,7 @@ pub trait Client: Send {
     fn download(
         &mut self,
         req: DownloadRequest,
-    ) -> impl Stream<Item = Result<DownloadEvent, ProtocolError>> + Send + '_ {
+    ) -> impl Stream<Item = Result<DownloadEvent>> + Send + '_ {
         self.request_stream(req.into())
             .scan(false, |done, r| {
                 if *done {
@@ -121,7 +117,7 @@ pub trait Client: Send {
     /// Reload skills from disk.
     fn reload_skills(
         &mut self,
-    ) -> impl std::future::Future<Output = Result<SkillsReloaded, ProtocolError>> + Send {
+    ) -> impl std::future::Future<Output = Result<SkillsReloaded>> + Send {
         async move { SkillsReloaded::try_from(self.request(ClientMessage::ReloadSkills).await?) }
     }
 
@@ -129,7 +125,7 @@ pub trait Client: Send {
     fn mcp_add(
         &mut self,
         req: McpAddRequest,
-    ) -> impl std::future::Future<Output = Result<McpAdded, ProtocolError>> + Send {
+    ) -> impl std::future::Future<Output = Result<McpAdded>> + Send {
         async move { McpAdded::try_from(self.request(req.into()).await?) }
     }
 
@@ -137,34 +133,29 @@ pub trait Client: Send {
     fn mcp_remove(
         &mut self,
         req: McpRemoveRequest,
-    ) -> impl std::future::Future<Output = Result<McpRemoved, ProtocolError>> + Send {
+    ) -> impl std::future::Future<Output = Result<McpRemoved>> + Send {
         async move { McpRemoved::try_from(self.request(req.into()).await?) }
     }
 
     /// Reload MCP servers from config.
-    fn mcp_reload(
-        &mut self,
-    ) -> impl std::future::Future<Output = Result<McpReloaded, ProtocolError>> + Send {
+    fn mcp_reload(&mut self) -> impl std::future::Future<Output = Result<McpReloaded>> + Send {
         async move { McpReloaded::try_from(self.request(ClientMessage::McpReload).await?) }
     }
 
     /// List connected MCP servers.
-    fn mcp_list(
-        &mut self,
-    ) -> impl std::future::Future<Output = Result<McpServerList, ProtocolError>> + Send {
+    fn mcp_list(&mut self) -> impl std::future::Future<Output = Result<McpServerList>> + Send {
         async move { McpServerList::try_from(self.request(ClientMessage::McpList).await?) }
     }
 
     /// Ping the server (keepalive).
-    fn ping(&mut self) -> impl std::future::Future<Output = Result<(), ProtocolError>> + Send {
+    fn ping(&mut self) -> impl std::future::Future<Output = Result<()>> + Send {
         async move {
             match self.request(ClientMessage::Ping).await? {
                 ServerMessage::Pong => Ok(()),
-                ServerMessage::Error { code, message } => Err(ProtocolError { code, message }),
-                other => Err(ProtocolError::new(
-                    0,
-                    format!("unexpected response: {other:?}"),
-                )),
+                ServerMessage::Error { code, message } => {
+                    anyhow::bail!("server error ({code}): {message}")
+                }
+                other => anyhow::bail!("unexpected response: {other:?}"),
             }
         }
     }

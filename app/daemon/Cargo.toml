@@ -31,7 +31,7 @@ mcp = { workspace = true }
 protocol = { workspace = true }
 socket = { workspace = true }
 channel = { workspace = true }
-telegram = { workspace = true }
+channel_router = { workspace = true }
 compact_str = { workspace = true }
 futures-core = { workspace = true }
 futures-util = { workspace = true }
@@ -43,6 +43,5 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 anyhow = { workspace = true }
-cron = { workspace = true }
-chrono = { workspace = true }
+wcron = { workspace = true }
 dirs = { workspace = true }

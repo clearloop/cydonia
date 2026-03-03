@@ -1,6 +1,5 @@
 //! Wire protocol message types — enums, payload structs, and conversions.
 
-use crate::error::ProtocolError;
 use client::ClientMessage;
 use compact_str::CompactString;
 use serde::{Deserialize, Serialize};
@@ -408,15 +407,6 @@ impl From<McpServerList> for ServerMessage {
     }
 }
 
-impl From<ProtocolError> for ServerMessage {
-    fn from(e: ProtocolError) -> Self {
-        Self::Error {
-            code: e.code,
-            message: e.message,
-        }
-    }
-}
-
 // ---------------------------------------------------------------------------
 // From<StreamEvent> for ServerMessage
 // ---------------------------------------------------------------------------
@@ -453,20 +443,22 @@ impl From<DownloadEvent> for ServerMessage {
 // TryFrom<ServerMessage> for response structs
 // ---------------------------------------------------------------------------
 
-fn unexpected(msg: &str) -> ProtocolError {
-    ProtocolError::new(0, format!("unexpected response: {msg}"))
+fn unexpected(msg: &str) -> anyhow::Error {
+    anyhow::anyhow!("unexpected response: {msg}")
 }
 
-fn error_or_unexpected(msg: ServerMessage) -> ProtocolError {
+fn error_or_unexpected(msg: ServerMessage) -> anyhow::Error {
     match msg {
-        ServerMessage::Error { code, message } => ProtocolError { code, message },
+        ServerMessage::Error { code, message } => {
+            anyhow::anyhow!("server error ({code}): {message}")
+        }
         other => unexpected(&format!("{other:?}")),
     }
 }
 
 impl TryFrom<ServerMessage> for SendResponse {
-    type Error = ProtocolError;
-    fn try_from(msg: ServerMessage) -> Result<Self, ProtocolError> {
+    type Error = anyhow::Error;
+    fn try_from(msg: ServerMessage) -> anyhow::Result<Self> {
         match msg {
             ServerMessage::Response { agent, content } => Ok(Self { agent, content }),
             other => Err(error_or_unexpected(other)),
@@ -475,8 +467,8 @@ impl TryFrom<ServerMessage> for SendResponse {
 }
 
 impl TryFrom<ServerMessage> for SessionCleared {
-    type Error = ProtocolError;
-    fn try_from(msg: ServerMessage) -> Result<Self, ProtocolError> {
+    type Error = anyhow::Error;
+    fn try_from(msg: ServerMessage) -> anyhow::Result<Self> {
         match msg {
             ServerMessage::SessionCleared { agent } => Ok(Self { agent }),
             other => Err(error_or_unexpected(other)),
@@ -485,8 +477,8 @@ impl TryFrom<ServerMessage> for SessionCleared {
 }
 
 impl TryFrom<ServerMessage> for AgentList {
-    type Error = ProtocolError;
-    fn try_from(msg: ServerMessage) -> Result<Self, ProtocolError> {
+    type Error = anyhow::Error;
+    fn try_from(msg: ServerMessage) -> anyhow::Result<Self> {
         match msg {
             ServerMessage::AgentList { agents } => Ok(Self { agents }),
             other => Err(error_or_unexpected(other)),
@@ -495,8 +487,8 @@ impl TryFrom<ServerMessage> for AgentList {
 }
 
 impl TryFrom<ServerMessage> for AgentDetail {
-    type Error = ProtocolError;
-    fn try_from(msg: ServerMessage) -> Result<Self, ProtocolError> {
+    type Error = anyhow::Error;
+    fn try_from(msg: ServerMessage) -> anyhow::Result<Self> {
         match msg {
             ServerMessage::AgentDetail {
                 name,
@@ -517,8 +509,8 @@ impl TryFrom<ServerMessage> for AgentDetail {
 }
 
 impl TryFrom<ServerMessage> for MemoryList {
-    type Error = ProtocolError;
-    fn try_from(msg: ServerMessage) -> Result<Self, ProtocolError> {
+    type Error = anyhow::Error;
+    fn try_from(msg: ServerMessage) -> anyhow::Result<Self> {
         match msg {
             ServerMessage::MemoryList { entries } => Ok(Self { entries }),
             other => Err(error_or_unexpected(other)),
@@ -527,8 +519,8 @@ impl TryFrom<ServerMessage> for MemoryList {
 }
 
 impl TryFrom<ServerMessage> for MemoryEntry {
-    type Error = ProtocolError;
-    fn try_from(msg: ServerMessage) -> Result<Self, ProtocolError> {
+    type Error = anyhow::Error;
+    fn try_from(msg: ServerMessage) -> anyhow::Result<Self> {
         match msg {
             ServerMessage::MemoryEntry { key, value } => Ok(Self { key, value }),
             other => Err(error_or_unexpected(other)),
@@ -537,8 +529,8 @@ impl TryFrom<ServerMessage> for MemoryEntry {
 }
 
 impl TryFrom<ServerMessage> for SkillsReloaded {
-    type Error = ProtocolError;
-    fn try_from(msg: ServerMessage) -> Result<Self, ProtocolError> {
+    type Error = anyhow::Error;
+    fn try_from(msg: ServerMessage) -> anyhow::Result<Self> {
         match msg {
             ServerMessage::SkillsReloaded { count } => Ok(Self { count }),
             other => Err(error_or_unexpected(other)),
@@ -547,8 +539,8 @@ impl TryFrom<ServerMessage> for SkillsReloaded {
 }
 
 impl TryFrom<ServerMessage> for McpAdded {
-    type Error = ProtocolError;
-    fn try_from(msg: ServerMessage) -> Result<Self, ProtocolError> {
+    type Error = anyhow::Error;
+    fn try_from(msg: ServerMessage) -> anyhow::Result<Self> {
         match msg {
             ServerMessage::McpAdded { name, tools } => Ok(Self { name, tools }),
             other => Err(error_or_unexpected(other)),
@@ -557,8 +549,8 @@ impl TryFrom<ServerMessage> for McpAdded {
 }
 
 impl TryFrom<ServerMessage> for McpRemoved {
-    type Error = ProtocolError;
-    fn try_from(msg: ServerMessage) -> Result<Self, ProtocolError> {
+    type Error = anyhow::Error;
+    fn try_from(msg: ServerMessage) -> anyhow::Result<Self> {
         match msg {
             ServerMessage::McpRemoved { name, tools } => Ok(Self { name, tools }),
             other => Err(error_or_unexpected(other)),
@@ -567,8 +559,8 @@ impl TryFrom<ServerMessage> for McpRemoved {
 }
 
 impl TryFrom<ServerMessage> for McpReloaded {
-    type Error = ProtocolError;
-    fn try_from(msg: ServerMessage) -> Result<Self, ProtocolError> {
+    type Error = anyhow::Error;
+    fn try_from(msg: ServerMessage) -> anyhow::Result<Self> {
         match msg {
             ServerMessage::McpReloaded { servers } => Ok(Self { servers }),
             other => Err(error_or_unexpected(other)),
@@ -577,8 +569,8 @@ impl TryFrom<ServerMessage> for McpReloaded {
 }
 
 impl TryFrom<ServerMessage> for McpServerList {
-    type Error = ProtocolError;
-    fn try_from(msg: ServerMessage) -> Result<Self, ProtocolError> {
+    type Error = anyhow::Error;
+    fn try_from(msg: ServerMessage) -> anyhow::Result<Self> {
         match msg {
             ServerMessage::McpServerList { servers } => Ok(Self { servers }),
             other => Err(error_or_unexpected(other)),
@@ -591,8 +583,8 @@ impl TryFrom<ServerMessage> for McpServerList {
 // ---------------------------------------------------------------------------
 
 impl TryFrom<ServerMessage> for StreamEvent {
-    type Error = ProtocolError;
-    fn try_from(msg: ServerMessage) -> Result<Self, ProtocolError> {
+    type Error = anyhow::Error;
+    fn try_from(msg: ServerMessage) -> anyhow::Result<Self> {
         match msg {
             ServerMessage::StreamStart { agent } => Ok(Self::Start { agent }),
             ServerMessage::StreamChunk { content } => Ok(Self::Chunk { content }),
@@ -603,8 +595,8 @@ impl TryFrom<ServerMessage> for StreamEvent {
 }
 
 impl TryFrom<ServerMessage> for DownloadEvent {
-    type Error = ProtocolError;
-    fn try_from(msg: ServerMessage) -> Result<Self, ProtocolError> {
+    type Error = anyhow::Error;
+    fn try_from(msg: ServerMessage) -> anyhow::Result<Self> {
         match msg {
             ServerMessage::DownloadStart { model } => Ok(Self::Start { model }),
             ServerMessage::DownloadFileStart { filename, size } => {

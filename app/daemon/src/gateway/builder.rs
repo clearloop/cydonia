@@ -3,9 +3,8 @@
 use crate::config;
 use crate::gateway::GatewayHook;
 use anyhow::Result;
-use memory::{InMemory, Memory};
 use model::ProviderManager;
-use runtime::{Runtime, Tool};
+use runtime::{Hook, Runtime};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -19,7 +18,7 @@ pub async fn build_runtime(
     config_dir: &Path,
 ) -> Result<Runtime<ProviderManager, GatewayHook>> {
     // Construct in-memory backend.
-    let memory = InMemory::new();
+    let memory = memory::InMemory::new();
     tracing::info!("using in-memory backend");
 
     // Construct provider manager from config list.
@@ -36,8 +35,12 @@ pub async fn build_runtime(
     // Load MCP servers.
     let mcp_handler = mcp::McpHandler::load(config_dir.to_path_buf(), &config.mcp_servers).await;
 
+    // Load cron jobs.
+    let cron_dir = config_dir.join(config::CRON_DIR);
+    let cron_handler = build_cron_handler(&cron_dir);
+
     // Build GatewayHook.
-    let mut hook = GatewayHook::new(memory, skills, mcp_handler);
+    let mut hook = GatewayHook::new(memory, skills, mcp_handler, cron_handler);
 
     // Register memory tools on the hook.
     register_memory_tools(&mut hook);
@@ -57,82 +60,37 @@ pub async fn build_runtime(
 
 /// Register memory-backed tools (remember, recall) on the GatewayHook.
 fn register_memory_tools(hook: &mut GatewayHook) {
-    // remember tool
-    {
-        let mem = hook.memory_arc();
-        let schema = serde_json::json!({
-            "type": "object",
-            "properties": {
-                "key": { "type": "string", "description": "Memory key" },
-                "value": { "type": "string", "description": "Value to remember" }
-            },
-            "required": ["key", "value"]
-        });
-        let tool = Tool {
-            name: "remember".into(),
-            description: "Store a key-value pair in memory.".into(),
-            parameters: serde_json::from_value(schema).unwrap(),
-            strict: false,
-        };
-        hook.register(tool, move |args| {
-            let mem = Arc::clone(&mem);
-            async move {
-                let parsed: serde_json::Value = match serde_json::from_str(&args) {
-                    Ok(v) => v,
-                    Err(e) => return format!("invalid arguments: {e}"),
-                };
-                let key = parsed["key"].as_str().unwrap_or("");
-                let value = parsed["value"].as_str().unwrap_or("");
-                match mem.store(key.to_owned(), value.to_owned()).await {
-                    Ok(()) => format!("remembered: {key}"),
-                    Err(e) => format!("failed to store: {e}"),
-                }
+    let mem = hook.memory_arc();
+    for mt in [
+        memory::tools::remember(Arc::clone(&mem)),
+        memory::tools::recall(mem),
+    ] {
+        hook.register(mt.tool, mt.handler);
+    }
+}
+
+/// Load cron entries from disk and build a CronHandler.
+fn build_cron_handler(cron_dir: &Path) -> wcron::CronHandler {
+    let entries = match crate::loader::load_cron_dir(cron_dir) {
+        Ok(e) => e,
+        Err(e) => {
+            tracing::warn!("failed to load cron entries: {e}");
+            return wcron::CronHandler::new(Vec::new());
+        }
+    };
+
+    let mut jobs = Vec::new();
+    for entry in entries {
+        match wcron::CronJob::new(entry.name, &entry.schedule, entry.agent, entry.message) {
+            Ok(job) => {
+                tracing::info!("registered cron job '{}' → agent '{}'", job.name, job.agent);
+                jobs.push(job);
             }
-        });
+            Err(e) => {
+                tracing::warn!("skipping cron entry: {e}");
+            }
+        }
     }
 
-    // recall tool
-    {
-        let mem = hook.memory_arc();
-        let schema = serde_json::json!({
-            "type": "object",
-            "properties": {
-                "query": { "type": "string", "description": "Search query for relevant memories" },
-                "limit": { "type": "integer", "description": "Maximum number of results (default: 10)" }
-            },
-            "required": ["query"]
-        });
-        let tool = Tool {
-            name: "recall".into(),
-            description: "Search memory for entries relevant to a query.".into(),
-            parameters: serde_json::from_value(schema).unwrap(),
-            strict: false,
-        };
-        hook.register(tool, move |args| {
-            let mem = Arc::clone(&mem);
-            async move {
-                let parsed: serde_json::Value = match serde_json::from_str(&args) {
-                    Ok(v) => v,
-                    Err(e) => return format!("invalid arguments: {e}"),
-                };
-                let query = parsed["query"].as_str().unwrap_or("");
-                let limit = parsed["limit"].as_u64().unwrap_or(10) as usize;
-                let options = memory::RecallOptions {
-                    limit,
-                    ..Default::default()
-                };
-                match mem.recall(query, options).await {
-                    Ok(entries) if entries.is_empty() => "no memories found".to_owned(),
-                    Ok(entries) => {
-                        let mut out = String::new();
-                        for entry in &entries {
-                            out.push_str(&format!("{}: {}\n", entry.key, entry.value));
-                        }
-                        out
-                    }
-                    Err(e) => format!("recall failed: {e}"),
-                }
-            }
-        });
-    }
+    wcron::CronHandler::new(jobs)
 }
