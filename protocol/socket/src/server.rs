@@ -1,9 +1,8 @@
 //! Unix domain socket server — accept loop and per-connection message handler.
 
-use crate::gateway::Gateway;
+use crate::codec;
 use futures_util::StreamExt;
 use protocol::api::Server;
-use protocol::codec::{self, FrameError};
 use protocol::message::client::ClientMessage;
 use protocol::message::server::ServerMessage;
 use tokio::net::UnixListener;
@@ -11,9 +10,12 @@ use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::sync::{mpsc, oneshot};
 
 /// Accept connections on the given `UnixListener` until shutdown is signalled.
-pub async fn accept_loop(
+///
+/// Each connection is handled in a separate task. The `state` must implement
+/// [`Server`] and be cheaply cloneable (typically via `Arc` internals).
+pub async fn accept_loop<S: Server + Clone + Send + 'static>(
     listener: UnixListener,
-    state: Gateway,
+    state: S,
     mut shutdown: oneshot::Receiver<()>,
 ) {
     loop {
@@ -40,7 +42,7 @@ pub async fn accept_loop(
 }
 
 /// Handle an established Unix domain socket connection.
-async fn handle_connection(stream: tokio::net::UnixStream, state: Gateway) {
+async fn handle_connection<S: Server>(stream: tokio::net::UnixStream, state: S) {
     let (reader, writer) = stream.into_split();
     let (tx, rx) = mpsc::unbounded_channel::<ServerMessage>();
 
@@ -66,15 +68,15 @@ async fn sender_loop(mut writer: OwnedWriteHalf, mut rx: mpsc::UnboundedReceiver
 }
 
 /// Reads client messages from the socket and dispatches them via Server trait.
-async fn receiver_loop(
+async fn receiver_loop<S: Server>(
     mut reader: OwnedReadHalf,
     tx: mpsc::UnboundedSender<ServerMessage>,
-    state: Gateway,
+    state: S,
 ) {
     loop {
         let client_msg: ClientMessage = match codec::read_message(&mut reader).await {
             Ok(msg) => msg,
-            Err(FrameError::ConnectionClosed) => break,
+            Err(codec::FrameError::ConnectionClosed) => break,
             Err(e) => {
                 tracing::debug!("read error: {e}");
                 break;

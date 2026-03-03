@@ -26,9 +26,12 @@ runtime = { workspace = true }
 wcore = { workspace = true }
 model = { workspace = true }
 memory = { workspace = true }
-channel = { workspace = true }
 protocol = { workspace = true }
+socket = { workspace = true }
+channel = { workspace = true }
+telegram = { workspace = true }
 compact_str = { workspace = true }
+futures-core = { workspace = true }
 futures-util = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }

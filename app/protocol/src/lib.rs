@@ -1,9 +1,6 @@
-//! Walrus wire protocol — message types, API traits, and optional UDS client.
+//! Walrus wire protocol — message types and API traits.
 
 pub mod api;
-#[cfg(feature = "client")]
-pub mod client;
-pub mod codec;
 pub mod error;
 pub mod message;
 

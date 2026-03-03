@@ -1,15 +1,16 @@
 //! Telegram Bot API channel adapter.
 //!
 //! Uses long-polling `getUpdates` for receiving messages and
-//! `sendMessage` for sending.
+//! `sendMessage` for sending. Implements [`Channel`] from walrus-pchannel.
 
-use crate::{Attachment, AttachmentKind, Channel, ChannelMessage, Platform};
 use anyhow::Result;
+use channel::{Attachment, AttachmentKind, Channel, ChannelHandle, ChannelMessage, Platform};
 use compact_str::CompactString;
-use futures_core::Stream;
 use reqwest::Client;
 use serde::Deserialize;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, Ordering};
+use tokio::sync::mpsc;
 
 /// Telegram Bot API channel adapter.
 pub struct TelegramChannel {
@@ -19,8 +20,6 @@ pub struct TelegramChannel {
     client: Client,
     /// Long-poll timeout in seconds.
     poll_timeout: u64,
-    /// Last processed update_id for deduplication.
-    last_update_id: AtomicI64,
 }
 
 impl TelegramChannel {
@@ -30,7 +29,6 @@ impl TelegramChannel {
             bot_token: bot_token.into(),
             client: Client::new(),
             poll_timeout: 30,
-            last_update_id: AtomicI64::new(0),
         }
     }
 
@@ -44,15 +42,129 @@ impl TelegramChannel {
             bot_token: bot_token.into(),
             client,
             poll_timeout,
-            last_update_id: AtomicI64::new(0),
         }
     }
+}
 
+/// Shared state for the live Telegram connection.
+struct TelegramInner {
+    /// Bot API token.
+    bot_token: CompactString,
+    /// HTTP client for API calls.
+    client: Client,
+    /// Last processed update_id for deduplication.
+    last_update_id: AtomicI64,
+}
+
+impl TelegramInner {
     /// Base URL for Telegram Bot API requests.
     fn api_url(&self, method: &str) -> String {
         format!("https://api.telegram.org/bot{}/{method}", self.bot_token)
     }
 }
+
+impl Channel for TelegramChannel {
+    async fn connect(self) -> Result<ChannelHandle> {
+        let inner = Arc::new(TelegramInner {
+            bot_token: self.bot_token,
+            client: self.client,
+            last_update_id: AtomicI64::new(0),
+        });
+
+        let (tx, rx) = mpsc::unbounded_channel();
+        let poll_timeout = self.poll_timeout;
+
+        // Spawn the polling task.
+        let poll_inner = Arc::clone(&inner);
+        tokio::spawn(async move {
+            poll_loop(poll_inner, tx, poll_timeout).await;
+        });
+
+        // Build the send closure.
+        let send_inner = Arc::clone(&inner);
+        let handle = ChannelHandle::new(Platform::Telegram, rx, move |msg| {
+            let inner = Arc::clone(&send_inner);
+            async move { send_message(&inner, msg).await }
+        });
+
+        Ok(handle)
+    }
+}
+
+/// Long-poll loop that fetches updates and sends them to the channel.
+async fn poll_loop(
+    inner: Arc<TelegramInner>,
+    tx: mpsc::UnboundedSender<ChannelMessage>,
+    timeout: u64,
+) {
+    let url = inner.api_url("getUpdates");
+
+    loop {
+        let offset = inner.last_update_id.load(Ordering::Relaxed) + 1;
+        let params = serde_json::json!({
+            "offset": offset,
+            "timeout": timeout,
+        });
+
+        let resp = match inner.client.post(&url).json(&params).send().await {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::error!("getUpdates failed: {e}");
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                continue;
+            }
+        };
+
+        let body: GetUpdatesResponse = match resp.json::<GetUpdatesResponse>().await {
+            Ok(b) if b.ok => b,
+            Ok(_) => {
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                continue;
+            }
+            Err(e) => {
+                tracing::error!("getUpdates parse failed: {e}");
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                continue;
+            }
+        };
+
+        for update in &body.result {
+            inner
+                .last_update_id
+                .store(update.update_id, Ordering::Relaxed);
+            if let Some(msg) = &update.message
+                && let Some(channel_msg) = convert_message(msg)
+                && tx.send(channel_msg).is_err()
+            {
+                tracing::info!("channel handle dropped, stopping poll loop");
+                return;
+            }
+        }
+
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
+}
+
+/// Send a message via the Telegram sendMessage API.
+async fn send_message(inner: &TelegramInner, message: ChannelMessage) -> Result<()> {
+    let url = inner.api_url("sendMessage");
+    let params = serde_json::json!({
+        "chat_id": message.channel_id.as_str(),
+        "text": message.content,
+    });
+
+    let resp = inner.client.post(&url).json(&params).send().await?;
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        anyhow::bail!("sendMessage failed: {body}");
+    }
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Telegram API types
+// ---------------------------------------------------------------------------
 
 /// Telegram getUpdates response.
 #[derive(Debug, Deserialize)]
@@ -117,7 +229,7 @@ struct Document {
     file_name: Option<String>,
 }
 
-/// Convert a Telegram Update to a ChannelMessage.
+/// Convert a Telegram Update JSON value to a ChannelMessage.
 pub fn channel_message_from_update(update: &serde_json::Value) -> Option<ChannelMessage> {
     let update: Update = serde_json::from_value(update.clone()).ok()?;
     let msg = update.message?;
@@ -165,101 +277,4 @@ fn convert_message(msg: &TelegramMessage) -> Option<ChannelMessage> {
         reply_to,
         timestamp: msg.date,
     })
-}
-
-impl Channel for TelegramChannel {
-    type Event = ChannelMessage;
-    type Config = ();
-
-    fn platform(&self) -> Platform {
-        Platform::Telegram
-    }
-
-    fn connect(
-        &self,
-        _config: Self::Config,
-    ) -> impl std::future::Future<Output = Result<impl Stream<Item = Self::Event> + Send>> + Send
-    {
-        let client = self.client.clone();
-        let url = self.api_url("getUpdates");
-        let timeout = self.poll_timeout;
-        let last_update_id = &self.last_update_id;
-
-        async move {
-            let stream = async_stream::stream! {
-                loop {
-                    let offset = last_update_id.load(Ordering::Relaxed) + 1;
-                    let params = serde_json::json!({
-                        "offset": offset,
-                        "timeout": timeout,
-                    });
-
-                    let resp = match client.post(&url).json(&params).send().await {
-                        Ok(r) => r,
-                        Err(e) => {
-                            tracing::error!("getUpdates failed: {e}");
-                            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                            continue;
-                        }
-                    };
-
-                    let body: GetUpdatesResponse = match resp.json::<GetUpdatesResponse>().await {
-                        Ok(b) if b.ok => b,
-                        Ok(_) => {
-                            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                            continue;
-                        }
-                        Err(e) => {
-                            tracing::error!("getUpdates parse failed: {e}");
-                            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                            continue;
-                        }
-                    };
-
-                    for update in &body.result {
-                        last_update_id.store(update.update_id, Ordering::Relaxed);
-                        if let Some(msg) = &update.message
-                            && let Some(channel_msg) = convert_message(msg)
-                        {
-                            yield channel_msg;
-                        }
-                    }
-
-                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                }
-            };
-
-            Ok(stream)
-        }
-    }
-
-    fn send(
-        &self,
-        message: ChannelMessage,
-    ) -> impl std::future::Future<Output = Result<()>> + Send {
-        let client = self.client.clone();
-        let url = self.api_url("sendMessage");
-        let chat_id = message.channel_id.to_string();
-        let text = message.content;
-
-        async move {
-            let params = serde_json::json!({
-                "chat_id": chat_id,
-                "text": text,
-            });
-
-            let resp = client.post(&url).json(&params).send().await?;
-            if !resp.status().is_success() {
-                let body = resp.text().await.unwrap_or_default();
-                anyhow::bail!("sendMessage failed: {body}");
-            }
-
-            Ok(())
-        }
-    }
-}
-
-/// Construct the sendMessage API URL for a given bot token.
-pub fn send_message_url(bot_token: &str) -> String {
-    format!("https://api.telegram.org/bot{bot_token}/sendMessage")
 }

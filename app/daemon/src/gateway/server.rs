@@ -2,7 +2,7 @@
 
 use crate::config::McpServerConfig;
 use crate::gateway::Gateway;
-use futures_util::StreamExt;
+use crate::gateway::dispatch;
 use memory::Memory;
 use protocol::api::Server;
 use protocol::error::ProtocolError;
@@ -12,30 +12,12 @@ use protocol::message::{
     McpRemoved, McpServerList, McpServerSummary, MemoryEntry, MemoryList, SendRequest,
     SendResponse, SessionCleared, SkillsReloaded, StreamEvent, StreamRequest,
 };
-use runtime::AgentDispatcher;
 use tokio::sync::mpsc;
-use wcore::AgentEvent;
-use wcore::model::Message;
 
 impl Server for Gateway {
     async fn send(&self, req: SendRequest) -> Result<SendResponse, ProtocolError> {
-        let Some(mut agent) = self.runtime.take_agent(&req.agent).await else {
-            return Err(ProtocolError::new(
-                404,
-                format!("agent '{}' not registered", req.agent),
-            ));
-        };
-
-        agent.push_message(Message::user(&req.content));
-        let dispatcher = AgentDispatcher {
-            hook: self.runtime.hook(),
-            agent: &req.agent,
-        };
-
-        let response = agent.run(&dispatcher).await;
-        let content = response.final_response.unwrap_or_default();
-        self.runtime.put_agent(agent).await;
-
+        let content =
+            dispatch::dispatch_send(&self.runtime, &self.locks, &req.agent, &req.content).await?;
         Ok(SendResponse {
             agent: req.agent,
             content,
@@ -46,37 +28,12 @@ impl Server for Gateway {
         &self,
         req: StreamRequest,
     ) -> impl futures_util::Stream<Item = Result<StreamEvent, ProtocolError>> + Send {
-        let runtime = self.runtime.clone();
-        async_stream::try_stream! {
-            let Some(mut agent) = runtime.take_agent(&req.agent).await else {
-                Err(ProtocolError::new(404, format!("agent '{}' not registered", req.agent)))?;
-                return;
-            };
-
-            yield StreamEvent::Start { agent: req.agent.clone() };
-
-            agent.push_message(Message::user(&req.content));
-            {
-                let dispatcher = AgentDispatcher {
-                    hook: runtime.hook(),
-                    agent: &req.agent,
-                };
-                let stream = agent.run_stream(&dispatcher);
-                futures_util::pin_mut!(stream);
-                while let Some(event) = stream.next().await {
-                    match event {
-                        AgentEvent::TextDelta(text) => {
-                            yield StreamEvent::Chunk { content: text };
-                        }
-                        AgentEvent::Done(_) => break,
-                        _ => {}
-                    }
-                }
-            }
-
-            yield StreamEvent::End { agent: req.agent.clone() };
-            runtime.put_agent(agent).await;
-        }
+        dispatch::dispatch_stream(
+            self.runtime.clone(),
+            self.locks.clone(),
+            req.agent,
+            req.content,
+        )
     }
 
     async fn clear_session(
