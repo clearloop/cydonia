@@ -6728,11 +6728,9 @@ name = "walrus-runtime"
 version = "0.0.9"
 dependencies = [
  "anyhow",
- "async-stream",
  "chrono",
  "compact_str 0.8.1",
  "dotenvy",
- "futures-core",
  "futures-util",
  "serde_json",
  "tokio",

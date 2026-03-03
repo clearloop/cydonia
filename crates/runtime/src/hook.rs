@@ -44,11 +44,6 @@ pub trait Hook: Send + Sync {
         config.system_prompt.clone()
     }
 
-    /// Called before agent execution begins. Prepare any per-agent state.
-    ///
-    /// Default is a no-op.
-    fn on_build_agent(&self, _config: &AgentConfig) {}
-
     /// Called when an agent emits an event during execution.
     ///
     /// Default is a no-op.

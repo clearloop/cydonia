@@ -2,12 +2,15 @@
 
 use crate::config::McpServerConfig;
 use crate::gateway::Gateway;
+use futures_util::StreamExt;
 use memory::Memory;
 use protocol::codec::{self, FrameError};
 use protocol::{AgentSummary, ClientMessage, McpServerSummary, ServerMessage};
+use runtime::AgentDispatcher;
 use tokio::net::UnixListener;
 use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::sync::{mpsc, oneshot};
+use wcore::AgentEvent;
 use wcore::model::Message;
 
 /// Accept connections on the given `UnixListener` until shutdown is signalled.
@@ -83,41 +86,64 @@ async fn receiver_loop(
 
         match client_msg {
             ClientMessage::Send { agent, content } => {
-                match state.runtime.send_to(&agent, Message::user(&content)).await {
-                    Ok(response) => {
-                        let content = response.content().cloned().unwrap_or_default();
-                        let _ = tx.send(ServerMessage::Response { agent, content });
-                    }
-                    Err(e) => {
-                        let _ = tx.send(ServerMessage::Error {
-                            code: 500,
-                            message: format!("agent error: {e}"),
-                        });
-                    }
-                }
+                let Some(mut agent_instance) = state.runtime.take_agent(&agent).await else {
+                    let _ = tx.send(ServerMessage::Error {
+                        code: 404,
+                        message: format!("agent '{agent}' not registered"),
+                    });
+                    continue;
+                };
+
+                agent_instance.push_message(Message::user(&content));
+                let dispatcher = AgentDispatcher {
+                    hook: state.runtime.hook(),
+                    agent: &agent,
+                };
+
+                let response = agent_instance.run(&dispatcher).await;
+                let content = response.final_response.unwrap_or_default();
+                let _ = tx.send(ServerMessage::Response {
+                    agent: agent.clone(),
+                    content,
+                });
+
+                state.runtime.put_agent(agent_instance).await;
             }
 
             ClientMessage::Stream { agent, content } => {
+                let Some(mut agent_instance) = state.runtime.take_agent(&agent).await else {
+                    let _ = tx.send(ServerMessage::Error {
+                        code: 404,
+                        message: format!("agent '{agent}' not registered"),
+                    });
+                    continue;
+                };
+
                 let _ = tx.send(ServerMessage::StreamStart {
                     agent: agent.clone(),
                 });
 
+                agent_instance.push_message(Message::user(&content));
                 {
-                    let stream = state.runtime.stream_to(&agent, Message::user(&content));
+                    let dispatcher = AgentDispatcher {
+                        hook: state.runtime.hook(),
+                        agent: &agent,
+                    };
+                    let stream = agent_instance.run_stream(&dispatcher);
                     futures_util::pin_mut!(stream);
-
-                    while let Some(event) = futures_util::StreamExt::next(&mut stream).await {
+                    while let Some(event) = stream.next().await {
                         match event {
-                            wcore::AgentEvent::TextDelta(text) => {
+                            AgentEvent::TextDelta(text) => {
                                 let _ = tx.send(ServerMessage::StreamChunk { content: text });
                             }
-                            wcore::AgentEvent::Done(_) => break,
+                            AgentEvent::Done(_) => break,
                             _ => {}
                         }
                     }
                 }
 
                 let _ = tx.send(ServerMessage::StreamEnd { agent });
+                state.runtime.put_agent(agent_instance).await;
             }
 
             ClientMessage::Download { model } => {

@@ -7,7 +7,7 @@ use compact_str::CompactString;
 use model::ProviderManager;
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use walrus_runtime::{Handler, Hook, Memory, Tool, prelude::*};
+use walrus_runtime::{AgentDispatcher, Handler, Hook, Memory, Tool, prelude::*};
 use wcore::AgentEvent;
 
 /// Example hook providing a model and optional tool dispatch.
@@ -140,14 +140,26 @@ pub async fn repl<H: Hook + 'static>(runtime: &Runtime<H>, agent: &str) {
         if input.is_empty() || input == "exit" || input == "quit" {
             break;
         }
-        let mut stream = std::pin::pin!(runtime.stream_to(agent, Message::user(input)));
-        while let Some(event) = stream.next().await {
-            if let AgentEvent::TextDelta(text) = &event {
-                print!("{text}");
-                std::io::stdout().flush().ok();
+        let Some(mut agent_instance) = runtime.take_agent(agent).await else {
+            eprintln!("agent '{agent}' not registered");
+            break;
+        };
+        agent_instance.push_message(Message::user(input));
+        {
+            let dispatcher = AgentDispatcher {
+                hook: runtime.hook(),
+                agent,
+            };
+            let mut stream = std::pin::pin!(agent_instance.run_stream(&dispatcher));
+            while let Some(event) = stream.next().await {
+                if let AgentEvent::TextDelta(text) = &event {
+                    print!("{text}");
+                    std::io::stdout().flush().ok();
+                }
             }
         }
         println!();
+        runtime.put_agent(agent_instance).await;
     }
 }
 
@@ -168,14 +180,26 @@ pub async fn repl_with_memory(runtime: &Runtime<ExampleHook>, hook: &ExampleHook
             break;
         }
         {
-            let mut stream = std::pin::pin!(runtime.stream_to(agent, Message::user(input)));
-            while let Some(event) = stream.next().await {
-                if let AgentEvent::TextDelta(text) = &event {
-                    print!("{text}");
-                    std::io::stdout().flush().ok();
+            let Some(mut agent_instance) = runtime.take_agent(agent).await else {
+                eprintln!("agent '{agent}' not registered");
+                break;
+            };
+            agent_instance.push_message(Message::user(input));
+            {
+                let dispatcher = AgentDispatcher {
+                    hook: runtime.hook(),
+                    agent,
+                };
+                let mut stream = std::pin::pin!(agent_instance.run_stream(&dispatcher));
+                while let Some(event) = stream.next().await {
+                    if let AgentEvent::TextDelta(text) = &event {
+                        print!("{text}");
+                        std::io::stdout().flush().ok();
+                    }
                 }
             }
             println!();
+            runtime.put_agent(agent_instance).await;
         }
 
         // Print current memory state.
