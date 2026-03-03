@@ -1,7 +1,7 @@
 //! Daemon configuration loaded from TOML.
 
 use anyhow::{Context, Result};
-use compact_str::CompactString;
+pub use channel_router::ChannelConfig;
 pub use model::{ProviderConfig, ProviderManager};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -55,19 +55,6 @@ impl Default for DaemonConfig {
             mcp_servers: Vec::new(),
         }
     }
-}
-
-/// Channel configuration.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ChannelConfig {
-    /// Platform name.
-    pub platform: CompactString,
-    /// Bot token (supports `${ENV_VAR}` expansion).
-    pub bot_token: String,
-    /// Default agent for this channel.
-    pub agent: CompactString,
-    /// Optional specific channel ID for exact routing.
-    pub channel_id: Option<CompactString>,
 }
 
 /// Default agent markdown content for first-run scaffold.

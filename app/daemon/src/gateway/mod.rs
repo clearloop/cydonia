@@ -12,7 +12,6 @@ use std::sync::Arc;
 use wcore::{AgentConfig, AgentEvent};
 
 pub mod builder;
-pub mod channel;
 pub mod dispatch;
 pub mod serve;
 pub mod server;
@@ -21,8 +20,6 @@ pub mod server;
 pub struct Gateway {
     /// The walrus runtime.
     pub runtime: Arc<Runtime<ProviderManager, GatewayHook>>,
-    /// Per-agent execution locks shared across all message sources.
-    pub locks: Arc<dispatch::AgentLock>,
     /// HuggingFace endpoint selected at startup (fastest of official/mirror).
     pub hf_endpoint: Arc<str>,
 }
@@ -31,7 +28,6 @@ impl Clone for Gateway {
     fn clone(&self) -> Self {
         Self {
             runtime: Arc::clone(&self.runtime),
-            locks: Arc::clone(&self.locks),
             hf_endpoint: Arc::clone(&self.hf_endpoint),
         }
     }

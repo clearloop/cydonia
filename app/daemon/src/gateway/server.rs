@@ -15,8 +15,7 @@ use tokio::sync::mpsc;
 
 impl Server for Gateway {
     async fn send(&self, req: SendRequest) -> Result<SendResponse, ProtocolError> {
-        let content =
-            dispatch::dispatch_send(&self.runtime, &self.locks, &req.agent, &req.content).await?;
+        let content = dispatch::dispatch_send(&self.runtime, &req.agent, &req.content).await?;
         Ok(SendResponse {
             agent: req.agent,
             content,
@@ -27,12 +26,7 @@ impl Server for Gateway {
         &self,
         req: StreamRequest,
     ) -> impl futures_util::Stream<Item = Result<StreamEvent, ProtocolError>> + Send {
-        dispatch::dispatch_stream(
-            self.runtime.clone(),
-            self.locks.clone(),
-            req.agent,
-            req.content,
-        )
+        dispatch::dispatch_stream(self.runtime.clone(), req.agent, req.content)
     }
 
     async fn clear_session(

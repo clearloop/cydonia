@@ -21,6 +21,7 @@ channel = { path = "protocol/channel", package = "walrus-pchannel", version = "0
 protocol = { path = "app/protocol", package = "walrus-protocol", version = "0.0.1" }
 socket = { path = "protocol/socket", package = "walrus-socket", version = "0.0.1" }
 telegram = { path = "channel/telegram", package = "walrus-telegram", version = "0.0.1" }
+channel_router = { path = "channel/router", package = "walrus-channel-router", version = "0.0.1" }
 daemon = { path = "app/daemon", package = "walrus-daemon", version = "0.0.1" }
 cli = { path = "app/cli", package = "walrus-cli", version = "0.0.1" }
 

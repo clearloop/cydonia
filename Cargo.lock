@@ -6591,6 +6591,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "walrus-channel-router"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "compact_str 0.8.1",
+ "serde",
+ "tokio",
+ "tracing",
+ "walrus-pchannel",
+ "walrus-telegram",
+]
+
+[[package]]
 name = "walrus-cli"
 version = "0.0.1"
 dependencies = [
@@ -6644,6 +6657,7 @@ dependencies = [
  "toml 0.8.23",
  "tracing",
  "tracing-subscriber",
+ "walrus-channel-router",
  "walrus-core",
  "walrus-mcp",
  "walrus-memory",
@@ -6653,7 +6667,6 @@ dependencies = [
  "walrus-runtime",
  "walrus-skill",
  "walrus-socket",
- "walrus-telegram",
 ]
 
 [[package]]

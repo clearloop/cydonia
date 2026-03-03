@@ -1,0 +1,20 @@
+[package]
+name = "walrus-channel-router"
+description = "Channel router — connects platform channels and routes messages to agents"
+documentation = "https://docs.rs/walrus-channel-router"
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords.workspace = true
+
+[dependencies]
+channel.workspace = true
+telegram.workspace = true
+anyhow.workspace = true
+compact_str.workspace = true
+serde.workspace = true
+tokio.workspace = true
+tracing.workspace = true
