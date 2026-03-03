@@ -22,9 +22,13 @@ pub fn global_config_dir() -> PathBuf {
     dirs::home_dir().expect("no home directory").join(".walrus")
 }
 
-/// Pinned socket path (`~/.walrus/walrus.sock`).
+/// Socket path, overridable via `WALRUS_SOCKET` env var.
+///
+/// Defaults to `~/.walrus/walrus.sock` when unset.
 pub fn socket_path() -> PathBuf {
-    global_config_dir().join("walrus.sock")
+    std::env::var_os("WALRUS_SOCKET")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| global_config_dir().join("walrus.sock"))
 }
 
 /// Top-level daemon configuration.
