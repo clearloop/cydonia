@@ -1,7 +1,6 @@
 //! Walrus wire protocol — message types and API traits.
 
 pub mod api;
-pub mod error;
 pub mod message;
 
 /// Current protocol version.

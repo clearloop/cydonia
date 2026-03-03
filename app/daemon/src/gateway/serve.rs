@@ -94,8 +94,9 @@ pub async fn serve_with_config(config: &DaemonConfig, config_dir: &Path) -> Resu
     let on_message = Arc::new(move |agent: CompactString, content: String| {
         let rt = Arc::clone(&rt);
         async move {
-            crate::gateway::dispatch::dispatch_send(&rt, &agent, &content)
+            rt.send_to(&agent, &content)
                 .await
+                .map(|r| r.final_response.unwrap_or_default())
                 .map_err(|e| e.to_string())
         }
     });
@@ -156,12 +157,13 @@ fn spawn_cron(
         move |job| {
             let rt = Arc::clone(&rt);
             async move {
-                match crate::gateway::dispatch::dispatch_send(&rt, &job.agent, &job.message).await {
+                match rt.send_to(&job.agent, &job.message).await {
                     Ok(response) => {
+                        let content = response.final_response.unwrap_or_default();
                         tracing::info!(
                             job = %job.name,
                             agent = %job.agent,
-                            response_len = response.len(),
+                            response_len = content.len(),
                             "cron job completed"
                         );
                     }

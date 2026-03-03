@@ -4,7 +4,6 @@ use crate::codec;
 use anyhow::Result;
 use futures_core::Stream;
 use protocol::api::Client;
-use protocol::error::ProtocolError;
 use protocol::message::client::ClientMessage;
 use protocol::message::server::ServerMessage;
 use std::path::{Path, PathBuf};
@@ -84,32 +83,24 @@ impl Connection {
 }
 
 impl Client for Connection {
-    async fn request(&mut self, msg: ClientMessage) -> Result<ServerMessage, ProtocolError> {
-        codec::write_message(&mut self.writer, &msg)
-            .await
-            .map_err(|e| ProtocolError::new(0, e.to_string()))?;
-        codec::read_message(&mut self.reader)
-            .await
-            .map_err(|e| ProtocolError::new(0, e.to_string()))
+    async fn request(&mut self, msg: ClientMessage) -> Result<ServerMessage> {
+        codec::write_message(&mut self.writer, &msg).await?;
+        Ok(codec::read_message(&mut self.reader).await?)
     }
 
     fn request_stream(
         &mut self,
         msg: ClientMessage,
-    ) -> impl Stream<Item = Result<ServerMessage, ProtocolError>> + Send + '_ {
+    ) -> impl Stream<Item = Result<ServerMessage>> + Send + '_ {
         async_stream::try_stream! {
-            codec::write_message(&mut self.writer, &msg)
-                .await
-                .map_err(|e| ProtocolError::new(0, e.to_string()))?;
+            codec::write_message(&mut self.writer, &msg).await?;
 
             loop {
-                let server_msg: ServerMessage = codec::read_message(&mut self.reader)
-                    .await
-                    .map_err(|e| ProtocolError::new(0, e.to_string()))?;
+                let server_msg: ServerMessage = codec::read_message(&mut self.reader).await?;
 
                 match &server_msg {
                     ServerMessage::Error { code, message } => {
-                        Err(ProtocolError::new(*code, message.clone()))?;
+                        Err(anyhow::anyhow!("server error ({code}): {message}"))?;
                     }
                     _ => yield server_msg,
                 }

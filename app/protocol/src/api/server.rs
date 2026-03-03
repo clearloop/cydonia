@@ -1,6 +1,5 @@
 //! Server trait — one async method per protocol operation.
 
-use crate::error::ProtocolError;
 use crate::message::client::ClientMessage;
 use crate::message::server::ServerMessage;
 use crate::message::{
@@ -9,6 +8,7 @@ use crate::message::{
     McpServerList, MemoryEntry, MemoryList, SendRequest, SendResponse, SessionCleared,
     SkillsReloaded, StreamEvent, StreamRequest,
 };
+use anyhow::Result;
 use futures_core::Stream;
 use futures_util::StreamExt;
 
@@ -26,77 +26,61 @@ pub trait Server: Sync {
     fn send(
         &self,
         req: SendRequest,
-    ) -> impl std::future::Future<Output = Result<SendResponse, ProtocolError>> + Send;
+    ) -> impl std::future::Future<Output = Result<SendResponse>> + Send;
 
     /// Handle `Stream` — run agent and stream response events.
-    fn stream(
-        &self,
-        req: StreamRequest,
-    ) -> impl Stream<Item = Result<StreamEvent, ProtocolError>> + Send;
+    fn stream(&self, req: StreamRequest) -> impl Stream<Item = Result<StreamEvent>> + Send;
 
     /// Handle `ClearSession` — clear agent history.
     fn clear_session(
         &self,
         req: ClearSessionRequest,
-    ) -> impl std::future::Future<Output = Result<SessionCleared, ProtocolError>> + Send;
+    ) -> impl std::future::Future<Output = Result<SessionCleared>> + Send;
 
     /// Handle `ListAgents` — list all registered agents.
-    fn list_agents(
-        &self,
-    ) -> impl std::future::Future<Output = Result<AgentList, ProtocolError>> + Send;
+    fn list_agents(&self) -> impl std::future::Future<Output = Result<AgentList>> + Send;
 
     /// Handle `AgentInfo` — get agent details.
     fn agent_info(
         &self,
         req: AgentInfoRequest,
-    ) -> impl std::future::Future<Output = Result<AgentDetail, ProtocolError>> + Send;
+    ) -> impl std::future::Future<Output = Result<AgentDetail>> + Send;
 
     /// Handle `ListMemory` — list all memory entries.
-    fn list_memory(
-        &self,
-    ) -> impl std::future::Future<Output = Result<MemoryList, ProtocolError>> + Send;
+    fn list_memory(&self) -> impl std::future::Future<Output = Result<MemoryList>> + Send;
 
     /// Handle `GetMemory` — get a memory entry by key.
     fn get_memory(
         &self,
         req: GetMemoryRequest,
-    ) -> impl std::future::Future<Output = Result<MemoryEntry, ProtocolError>> + Send;
+    ) -> impl std::future::Future<Output = Result<MemoryEntry>> + Send;
 
     /// Handle `Download` — download model files with progress.
-    fn download(
-        &self,
-        req: DownloadRequest,
-    ) -> impl Stream<Item = Result<DownloadEvent, ProtocolError>> + Send;
+    fn download(&self, req: DownloadRequest) -> impl Stream<Item = Result<DownloadEvent>> + Send;
 
     /// Handle `ReloadSkills` — reload skills from disk.
-    fn reload_skills(
-        &self,
-    ) -> impl std::future::Future<Output = Result<SkillsReloaded, ProtocolError>> + Send;
+    fn reload_skills(&self) -> impl std::future::Future<Output = Result<SkillsReloaded>> + Send;
 
     /// Handle `McpAdd` — add an MCP server.
     fn mcp_add(
         &self,
         req: McpAddRequest,
-    ) -> impl std::future::Future<Output = Result<McpAdded, ProtocolError>> + Send;
+    ) -> impl std::future::Future<Output = Result<McpAdded>> + Send;
 
     /// Handle `McpRemove` — remove an MCP server.
     fn mcp_remove(
         &self,
         req: McpRemoveRequest,
-    ) -> impl std::future::Future<Output = Result<McpRemoved, ProtocolError>> + Send;
+    ) -> impl std::future::Future<Output = Result<McpRemoved>> + Send;
 
     /// Handle `McpReload` — reload MCP servers from config.
-    fn mcp_reload(
-        &self,
-    ) -> impl std::future::Future<Output = Result<McpReloaded, ProtocolError>> + Send;
+    fn mcp_reload(&self) -> impl std::future::Future<Output = Result<McpReloaded>> + Send;
 
     /// Handle `McpList` — list connected MCP servers.
-    fn mcp_list(
-        &self,
-    ) -> impl std::future::Future<Output = Result<McpServerList, ProtocolError>> + Send;
+    fn mcp_list(&self) -> impl std::future::Future<Output = Result<McpServerList>> + Send;
 
     /// Handle `Ping` — keepalive.
-    fn ping(&self) -> impl std::future::Future<Output = Result<(), ProtocolError>> + Send;
+    fn ping(&self) -> impl std::future::Future<Output = Result<()>> + Send;
 
     /// Dispatch a `ClientMessage` to the appropriate handler method.
     ///
@@ -161,7 +145,10 @@ pub trait Server: Sync {
                 ClientMessage::Ping => {
                     yield match self.ping().await {
                         Ok(()) => ServerMessage::Pong,
-                        Err(e) => e.into(),
+                        Err(e) => ServerMessage::Error {
+                            code: 500,
+                            message: e.to_string(),
+                        },
                     };
                 }
             }
@@ -170,9 +157,12 @@ pub trait Server: Sync {
 }
 
 /// Convert a typed `Result` into a `ServerMessage`.
-fn result_to_msg<T: Into<ServerMessage>>(result: Result<T, ProtocolError>) -> ServerMessage {
+fn result_to_msg<T: Into<ServerMessage>>(result: Result<T>) -> ServerMessage {
     match result {
         Ok(resp) => resp.into(),
-        Err(e) => e.into(),
+        Err(e) => ServerMessage::Error {
+            code: 500,
+            message: e.to_string(),
+        },
     }
 }

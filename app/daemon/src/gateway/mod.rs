@@ -12,7 +12,6 @@ use std::sync::Arc;
 use wcore::{AgentConfig, AgentEvent};
 
 pub mod builder;
-pub mod dispatch;
 pub mod serve;
 pub mod server;
 

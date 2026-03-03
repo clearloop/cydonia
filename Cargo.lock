@@ -6732,6 +6732,7 @@ dependencies = [
 name = "walrus-protocol"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
  "async-stream",
  "compact_str 0.8.1",
  "futures-core",

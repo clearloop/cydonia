@@ -11,6 +11,7 @@ repository.workspace = true
 keywords.workspace = true
 
 [dependencies]
+anyhow = { workspace = true }
 async-stream = { workspace = true }
 compact_str = { workspace = true }
 futures-core = { workspace = true }
