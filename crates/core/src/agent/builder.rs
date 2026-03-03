@@ -1,29 +1,24 @@
 //! Fluent builder for constructing an [`Agent`].
-//!
-//! Requires an `mpsc::Sender<AgentEvent>` at construction — event emission
-//! is not optional.
 
 use crate::agent::Agent;
 use crate::agent::config::AgentConfig;
-use crate::event::AgentEvent;
-use tokio::sync::mpsc;
+use crate::model::Model;
 
-/// Fluent builder for [`Agent`].
+/// Fluent builder for [`Agent<M>`].
 ///
-/// The event sender is required at construction — call [`AgentBuilder::new`]
-/// with an `mpsc::Sender<AgentEvent>`. Use [`AgentConfig`] builder methods
+/// Requires a model at construction. Use [`AgentConfig`] builder methods
 /// for field configuration, then pass it via [`AgentBuilder::config`].
-pub struct AgentBuilder {
+pub struct AgentBuilder<M: Model> {
     config: AgentConfig,
-    event_tx: mpsc::Sender<AgentEvent>,
+    model: M,
 }
 
-impl AgentBuilder {
-    /// Create a new builder with the required event sender.
-    pub fn new(event_tx: mpsc::Sender<AgentEvent>) -> Self {
+impl<M: Model> AgentBuilder<M> {
+    /// Create a new builder with the given model.
+    pub fn new(model: M) -> Self {
         Self {
             config: AgentConfig::default(),
-            event_tx,
+            model,
         }
     }
 
@@ -37,11 +32,11 @@ impl AgentBuilder {
     }
 
     /// Build the [`Agent`].
-    pub fn build(self) -> Agent {
+    pub fn build(self) -> Agent<M> {
         Agent {
             config: self.config,
+            model: self.model,
             history: Vec::new(),
-            event_tx: self.event_tx,
         }
     }
 }

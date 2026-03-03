@@ -45,13 +45,13 @@ pub async fn build_runtime(
     register_memory_tools(&mut hook);
 
     // Wrap in Runtime.
-    let mut runtime = Runtime::new(Arc::new(hook));
+    let runtime = Runtime::new(Arc::new(hook));
 
     // Load agents from markdown files.
     let agents = crate::loader::load_agents_dir(&config_dir.join(config::AGENTS_DIR))?;
     for agent in agents {
         tracing::info!("registered agent '{}'", agent.name);
-        runtime.add_agent(agent);
+        runtime.add_agent(agent).await;
     }
 
     Ok(runtime)

@@ -175,6 +175,8 @@ async fn receiver_loop(
                 let agents = state
                     .runtime
                     .agents()
+                    .await
+                    .into_iter()
                     .map(|a| AgentSummary {
                         name: a.name.clone(),
                         description: a.description.clone(),
@@ -183,7 +185,7 @@ async fn receiver_loop(
                 let _ = tx.send(ServerMessage::AgentList { agents });
             }
 
-            ClientMessage::AgentInfo { agent } => match state.runtime.agent(&agent) {
+            ClientMessage::AgentInfo { agent } => match state.runtime.agent(&agent).await {
                 Some(a) => {
                     let _ = tx.send(ServerMessage::AgentDetail {
                         name: a.name.clone(),

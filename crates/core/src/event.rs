@@ -11,7 +11,7 @@ use compact_str::CompactString;
 
 /// A fine-grained event emitted during agent execution.
 ///
-/// Streamed via `mpsc::Sender<AgentEvent>` from Agent to runtime/daemon
+/// Yielded by `Agent::run_stream()` or emitted via `Hook::on_event()`
 /// for real-time status reporting to clients.
 #[derive(Debug, Clone)]
 pub enum AgentEvent {

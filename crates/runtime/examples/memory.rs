@@ -26,12 +26,14 @@ async fn main() {
         .set("learning", "Currently learning Rust, focus on async.");
 
     let hook = Arc::new(hook);
-    let mut runtime = Runtime::new(Arc::clone(&hook));
+    let runtime = Runtime::new(Arc::clone(&hook));
 
-    runtime.add_agent(AgentConfig::new("assistant").system_prompt(
-        "You are a helpful assistant. Use any stored memory about the user \
-                 to personalize your responses.",
-    ));
+    runtime
+        .add_agent(AgentConfig::new("assistant").system_prompt(
+            "You are a helpful assistant. Use any stored memory about the user \
+                     to personalize your responses.",
+        ))
+        .await;
 
     println!("Memory REPL — the assistant knows your stored context.");
     println!("Try: 'What do you know about me?' or tell it something new.");

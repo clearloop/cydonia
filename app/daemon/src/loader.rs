@@ -3,8 +3,8 @@
 //! All filesystem I/O and YAML frontmatter parsing lives here, keeping the
 //! runtime crate free of `std::fs` and `serde_yaml` dependencies.
 
+use crate::feature::skill::{Skill, SkillRegistry, SkillTier};
 use compact_str::CompactString;
-use runtime::{Skill, SkillRegistry, SkillTier};
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::path::Path;

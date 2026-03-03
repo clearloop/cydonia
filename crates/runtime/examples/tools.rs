@@ -34,16 +34,18 @@ async fn main() {
         |_| async move { chrono::Utc::now().to_rfc3339() },
     );
 
-    let mut runtime = Runtime::new(Arc::new(hook));
+    let runtime = Runtime::new(Arc::new(hook));
 
-    runtime.add_agent(
-        AgentConfig::new("assistant")
-            .system_prompt(
-                "You are a helpful assistant with access to tools. \
-                 Use current_time when the user asks about the current time or date.",
-            )
-            .tool("current_time"),
-    );
+    runtime
+        .add_agent(
+            AgentConfig::new("assistant")
+                .system_prompt(
+                    "You are a helpful assistant with access to tools. \
+                     Use current_time when the user asks about the current time or date.",
+                )
+                .tool("current_time"),
+        )
+        .await;
 
     println!("Tools REPL — try asking:");
     println!("  'What time is it?'");

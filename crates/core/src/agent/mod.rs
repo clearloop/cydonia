@@ -1,8 +1,8 @@
 //! Stateful agent execution unit.
 //!
-//! [`Agent`] owns its configuration, message history, and event sender.
-//! It drives LLM execution through [`Agent::step`], [`Agent::run`], and
-//! [`Agent::run_stream`].
+//! [`Agent`] owns its configuration, model, and message history. It drives
+//! LLM execution through [`Agent::step`], [`Agent::run`], and
+//! [`Agent::run_stream`]. Event emission is the caller's responsibility.
 
 use crate::dispatch::Dispatcher;
 use crate::event::{AgentEvent, AgentResponse, AgentStep, AgentStopReason};
@@ -10,7 +10,6 @@ use crate::model::{Message, Model, Request};
 use anyhow::Result;
 use async_stream::stream;
 use futures_core::Stream;
-use tokio::sync::mpsc;
 
 pub use builder::AgentBuilder;
 pub use config::AgentConfig;
@@ -20,19 +19,20 @@ pub mod config;
 
 /// A stateful agent execution unit.
 ///
-/// Holds configuration, conversation history, and an event sender.
-/// Callers drive execution via `step()` (single LLM round), `run()`
-/// (loop to completion), or `run_stream()` (yields events as a stream).
-pub struct Agent {
+/// Generic over `M: Model` — stores the model provider alongside config
+/// and conversation history. Callers drive execution via `step()` (single
+/// LLM round), `run()` (loop to completion), or `run_stream()` (yields
+/// events as a stream).
+pub struct Agent<M: Model> {
     /// Agent configuration (name, prompt, model, limits, tool_choice).
     pub config: AgentConfig,
-    /// Conversation history (system prompt + user/assistant/tool messages).
-    history: Vec<Message>,
-    /// Event sender for real-time status reporting.
-    event_tx: mpsc::Sender<AgentEvent>,
+    /// The model provider for LLM calls.
+    model: M,
+    /// Conversation history (user/assistant/tool messages).
+    pub(crate) history: Vec<Message>,
 }
 
-impl Agent {
+impl<M: Model> Agent<M> {
     /// Push a message into the conversation history.
     pub fn push_message(&mut self, message: Message) {
         self.history.push(message);
@@ -43,24 +43,22 @@ impl Agent {
         &self.history
     }
 
+    /// Clear the conversation history, keeping configuration intact.
+    pub fn clear_history(&mut self) {
+        self.history.clear();
+    }
+
     /// Perform a single LLM round: send request, dispatch tools, return step.
     ///
     /// Composes a [`Request`] from config state (system prompt + history +
-    /// dispatcher tools), calls `model.send()`, dispatches any tool calls
+    /// dispatcher tools), calls the stored model, dispatches any tool calls
     /// via `dispatcher.dispatch()`, and appends results to history.
-    ///
-    /// This is a pure computation — no events are emitted. Callers (`run`
-    /// and `run_stream`) handle event emission.
-    pub async fn step<M: Model, D: Dispatcher>(
-        &mut self,
-        model: &M,
-        dispatcher: &D,
-    ) -> Result<AgentStep> {
+    pub async fn step<D: Dispatcher>(&mut self, dispatcher: &D) -> Result<AgentStep> {
         let model_name = self
             .config
             .model
             .clone()
-            .unwrap_or_else(|| model.active_model());
+            .unwrap_or_else(|| self.model.active_model());
 
         let mut messages = Vec::with_capacity(1 + self.history.len());
         if !self.config.system_prompt.is_empty() {
@@ -76,7 +74,7 @@ impl Agent {
             request = request.with_tools(tools);
         }
 
-        let response = model.send(&request).await?;
+        let response = self.model.send(&request).await?;
         let tool_calls = response.tool_calls().unwrap_or_default().to_vec();
 
         // Append the assistant message to history.
@@ -113,35 +111,6 @@ impl Agent {
         })
     }
 
-    /// Emit events for a completed step through the event channel.
-    async fn emit_step_events(&self, step: &AgentStep) {
-        if let Some(text) = step.response.content() {
-            let _ = self
-                .event_tx
-                .send(AgentEvent::TextDelta(text.clone()))
-                .await;
-        }
-
-        if !step.tool_calls.is_empty() {
-            let _ = self
-                .event_tx
-                .send(AgentEvent::ToolCallsStart(step.tool_calls.clone()))
-                .await;
-
-            for (tc, result) in step.tool_calls.iter().zip(&step.tool_results) {
-                let _ = self
-                    .event_tx
-                    .send(AgentEvent::ToolResult {
-                        call_id: tc.id.clone(),
-                        output: result.content.clone(),
-                    })
-                    .await;
-            }
-
-            let _ = self.event_tx.send(AgentEvent::ToolCallsComplete).await;
-        }
-    }
-
     /// Determine the stop reason for a step with no tool calls.
     fn stop_reason(step: &AgentStep) -> AgentStopReason {
         if step.response.content().is_some() {
@@ -155,69 +124,56 @@ impl Agent {
     ///
     /// Each iteration calls [`Agent::step`]. Stops when the model produces a
     /// response with no tool calls, hits the iteration limit, or errors.
-    /// Events are emitted through the channel.
-    pub async fn run<M: Model, D: Dispatcher>(
-        &mut self,
-        model: &M,
-        dispatcher: &D,
-    ) -> AgentResponse {
+    pub async fn run<D: Dispatcher>(&mut self, dispatcher: &D) -> AgentResponse {
         let mut steps = Vec::new();
         let max = self.config.max_iterations;
 
         for _ in 0..max {
-            match self.step(model, dispatcher).await {
+            match self.step(dispatcher).await {
                 Ok(step) => {
                     let has_tool_calls = !step.tool_calls.is_empty();
                     let text = step.response.content().cloned();
-                    self.emit_step_events(&step).await;
 
                     if !has_tool_calls {
                         let stop_reason = Self::stop_reason(&step);
                         steps.push(step);
-                        let response = AgentResponse {
+                        return AgentResponse {
                             final_response: text,
                             iterations: steps.len(),
                             stop_reason,
                             steps,
                         };
-                        let _ = self.event_tx.send(AgentEvent::Done(response.clone())).await;
-                        return response;
                     }
 
                     steps.push(step);
                 }
                 Err(e) => {
-                    let response = AgentResponse {
+                    return AgentResponse {
                         final_response: None,
                         iterations: steps.len(),
                         stop_reason: AgentStopReason::Error(e.to_string()),
                         steps,
                     };
-                    let _ = self.event_tx.send(AgentEvent::Done(response.clone())).await;
-                    return response;
                 }
             }
         }
 
         let final_response = steps.last().and_then(|s| s.response.content().cloned());
-        let response = AgentResponse {
+        AgentResponse {
             final_response,
             iterations: steps.len(),
             stop_reason: AgentStopReason::MaxIterations,
             steps,
-        };
-        let _ = self.event_tx.send(AgentEvent::Done(response.clone())).await;
-        response
+        }
     }
 
     /// Run the agent loop as a stream of [`AgentEvent`]s.
     ///
     /// Yields events as they are produced during execution. This is a
     /// convenience wrapper that calls [`Agent::step`] in a loop and yields
-    /// events directly. Events are not emitted through the channel.
-    pub fn run_stream<'a, M: Model + 'a, D: Dispatcher + 'a>(
+    /// events directly.
+    pub fn run_stream<'a, D: Dispatcher + 'a>(
         &'a mut self,
-        model: &'a M,
         dispatcher: &'a D,
     ) -> impl Stream<Item = AgentEvent> + 'a {
         stream! {
@@ -225,7 +181,7 @@ impl Agent {
             let max = self.config.max_iterations;
 
             for _ in 0..max {
-                match self.step(model, dispatcher).await {
+                match self.step(dispatcher).await {
                     Ok(step) => {
                         let has_tool_calls = !step.tool_calls.is_empty();
                         let text = step.response.content().cloned();

@@ -178,7 +178,10 @@ impl Hook for GatewayHook {
 }
 
 /// Build a system prompt enriched with skills for the given agent config.
-fn build_system_prompt(agent_config: &AgentConfig, skills: &runtime::SkillRegistry) -> String {
+fn build_system_prompt(
+    agent_config: &AgentConfig,
+    skills: &crate::feature::skill::SkillRegistry,
+) -> String {
     let mut prompt = agent_config.system_prompt.clone();
     for skill in skills.find_by_tags(&agent_config.skill_tags) {
         if !skill.body.is_empty() {
