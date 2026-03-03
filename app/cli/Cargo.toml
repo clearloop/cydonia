@@ -15,8 +15,7 @@ name = "walrus"
 path = "src/bin/main.rs"
 
 [dependencies]
-client = { workspace = true }
-protocol = { workspace = true }
+protocol = { workspace = true, features = ["client"] }
 clap = { workspace = true }
 compact_str = { workspace = true }
 tokio = { workspace = true }

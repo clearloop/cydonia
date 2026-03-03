@@ -13,6 +13,7 @@ use wcore::{AgentConfig, AgentEvent};
 
 pub mod builder;
 pub mod serve;
+pub mod server;
 pub mod uds;
 
 /// Shared state available to all request handlers.

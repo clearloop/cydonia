@@ -1,5 +1,6 @@
-//! Walrus client library — Unix domain socket client for connecting to a
-//! walrus-gateway. Used by walrus-cli and other platform clients.
+//! Unix domain socket client for connecting to a walrus-gateway.
+//!
+//! Requires the `client` feature.
 
 pub use connection::Connection;
 use std::path::PathBuf;

@@ -10,8 +10,19 @@ license.workspace = true
 repository.workspace = true
 keywords.workspace = true
 
+[features]
+default = []
+client = ["dep:anyhow", "dep:async-stream", "dep:dirs", "dep:tracing"]
+
 [dependencies]
 compact_str = { workspace = true }
+futures-core = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
+
+# Optional (client feature)
+anyhow = { workspace = true, optional = true }
+async-stream = { workspace = true, optional = true }
+dirs = { workspace = true, optional = true }
+tracing = { workspace = true, optional = true }

@@ -6621,20 +6621,6 @@ dependencies = [
  "toml 0.8.23",
  "tracing",
  "tracing-subscriber",
- "walrus-client",
- "walrus-protocol",
-]
-
-[[package]]
-name = "walrus-client"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "async-stream",
- "dirs",
- "futures-core",
- "tokio",
- "tracing",
  "walrus-protocol",
 ]
 
@@ -6659,6 +6645,7 @@ name = "walrus-daemon"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "async-stream",
  "chrono",
  "compact_str 0.8.1",
  "cron",
@@ -6717,10 +6704,15 @@ dependencies = [
 name = "walrus-protocol"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
+ "async-stream",
  "compact_str 0.8.1",
+ "dirs",
+ "futures-core",
  "serde",
  "serde_json",
  "tokio",
+ "tracing",
 ]
 
 [[package]]

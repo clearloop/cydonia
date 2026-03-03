@@ -3,9 +3,8 @@
 use crate::runner::gateway::GatewayRunner;
 use anyhow::Result;
 use clap::Args;
-use compact_str::CompactString;
 use futures_util::StreamExt;
-use protocol::{ClientMessage, ServerMessage};
+use protocol::message::DownloadEvent;
 use std::io::Write;
 
 /// Download a model's files from HuggingFace.
@@ -18,10 +17,7 @@ pub struct Download {
 impl Download {
     /// Run the download, streaming progress to the terminal.
     pub async fn run(self, runner: &mut GatewayRunner) -> Result<()> {
-        let msg = ClientMessage::Download {
-            model: CompactString::from(&self.model),
-        };
-        let stream = runner.download_stream(msg);
+        let stream = runner.download_stream(&self.model);
         futures_util::pin_mut!(stream);
 
         let mut current_size: u64 = 0;
@@ -30,15 +26,15 @@ impl Download {
 
         while let Some(result) = stream.next().await {
             match result? {
-                ServerMessage::DownloadStart { model } => {
+                DownloadEvent::Start { model } => {
                     println!("Downloading {model}...");
                 }
-                ServerMessage::DownloadFileStart { filename, size } => {
+                DownloadEvent::FileStart { filename, size } => {
                     current_file = filename;
                     current_size = size;
                     downloaded = 0;
                 }
-                ServerMessage::DownloadProgress { bytes } => {
+                DownloadEvent::Progress { bytes } => {
                     downloaded += bytes;
                     let pct = if current_size > 0 {
                         downloaded * 100 / current_size
@@ -54,17 +50,12 @@ impl Download {
                     );
                     std::io::stderr().flush().ok();
                 }
-                ServerMessage::DownloadFileEnd { filename } => {
+                DownloadEvent::FileEnd { filename } => {
                     eprintln!("\r  {filename} done{:30}", "");
                 }
-                ServerMessage::DownloadEnd { model } => {
+                DownloadEvent::End { model } => {
                     println!("Download complete: {model}");
                 }
-                ServerMessage::Error { code, message } => {
-                    eprintln!("Error ({code}): {message}");
-                    break;
-                }
-                _ => {}
             }
         }
         Ok(())

@@ -21,6 +21,7 @@ name = "walrusd"
 path = "src/bin/main.rs"
 
 [dependencies]
+async-stream = { workspace = true }
 runtime = { workspace = true }
 wcore = { workspace = true }
 model = { workspace = true }
