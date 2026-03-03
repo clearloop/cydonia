@@ -15,12 +15,15 @@ pub mod uds;
 pub struct Gateway<H: Hook + 'static> {
     /// The walrus runtime (immutable after init).
     pub runtime: Arc<Runtime<H>>,
+    /// HuggingFace endpoint selected at startup (fastest of official/mirror).
+    pub hf_endpoint: Arc<str>,
 }
 
 impl<H: Hook + 'static> Clone for Gateway<H> {
     fn clone(&self) -> Self {
         Self {
             runtime: Arc::clone(&self.runtime),
+            hf_endpoint: Arc::clone(&self.hf_endpoint),
         }
     }
 }

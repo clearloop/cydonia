@@ -130,8 +130,9 @@ async fn receiver_loop<H: Hook + 'static>(
 
                 let (dtx, mut drx) = mpsc::unbounded_channel();
                 let model_str = model.to_string();
+                let endpoint = state.hf_endpoint.clone();
                 let download_handle = tokio::spawn(async move {
-                    model::local::download::download_model(&model_str, dtx).await
+                    model::local::download::download_model(&model_str, &endpoint, dtx).await
                 });
 
                 while let Some(event) = drx.recv().await {

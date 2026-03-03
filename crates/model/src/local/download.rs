@@ -7,6 +7,7 @@
 use crate::local::cache_dir;
 use hf_hub::api::tokio::{ApiBuilder, Progress};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::time::Instant;
 
@@ -82,6 +83,37 @@ impl Progress for ChannelProgress {
     }
 }
 
+const HF_OFFICIAL: &str = "https://huggingface.co";
+const HF_MIRROR: &str = "https://hf-mirror.com";
+const PROBE_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Probe both HuggingFace endpoints and return the faster one.
+///
+/// Sends a lightweight GET to each endpoint's API and returns whichever
+/// responds first. Falls back to the official endpoint if both fail.
+pub async fn probe_endpoint() -> String {
+    let probe_path = "/api/models/gpt2/revision/main";
+    let client = reqwest::Client::builder()
+        .timeout(PROBE_TIMEOUT)
+        .build()
+        .unwrap_or_default();
+
+    let official = {
+        let c = client.clone();
+        async move { c.get(format!("{HF_OFFICIAL}{probe_path}")).send().await }
+    };
+    let mirror = {
+        let c = client.clone();
+        async move { c.get(format!("{HF_MIRROR}{probe_path}")).send().await }
+    };
+
+    tokio::select! {
+        Ok(_) = official => HF_OFFICIAL.to_owned(),
+        Ok(_) = mirror => HF_MIRROR.to_owned(),
+        else => HF_OFFICIAL.to_owned(),
+    }
+}
+
 /// Download all files for a model repo, sending progress events to `tx`.
 ///
 /// Uses hf-hub's async API with `download_with_progress()`. Files are
@@ -89,9 +121,11 @@ impl Progress for ChannelProgress {
 /// mistralrs reads from.
 pub async fn download_model(
     model_id: &str,
+    endpoint: &str,
     tx: mpsc::UnboundedSender<DownloadEvent>,
 ) -> anyhow::Result<()> {
     let api = ApiBuilder::new()
+        .with_endpoint(endpoint.to_owned())
         .with_progress(false)
         .with_cache_dir(cache_dir())
         .build()?;

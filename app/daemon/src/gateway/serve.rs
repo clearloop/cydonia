@@ -48,8 +48,12 @@ pub async fn serve_with_config(config: &DaemonConfig, config_dir: &Path) -> Resu
 
     let runtime = crate::build_runtime(config, config_dir).await?;
 
+    let hf_endpoint = model::local::download::probe_endpoint().await;
+    tracing::info!("using hf endpoint: {hf_endpoint}");
+
     let state = Gateway {
         runtime: Arc::new(runtime),
+        hf_endpoint: Arc::from(hf_endpoint),
     };
 
     let resolved_path = crate::config::socket_path();
