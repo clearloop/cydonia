@@ -1,13 +1,10 @@
-//! Skill registry — loads, indexes, and matches skills.
+//! Skill registry — indexes and matches skills in memory.
 //!
-//! Skills are directories containing a `SKILL.md` file with YAML frontmatter
-//! (agentskills.io format). The [`SkillRegistry`] loads them from a directory,
-//! builds tag/trigger indices, and returns ranked matches.
+//! Pure data types and in-memory indexing. Filesystem loading and YAML parsing
+//! live in the daemon's `loader` module.
 
 use compact_str::CompactString;
-use serde::Deserialize;
 use std::collections::BTreeMap;
-use std::path::Path;
 
 /// Priority tier for skill resolution.
 ///
@@ -26,7 +23,7 @@ pub enum SkillTier {
 
 /// A named unit of agent behavior (agentskills.io format).
 ///
-/// Pure data struct — parsing and registry logic live alongside in this module.
+/// Pure data struct — parsing logic lives in the daemon's loader module.
 /// Fields mirror the agentskills.io specification. Runtime-only concepts
 /// like tier and priority live in the registry, not here.
 #[derive(Debug, Clone)]
@@ -55,22 +52,6 @@ struct IndexedSkill {
     priority: u8,
 }
 
-/// YAML frontmatter deserialization target.
-#[derive(Debug, Deserialize)]
-struct SkillFrontmatter {
-    name: String,
-    #[serde(default)]
-    description: String,
-    #[serde(default)]
-    license: Option<String>,
-    #[serde(default)]
-    compatibility: Option<String>,
-    #[serde(default)]
-    metadata: BTreeMap<String, String>,
-    #[serde(default, rename = "allowed-tools")]
-    allowed_tools: Option<String>,
-}
-
 /// A registry of loaded skills with tag and trigger indices.
 #[derive(Debug, Clone)]
 pub struct SkillRegistry {
@@ -93,38 +74,6 @@ impl SkillRegistry {
             tag_index: BTreeMap::new(),
             trigger_index: BTreeMap::new(),
         }
-    }
-
-    /// Load skills from a directory. Each subdirectory should contain a `SKILL.md`.
-    /// The given tier is assigned to all loaded skills.
-    pub fn load_dir(path: impl AsRef<Path>, tier: SkillTier) -> anyhow::Result<Self> {
-        let path = path.as_ref();
-        let mut registry = Self::new();
-
-        let entries = std::fs::read_dir(path).map_err(|e| {
-            anyhow::anyhow!("failed to read skill directory {}: {e}", path.display())
-        })?;
-
-        for entry in entries {
-            let entry = entry?;
-            let entry_path = entry.path();
-            if !entry_path.is_dir() {
-                continue;
-            }
-
-            let skill_file = entry_path.join("SKILL.md");
-            if !skill_file.exists() {
-                continue;
-            }
-
-            let content = std::fs::read_to_string(&skill_file)
-                .map_err(|e| anyhow::anyhow!("failed to read {}: {e}", skill_file.display()))?;
-
-            let skill = parse_skill_md(&content)?;
-            registry.add(skill, tier);
-        }
-
-        Ok(registry)
     }
 
     /// Add a skill to the registry with the given tier.
@@ -233,63 +182,4 @@ impl SkillRegistry {
     pub fn is_empty(&self) -> bool {
         self.skills.is_empty()
     }
-}
-
-/// Parse a SKILL.md file (YAML frontmatter + Markdown body) into a Skill.
-pub fn parse_skill_md(content: &str) -> anyhow::Result<Skill> {
-    let (frontmatter, body) = split_yaml_frontmatter(content)?;
-    let fm: SkillFrontmatter = serde_yaml::from_str(frontmatter)?;
-
-    let allowed_tools = fm
-        .allowed_tools
-        .map(|s| {
-            s.split_whitespace()
-                .map(CompactString::from)
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-
-    let metadata = fm
-        .metadata
-        .into_iter()
-        .map(|(k, v)| (CompactString::from(k), v))
-        .collect();
-
-    Ok(Skill {
-        name: CompactString::from(fm.name),
-        description: fm.description,
-        license: fm.license.map(CompactString::from),
-        compatibility: fm.compatibility.map(CompactString::from),
-        metadata,
-        allowed_tools,
-        body: body.to_owned(),
-    })
-}
-
-/// Split YAML frontmatter from the body. Frontmatter is delimited by `---`.
-///
-/// Handles CRLF line endings and trailing whitespace on delimiter lines.
-pub fn split_yaml_frontmatter(content: &str) -> anyhow::Result<(&str, &str)> {
-    let content = content.trim_start();
-    if !content.starts_with("---") {
-        anyhow::bail!("missing YAML frontmatter delimiter (---)");
-    }
-
-    // Skip opening delimiter and its trailing newline.
-    let after_first = content[3..].trim_start_matches(['\n', '\r']);
-
-    // Scan line-by-line for the closing `---` delimiter.
-    let mut pos = 0;
-    for line in after_first.lines() {
-        if line.trim() == "---" {
-            let frontmatter = &after_first[..pos].trim_end();
-            let body_start = pos + line.len();
-            // Skip the newline after `---` if present.
-            let body = after_first[body_start..].trim_start_matches(['\n', '\r']);
-            return Ok((frontmatter, body));
-        }
-        pos += line.len() + 1; // +1 for the newline consumed by lines()
-    }
-
-    anyhow::bail!("missing closing YAML frontmatter delimiter (---)")
 }

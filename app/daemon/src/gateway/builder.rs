@@ -48,7 +48,7 @@ pub async fn build_runtime(
     let mut runtime = Runtime::new(Arc::new(hook));
 
     // Load agents from markdown files.
-    let agents = runtime::load_agents_dir(&config_dir.join(config::AGENTS_DIR))?;
+    let agents = crate::loader::load_agents_dir(&config_dir.join(config::AGENTS_DIR))?;
     for agent in agents {
         tracing::info!("registered agent '{}'", agent.name);
         runtime.add_agent(agent);

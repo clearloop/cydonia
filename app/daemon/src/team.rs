@@ -3,23 +3,9 @@
 //! Each worker agent is exposed as a tool on the leader. When the leader
 //! calls a worker tool, the handler creates an ephemeral Agent instance
 //! and runs it using the Hook for dispatch and model access.
-//!
-//! # Example
-//!
-//! ```rust,ignore
-//! use walrus_core::AgentConfig;
-//! use walrus_runtime::{build_team, worker_tool};
-//!
-//! let leader = AgentConfig::new("leader").system_prompt("You coordinate.");
-//! let analyst = AgentConfig::new("analyst").description("Market analysis");
-//!
-//! let (leader, worker_tools) = build_team(leader, vec![analyst], &hook);
-//! // Register worker_tools on your Hook implementation, then:
-//! runtime.add_agent(leader);
-//! ```
 
-use crate::{Handler, Hook};
 use compact_str::CompactString;
+use runtime::{AgentDispatcher, Handler, Hook};
 use std::sync::Arc;
 use wcore::AgentConfig;
 use wcore::model::{Message, Tool};
@@ -78,7 +64,7 @@ async fn worker_send<H: Hook>(hook: &H, config: &AgentConfig, input: String) -> 
 
     // Workers use the hook directly as their context for model access.
     let agent_name = agent.config.name.clone();
-    let dispatcher = crate::AgentDispatcher {
+    let dispatcher = AgentDispatcher {
         hook,
         agent: &agent_name,
     };

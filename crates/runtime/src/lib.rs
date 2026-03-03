@@ -6,11 +6,8 @@
 //! `Agent::run()` and `Agent::run_stream()`.
 
 pub use hook::Hook;
-pub use listener::{IncomingMessage, Listener};
-pub use loader::{CronEntry, load_agents_dir, load_cron_dir, parse_agent_md, parse_cron_md};
 pub use memory::{InMemory, Memory, NoEmbedder};
-pub use skills::{Skill, SkillRegistry, SkillTier, parse_skill_md};
-pub use team::{build_team, extract_input, worker_tool};
+pub use skills::{Skill, SkillRegistry, SkillTier};
 pub use wcore::AgentConfig;
 pub use wcore::model::{Message, Request, Response, Role, StreamChunk, Tool};
 
@@ -22,10 +19,7 @@ use tokio::sync::RwLock;
 use wcore::AgentEvent;
 
 pub mod hook;
-pub mod listener;
-pub mod loader;
 pub mod skills;
-pub mod team;
 
 /// Re-exports of the most commonly used types.
 pub mod prelude {
@@ -53,9 +47,11 @@ impl Session {
 }
 
 /// Thin wrapper that implements wcore's `Dispatcher` by forwarding to Hook.
-pub(crate) struct AgentDispatcher<'a, H: Hook> {
-    pub(crate) hook: &'a H,
-    pub(crate) agent: &'a str,
+pub struct AgentDispatcher<'a, H: Hook> {
+    /// The hook backend.
+    pub hook: &'a H,
+    /// The agent name for scoped dispatch.
+    pub agent: &'a str,
 }
 
 impl<H: Hook> wcore::Dispatcher for AgentDispatcher<'_, H> {

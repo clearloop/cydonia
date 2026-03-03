@@ -9,6 +9,7 @@
 //! matched skills`, a registry swap is all that's needed — the next request
 //! to any agent automatically picks up the new skills.
 
+use crate::loader::load_skills_dir;
 use anyhow::Result;
 use runtime::{SkillRegistry, SkillTier};
 use std::path::PathBuf;
@@ -25,7 +26,7 @@ impl SkillHandler {
     /// by creating an empty registry.
     pub fn load(skills_dir: PathBuf) -> Result<Self> {
         let registry = if skills_dir.exists() {
-            match SkillRegistry::load_dir(&skills_dir, SkillTier::Workspace) {
+            match load_skills_dir(&skills_dir, SkillTier::Workspace) {
                 Ok(r) => {
                     tracing::info!("loaded {} skill(s)", r.len());
                     r
@@ -48,7 +49,7 @@ impl SkillHandler {
     /// Returns the number of skills loaded.
     pub async fn reload(&self) -> Result<usize> {
         let registry = if self.skills_dir.exists() {
-            SkillRegistry::load_dir(&self.skills_dir, SkillTier::Workspace)?
+            load_skills_dir(&self.skills_dir, SkillTier::Workspace)?
         } else {
             SkillRegistry::new()
         };

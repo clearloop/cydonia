@@ -19,10 +19,6 @@ compact_str.workspace = true
 async-stream.workspace = true
 futures-core.workspace = true
 futures-util.workspace = true
-schemars.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-serde_yaml.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 
@@ -31,3 +27,4 @@ model.workspace = true
 tracing-subscriber.workspace = true
 dotenvy.workspace = true
 chrono.workspace = true
+serde_json.workspace = true
