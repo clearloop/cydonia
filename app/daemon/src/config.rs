@@ -37,7 +37,7 @@ pub struct DaemonConfig {
     pub channels: Vec<ChannelConfig>,
     /// MCP server configurations.
     #[serde(default)]
-    pub mcp_servers: Vec<McpServerConfig>,
+    pub mcp_servers: Vec<mcp::McpServerConfig>,
 }
 
 impl Default for DaemonConfig {
@@ -68,28 +68,6 @@ pub struct ChannelConfig {
     pub agent: CompactString,
     /// Optional specific channel ID for exact routing.
     pub channel_id: Option<CompactString>,
-}
-
-/// MCP server configuration.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct McpServerConfig {
-    /// Server name.
-    pub name: CompactString,
-    /// Command to spawn.
-    pub command: String,
-    /// Command arguments.
-    #[serde(default)]
-    pub args: Vec<String>,
-    /// Environment variables.
-    #[serde(default)]
-    pub env: std::collections::BTreeMap<String, String>,
-    /// Auto-restart on failure.
-    #[serde(default = "default_true")]
-    pub auto_restart: bool,
-}
-
-fn default_true() -> bool {
-    true
 }
 
 /// Default agent markdown content for first-run scaffold.

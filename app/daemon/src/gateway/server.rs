@@ -183,17 +183,7 @@ impl Server for Gateway {
             .mcp()
             .reload(|path| {
                 let config = crate::DaemonConfig::load(path)?;
-                Ok(config
-                    .mcp_servers
-                    .iter()
-                    .map(|s| mcp::McpServerConfig {
-                        name: s.name.clone(),
-                        command: s.command.clone(),
-                        args: s.args.clone(),
-                        env: s.env.clone(),
-                        auto_restart: s.auto_restart,
-                    })
-                    .collect())
+                Ok(config.mcp_servers)
             })
             .await
         {

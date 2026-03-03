@@ -26,7 +26,8 @@ async fn main() {
         .set("learning", "Currently learning Rust, focus on async.");
 
     let hook = Arc::new(hook);
-    let runtime = Runtime::new(Arc::clone(&hook));
+    let provider = common::build_provider();
+    let runtime = Runtime::new(provider, Arc::clone(&hook));
 
     runtime
         .add_agent(AgentConfig::new("assistant").system_prompt(

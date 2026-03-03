@@ -33,19 +33,8 @@ pub async fn build_runtime(
     let skills_dir = config_dir.join(config::SKILLS_DIR);
     let skills = skill::SkillHandler::load(skills_dir)?;
 
-    // Load MCP servers — convert daemon config to mcp config.
-    let mcp_configs: Vec<mcp::McpServerConfig> = config
-        .mcp_servers
-        .iter()
-        .map(|s| mcp::McpServerConfig {
-            name: s.name.clone(),
-            command: s.command.clone(),
-            args: s.args.clone(),
-            env: s.env.clone(),
-            auto_restart: s.auto_restart,
-        })
-        .collect();
-    let mcp_handler = mcp::McpHandler::load(config_dir.to_path_buf(), &mcp_configs).await;
+    // Load MCP servers.
+    let mcp_handler = mcp::McpHandler::load(config_dir.to_path_buf(), &config.mcp_servers).await;
 
     // Build GatewayHook.
     let mut hook = GatewayHook::new(memory, skills, mcp_handler);

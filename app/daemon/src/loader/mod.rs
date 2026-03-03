@@ -5,11 +5,9 @@
 
 pub use agent::{load_agents_dir, parse_agent_md};
 pub use cron::{CronEntry, load_cron_dir, parse_cron_md};
-pub use skill::{load_skills_dir, parse_skill_md};
 
 pub mod agent;
 pub mod cron;
-pub mod skill;
 
 /// Split YAML frontmatter from the body. Frontmatter is delimited by `---`.
 ///

@@ -5,7 +5,7 @@
 //! graceful shutdown across all subsystems.
 
 use crate::config::ChannelConfig;
-use crate::feature::cron::{CronJob, CronScheduler};
+use crate::cron::{CronJob, CronScheduler};
 use crate::gateway::dispatch::AgentLock;
 use crate::gateway::{Gateway, GatewayHook};
 use crate::{DaemonConfig, loader};

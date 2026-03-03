@@ -2,7 +2,7 @@
 //! scheduling. Personal agent, local-first.
 
 pub mod config;
-pub mod feature;
+pub mod cron;
 pub mod gateway;
 pub mod loader;
 

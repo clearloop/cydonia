@@ -34,7 +34,8 @@ async fn main() {
         |_| async move { chrono::Utc::now().to_rfc3339() },
     );
 
-    let runtime = Runtime::new(Arc::new(hook));
+    let provider = common::build_provider();
+    let runtime = Runtime::new(provider, Arc::new(hook));
 
     runtime
         .add_agent(
