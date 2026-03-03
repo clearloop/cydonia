@@ -1,6 +1,7 @@
 //! Protocol impls for the gateway.
 
 use crate::MemoryBackend;
+use crate::feature::mcp::McpHandler;
 use crate::feature::skill::SkillHandler;
 use model::ProviderManager;
 use runtime::Hook;
@@ -14,12 +15,14 @@ pub mod uds;
 
 /// Shared state available to all request handlers.
 pub struct Gateway<H: Hook + 'static> {
-    /// The walrus runtime (immutable after init).
+    /// The walrus runtime.
     pub runtime: Arc<Runtime<H>>,
     /// HuggingFace endpoint selected at startup (fastest of official/mirror).
     pub hf_endpoint: Arc<str>,
     /// Skill registry with hot-reload support.
     pub skills: Arc<SkillHandler>,
+    /// MCP server manager with hot-reload support.
+    pub mcp: Arc<McpHandler>,
 }
 
 impl<H: Hook + 'static> Clone for Gateway<H> {
@@ -28,6 +31,7 @@ impl<H: Hook + 'static> Clone for Gateway<H> {
             runtime: Arc::clone(&self.runtime),
             hf_endpoint: Arc::clone(&self.hf_endpoint),
             skills: Arc::clone(&self.skills),
+            mcp: Arc::clone(&self.mcp),
         }
     }
 }

@@ -10,6 +10,7 @@
 
 mod common;
 
+use std::sync::Arc;
 use walrus_runtime::{McpBridge, prelude::*};
 
 #[tokio::main]
@@ -36,12 +37,8 @@ async fn main() {
         println!("  - {}: {}", tool.name, tool.description);
     }
 
-    // Wire MCP tools into the runtime's tool registry.
-    runtime.connect_mcp(bridge);
-    runtime
-        .register_mcp_tools()
-        .await
-        .expect("failed to register MCP tools");
+    // Wire MCP bridge into the runtime.
+    runtime.set_mcp_bridge(Arc::new(bridge)).await;
 
     runtime.add_agent(
         AgentConfig::new("assistant")

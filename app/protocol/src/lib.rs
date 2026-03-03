@@ -52,6 +52,28 @@ pub enum ClientMessage {
     },
     /// Reload skills from disk.
     ReloadSkills,
+    /// Add an MCP server to config and reload.
+    McpAdd {
+        /// Server name.
+        name: CompactString,
+        /// Command to spawn.
+        command: String,
+        /// Command arguments.
+        #[serde(default)]
+        args: Vec<String>,
+        /// Environment variables.
+        #[serde(default)]
+        env: std::collections::BTreeMap<String, String>,
+    },
+    /// Remove an MCP server from config and reload.
+    McpRemove {
+        /// Server name to remove.
+        name: CompactString,
+    },
+    /// Reload MCP servers from walrus.toml.
+    McpReload,
+    /// List connected MCP servers and their tools.
+    McpList,
     /// Ping the server (keepalive).
     Ping,
 }
@@ -156,8 +178,41 @@ pub enum ServerMessage {
         /// Number of skills loaded.
         count: usize,
     },
+    /// MCP server added successfully.
+    McpAdded {
+        /// Server name.
+        name: CompactString,
+        /// Tools provided by this server.
+        tools: Vec<CompactString>,
+    },
+    /// MCP server removed successfully.
+    McpRemoved {
+        /// Server name.
+        name: CompactString,
+        /// Tools that were removed.
+        tools: Vec<CompactString>,
+    },
+    /// MCP servers reloaded from config.
+    McpReloaded {
+        /// Connected servers after reload.
+        servers: Vec<McpServerSummary>,
+    },
+    /// List of connected MCP servers.
+    McpServerList {
+        /// Connected servers.
+        servers: Vec<McpServerSummary>,
+    },
     /// Pong response to client ping.
     Pong,
+}
+
+/// Summary of a connected MCP server.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpServerSummary {
+    /// Server name.
+    pub name: CompactString,
+    /// Tool names provided by this server.
+    pub tools: Vec<CompactString>,
 }
 
 /// Summary of a registered agent.

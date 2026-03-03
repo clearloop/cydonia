@@ -5,14 +5,14 @@ use crate::config;
 use crate::gateway::GatewayHook;
 use anyhow::Result;
 use model::ProviderManager;
-use runtime::{McpBridge, Memory, Request, Runtime, Tool};
+use runtime::{Memory, Request, Runtime, Tool};
 use std::path::Path;
 use std::sync::Arc;
 
 /// Build a fully-configured `Runtime<GatewayHook>` from config and directory.
 ///
-/// Loads agents from `config_dir/agents/*.md`, memory tools, and MCP servers
-/// from TOML config. Skills are loaded separately by the `SkillHandler`.
+/// Loads agents from `config_dir/agents/*.md` and memory tools.
+/// MCP servers and skills are loaded separately by their respective handlers.
 pub async fn build_runtime(
     config: &crate::DaemonConfig,
     config_dir: &Path,
@@ -42,27 +42,6 @@ pub async fn build_runtime(
     for agent in agents {
         tracing::info!("registered agent '{}'", agent.name);
         runtime.add_agent(agent);
-    }
-
-    // Connect MCP servers if configured.
-    if !config.mcp_servers.is_empty() {
-        let bridge = McpBridge::new();
-        for server_config in &config.mcp_servers {
-            let mut cmd = tokio::process::Command::new(&server_config.command);
-            cmd.args(&server_config.args);
-            for (k, v) in &server_config.env {
-                cmd.env(k, v);
-            }
-            if let Err(e) = bridge.connect_stdio(cmd).await {
-                tracing::warn!("failed to connect MCP server '{}': {e}", server_config.name);
-            } else {
-                tracing::info!("connected MCP server '{}'", server_config.name);
-            }
-        }
-        runtime.connect_mcp(bridge);
-        if let Err(e) = runtime.register_mcp_tools().await {
-            tracing::warn!("failed to register MCP tools: {e}");
-        }
     }
 
     Ok(runtime)

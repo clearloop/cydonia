@@ -66,7 +66,7 @@ async fn main() {
         .system_prompt("You are a research analyst. Provide well-reasoned answers.")
         .tool("current_time");
 
-    let leader = build_team(leader, vec![analyst], &mut runtime, &skills);
+    let leader = build_team(leader, vec![analyst], &mut runtime, &skills).await;
     runtime.add_agent(leader);
 
     println!("Everything REPL — leader + analyst team, tools, memory, skills");

@@ -17,6 +17,7 @@ use wcore::model::Tool;
 
 /// A connected MCP server peer with its tool names.
 struct ConnectedPeer {
+    name: CompactString,
     peer: RunningService<RoleClient, ()>,
     tools: Vec<CompactString>,
 }
@@ -49,7 +50,27 @@ impl McpBridge {
     /// Connect to an MCP server by spawning a child process.
     ///
     /// The command should be a program that speaks MCP over stdio.
+    /// Delegates to [`connect_stdio_named`](Self::connect_stdio_named) with
+    /// a name derived from the command program.
     pub async fn connect_stdio(&self, command: Command) -> Result<()> {
+        let name = command
+            .as_std()
+            .get_program()
+            .to_string_lossy()
+            .into_owned();
+        self.connect_stdio_named(CompactString::from(name), command)
+            .await?;
+        Ok(())
+    }
+
+    /// Connect to a named MCP server by spawning a child process.
+    ///
+    /// Returns the list of tool names registered by this server.
+    pub async fn connect_stdio_named(
+        &self,
+        name: CompactString,
+        command: Command,
+    ) -> Result<Vec<CompactString>> {
         let transport = TokioChildProcess::new(command)?;
         let peer: RunningService<RoleClient, ()> = ().serve(transport).await?;
 
@@ -66,11 +87,52 @@ impl McpBridge {
         }
 
         self.peers.lock().await.push(ConnectedPeer {
+            name,
             peer,
-            tools: tool_names,
+            tools: tool_names.clone(),
         });
 
-        Ok(())
+        Ok(tool_names)
+    }
+
+    /// Disconnect all peers and clear the tool cache.
+    ///
+    /// Dropping `RunningService` terminates the child process.
+    pub async fn clear(&self) {
+        self.peers.lock().await.clear();
+        self.tool_cache.lock().await.clear();
+    }
+
+    /// Remove a server by name, returning the tool names that were removed.
+    pub async fn remove_server(&self, name: &str) -> Vec<CompactString> {
+        let mut peers = self.peers.lock().await;
+        let mut removed_tools = Vec::new();
+
+        peers.retain(|p| {
+            if p.name.as_str() == name {
+                removed_tools.extend(p.tools.iter().cloned());
+                false
+            } else {
+                true
+            }
+        });
+
+        let mut cache = self.tool_cache.lock().await;
+        for tool_name in &removed_tools {
+            cache.remove(tool_name);
+        }
+
+        removed_tools
+    }
+
+    /// List all connected servers with their tool names.
+    pub async fn list_servers(&self) -> Vec<(CompactString, Vec<CompactString>)> {
+        self.peers
+            .lock()
+            .await
+            .iter()
+            .map(|p| (p.name.clone(), p.tools.clone()))
+            .collect()
     }
 
     /// List all tools available across all connected peers.

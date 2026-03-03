@@ -28,7 +28,7 @@ use wcore::model::{Message, Model, Tool};
 /// Each worker's handler captures everything it needs to independently run
 /// a conversation: provider, agent config, and a RuntimeDispatcher.
 /// Workers create ephemeral Agent instances per invocation (no cross-call state).
-pub fn build_team<H: Hook + 'static>(
+pub async fn build_team<H: Hook + 'static>(
     mut leader: AgentConfig,
     workers: Vec<AgentConfig>,
     runtime: &mut crate::Runtime<H>,
@@ -38,7 +38,7 @@ pub fn build_team<H: Hook + 'static>(
 
     for worker in workers {
         let tool_def = worker_tool(worker.name.clone(), worker.description.to_string());
-        let dispatcher = runtime.build_dispatcher(&worker);
+        let dispatcher = runtime.build_dispatcher(&worker).await;
 
         let ctx = Arc::new(WorkerCtx {
             provider: provider.clone(),

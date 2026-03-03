@@ -1,9 +1,10 @@
 //! Unix domain socket server — accept loop and per-connection message handler.
 
+use crate::config::McpServerConfig;
 use crate::gateway::Gateway;
 use memory::Memory;
 use protocol::codec::{self, FrameError};
-use protocol::{AgentSummary, ClientMessage, ServerMessage};
+use protocol::{AgentSummary, ClientMessage, McpServerSummary, ServerMessage};
 use runtime::Hook;
 use tokio::net::UnixListener;
 use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
@@ -234,6 +235,75 @@ async fn receiver_loop<H: Hook + 'static>(
                     });
                 }
             },
+
+            ClientMessage::McpAdd {
+                name,
+                command,
+                args,
+                env,
+            } => {
+                let config = McpServerConfig {
+                    name: name.clone(),
+                    command,
+                    args,
+                    env,
+                    auto_restart: true,
+                };
+                match state.mcp.add(config).await {
+                    Ok(tools) => {
+                        let _ = tx.send(ServerMessage::McpAdded { name, tools });
+                    }
+                    Err(e) => {
+                        let _ = tx.send(ServerMessage::Error {
+                            code: 500,
+                            message: format!("failed to add MCP server: {e}"),
+                        });
+                    }
+                }
+            }
+
+            ClientMessage::McpRemove { name } => match state.mcp.remove(&name).await {
+                Ok(tools) => {
+                    let bridge = state.mcp.bridge().await;
+                    state.runtime.set_mcp_bridge(bridge).await;
+                    let _ = tx.send(ServerMessage::McpRemoved { name, tools });
+                }
+                Err(e) => {
+                    let _ = tx.send(ServerMessage::Error {
+                        code: 500,
+                        message: format!("failed to remove MCP server: {e}"),
+                    });
+                }
+            },
+
+            ClientMessage::McpReload => match state.mcp.reload().await {
+                Ok(servers) => {
+                    let bridge = state.mcp.bridge().await;
+                    state.runtime.set_mcp_bridge(bridge).await;
+                    let servers = servers
+                        .into_iter()
+                        .map(|(name, tools)| McpServerSummary { name, tools })
+                        .collect();
+                    let _ = tx.send(ServerMessage::McpReloaded { servers });
+                }
+                Err(e) => {
+                    let _ = tx.send(ServerMessage::Error {
+                        code: 500,
+                        message: format!("MCP reload failed: {e}"),
+                    });
+                }
+            },
+
+            ClientMessage::McpList => {
+                let servers = state
+                    .mcp
+                    .list()
+                    .await
+                    .into_iter()
+                    .map(|(name, tools)| McpServerSummary { name, tools })
+                    .collect();
+                let _ = tx.send(ServerMessage::McpServerList { servers });
+            }
 
             ClientMessage::Ping => {
                 let _ = tx.send(ServerMessage::Pong);

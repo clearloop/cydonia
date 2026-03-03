@@ -65,7 +65,7 @@ pub struct Runtime<H: Hook> {
     provider: H::Model,
     request: Request,
     memory: Arc<H::Memory>,
-    mcp: Option<Arc<McpBridge>>,
+    mcp: RwLock<Option<Arc<McpBridge>>>,
     tools: BTreeMap<CompactString, (Tool, Handler)>,
     agents: BTreeMap<CompactString, AgentConfig>,
     sessions: RwLock<BTreeMap<CompactString, Session>>,
@@ -91,46 +91,19 @@ impl<H: Hook + 'static> Runtime<H> {
             provider,
             request,
             memory,
-            mcp: None,
+            mcp: RwLock::new(None),
             tools: BTreeMap::new(),
             agents: BTreeMap::new(),
             sessions: RwLock::new(BTreeMap::new()),
         }
     }
 
-    /// Connect an MCP bridge to this runtime.
-    pub fn connect_mcp(&mut self, bridge: McpBridge) {
-        self.mcp = Some(Arc::new(bridge));
-    }
-
-    /// Get a reference to the MCP bridge, if connected.
-    pub fn mcp_bridge(&self) -> Option<&McpBridge> {
-        self.mcp.as_deref()
-    }
-
-    /// Register all MCP tools from the connected bridge into the tool registry.
-    pub async fn register_mcp_tools(&mut self) -> Result<()> {
-        let bridge = self
-            .mcp
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("no MCP bridge connected"))?;
-        let mcp_tools = bridge.tools().await;
-        for tool in mcp_tools {
-            let name = tool.name.clone();
-            let bridge = Arc::clone(bridge);
-            self.tools.insert(
-                name.clone(),
-                (
-                    tool,
-                    Arc::new(move |args: String| {
-                        let bridge = Arc::clone(&bridge);
-                        let name = name.clone();
-                        Box::pin(async move { bridge.call(&name, &args).await })
-                    }),
-                ),
-            );
-        }
-        Ok(())
+    /// Set the MCP bridge for this runtime (dynamic update via `&self`).
+    ///
+    /// Agents mid-execution keep the old bridge via their `Arc<McpBridge>`
+    /// clone — new agents pick up the new bridge on next `build_dispatcher`.
+    pub async fn set_mcp_bridge(&self, bridge: Arc<McpBridge>) {
+        *self.mcp.write().await = Some(bridge);
     }
 
     /// Register an agent configuration.
@@ -217,8 +190,9 @@ impl<H: Hook + 'static> Runtime<H> {
     /// Build a RuntimeDispatcher for the given agent config.
     ///
     /// Resolves the agent's tool names against the registry and includes
-    /// the MCP bridge if connected.
-    pub fn build_dispatcher(&self, agent_config: &AgentConfig) -> RuntimeDispatcher {
+    /// the MCP bridge if connected. MCP tool schemas are merged into the
+    /// dispatcher's tool list so the LLM can see them.
+    pub async fn build_dispatcher(&self, agent_config: &AgentConfig) -> RuntimeDispatcher {
         let resolved = self.resolve_tools(&agent_config.tools);
         let mut tools = Vec::with_capacity(resolved.len());
         let mut handlers = BTreeMap::new();
@@ -226,7 +200,18 @@ impl<H: Hook + 'static> Runtime<H> {
             handlers.insert(tool.name.clone(), handler);
             tools.push(tool);
         }
-        RuntimeDispatcher::new(tools, handlers, self.mcp.clone())
+
+        let mcp = self.mcp.read().await.clone();
+        if let Some(ref bridge) = mcp {
+            let mcp_tools = bridge.tools().await;
+            for tool in mcp_tools {
+                if !handlers.contains_key(&tool.name) {
+                    tools.push(tool);
+                }
+            }
+        }
+
+        RuntimeDispatcher::new(tools, handlers, mcp)
     }
 
     /// Create an ephemeral Agent from config with a fresh event channel.
@@ -274,7 +259,7 @@ impl<H: Hook + 'static> Runtime<H> {
         };
         session.messages.push(message);
 
-        let dispatcher = self.build_dispatcher(&agent_config);
+        let dispatcher = self.build_dispatcher(&agent_config).await;
         let (mut agent_instance, mut rx) =
             Self::create_agent(&agent_config, session.messages, skills);
 
@@ -330,7 +315,7 @@ impl<H: Hook + 'static> Runtime<H> {
             };
             session.messages.push(message);
 
-            let dispatcher = self.build_dispatcher(&agent_config);
+            let dispatcher = self.build_dispatcher(&agent_config).await;
             let (mut agent_instance, _rx) =
                 Self::create_agent(&agent_config, session.messages, skills);
 
