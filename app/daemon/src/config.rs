@@ -45,7 +45,7 @@ impl Default for DaemonConfig {
         Self {
             models: vec![ProviderConfig {
                 model: "deepseek-chat".into(),
-                api_key: Some("${DEEPSEEK_API_KEY}".to_owned()),
+                api_key: None,
                 base_url: None,
                 loader: None,
                 quantization: None,
@@ -104,11 +104,9 @@ You are a helpful assistant. Be concise.
 "#;
 
 impl DaemonConfig {
-    /// Parse a TOML string into a `DaemonConfig`, expanding environment
-    /// variables in supported fields.
+    /// Parse a TOML string into a `DaemonConfig`.
     pub fn from_toml(toml_str: &str) -> anyhow::Result<Self> {
-        let expanded = crate::utils::expand_env_vars(toml_str);
-        let config: Self = toml::from_str(&expanded)?;
+        let config: Self = toml::from_str(toml_str)?;
         Ok(config)
     }
 
