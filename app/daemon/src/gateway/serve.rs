@@ -4,13 +4,10 @@
 //! through the shared dispatch path. A broadcast channel coordinates
 //! graceful shutdown across all subsystems.
 
-use crate::cron::{CronJob, CronScheduler};
-use crate::gateway::{Gateway, GatewayHook};
-use crate::{DaemonConfig, loader};
+use crate::DaemonConfig;
+use crate::gateway::Gateway;
 use anyhow::Result;
 use compact_str::CompactString;
-use model::ProviderManager;
-use runtime::Runtime;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::broadcast;
@@ -104,7 +101,7 @@ pub async fn serve_with_config(config: &DaemonConfig, config_dir: &Path) -> Resu
 
     // --- Cron scheduler ---
     let cron_dir = config_dir.join(crate::config::CRON_DIR);
-    spawn_cron(&cron_dir, &runtime, shutdown_tx.subscribe());
+    crate::cron::spawn(&cron_dir, &runtime, shutdown_tx.subscribe());
 
     Ok(ServeHandle {
         socket_path: resolved_path,
@@ -121,58 +118,4 @@ fn bridge_shutdown(mut rx: broadcast::Receiver<()>) -> tokio::sync::oneshot::Rec
         let _ = otx.send(());
     });
     orx
-}
-
-/// Load cron entries and start the scheduler.
-fn spawn_cron(
-    cron_dir: &Path,
-    runtime: &Arc<Runtime<ProviderManager, GatewayHook>>,
-    shutdown: broadcast::Receiver<()>,
-) {
-    let entries = match loader::load_cron_dir(cron_dir) {
-        Ok(e) => e,
-        Err(e) => {
-            tracing::warn!("failed to load cron entries: {e}");
-            return;
-        }
-    };
-
-    let mut jobs = Vec::new();
-    for entry in &entries {
-        match CronJob::from_entry(entry) {
-            Ok(job) => {
-                tracing::info!("registered cron job '{}' → agent '{}'", job.name, job.agent);
-                jobs.push(job);
-            }
-            Err(e) => {
-                tracing::warn!("skipping cron entry '{}': {e}", entry.name);
-            }
-        }
-    }
-
-    let scheduler = CronScheduler::new(jobs);
-    let rt = Arc::clone(runtime);
-
-    scheduler.start(
-        move |job| {
-            let rt = Arc::clone(&rt);
-            async move {
-                match rt.send_to(&job.agent, &job.message).await {
-                    Ok(response) => {
-                        let content = response.final_response.unwrap_or_default();
-                        tracing::info!(
-                            job = %job.name,
-                            agent = %job.agent,
-                            response_len = content.len(),
-                            "cron job completed"
-                        );
-                    }
-                    Err(e) => {
-                        tracing::error!(job = %job.name, "cron dispatch failed: {e}");
-                    }
-                }
-            }
-        },
-        shutdown,
-    );
 }

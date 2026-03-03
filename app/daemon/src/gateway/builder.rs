@@ -3,9 +3,8 @@
 use crate::config;
 use crate::gateway::GatewayHook;
 use anyhow::Result;
-use memory::{InMemory, Memory};
 use model::ProviderManager;
-use runtime::{Runtime, Tool};
+use runtime::{Hook, Runtime};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -19,7 +18,7 @@ pub async fn build_runtime(
     config_dir: &Path,
 ) -> Result<Runtime<ProviderManager, GatewayHook>> {
     // Construct in-memory backend.
-    let memory = InMemory::new();
+    let memory = memory::InMemory::new();
     tracing::info!("using in-memory backend");
 
     // Construct provider manager from config list.
@@ -57,82 +56,11 @@ pub async fn build_runtime(
 
 /// Register memory-backed tools (remember, recall) on the GatewayHook.
 fn register_memory_tools(hook: &mut GatewayHook) {
-    // remember tool
-    {
-        let mem = hook.memory_arc();
-        let schema = serde_json::json!({
-            "type": "object",
-            "properties": {
-                "key": { "type": "string", "description": "Memory key" },
-                "value": { "type": "string", "description": "Value to remember" }
-            },
-            "required": ["key", "value"]
-        });
-        let tool = Tool {
-            name: "remember".into(),
-            description: "Store a key-value pair in memory.".into(),
-            parameters: serde_json::from_value(schema).unwrap(),
-            strict: false,
-        };
-        hook.register(tool, move |args| {
-            let mem = Arc::clone(&mem);
-            async move {
-                let parsed: serde_json::Value = match serde_json::from_str(&args) {
-                    Ok(v) => v,
-                    Err(e) => return format!("invalid arguments: {e}"),
-                };
-                let key = parsed["key"].as_str().unwrap_or("");
-                let value = parsed["value"].as_str().unwrap_or("");
-                match mem.store(key.to_owned(), value.to_owned()).await {
-                    Ok(()) => format!("remembered: {key}"),
-                    Err(e) => format!("failed to store: {e}"),
-                }
-            }
-        });
-    }
-
-    // recall tool
-    {
-        let mem = hook.memory_arc();
-        let schema = serde_json::json!({
-            "type": "object",
-            "properties": {
-                "query": { "type": "string", "description": "Search query for relevant memories" },
-                "limit": { "type": "integer", "description": "Maximum number of results (default: 10)" }
-            },
-            "required": ["query"]
-        });
-        let tool = Tool {
-            name: "recall".into(),
-            description: "Search memory for entries relevant to a query.".into(),
-            parameters: serde_json::from_value(schema).unwrap(),
-            strict: false,
-        };
-        hook.register(tool, move |args| {
-            let mem = Arc::clone(&mem);
-            async move {
-                let parsed: serde_json::Value = match serde_json::from_str(&args) {
-                    Ok(v) => v,
-                    Err(e) => return format!("invalid arguments: {e}"),
-                };
-                let query = parsed["query"].as_str().unwrap_or("");
-                let limit = parsed["limit"].as_u64().unwrap_or(10) as usize;
-                let options = memory::RecallOptions {
-                    limit,
-                    ..Default::default()
-                };
-                match mem.recall(query, options).await {
-                    Ok(entries) if entries.is_empty() => "no memories found".to_owned(),
-                    Ok(entries) => {
-                        let mut out = String::new();
-                        for entry in &entries {
-                            out.push_str(&format!("{}: {}\n", entry.key, entry.value));
-                        }
-                        out
-                    }
-                    Err(e) => format!("recall failed: {e}"),
-                }
-            }
-        });
+    let mem = hook.memory_arc();
+    for mt in [
+        memory::tools::remember(Arc::clone(&mem)),
+        memory::tools::recall(mem),
+    ] {
+        hook.register(mt.tool, mt.handler);
     }
 }

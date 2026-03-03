@@ -54,17 +54,6 @@ impl GatewayHook {
         }
     }
 
-    /// Register a tool with its handler.
-    pub fn register<F, Fut>(&mut self, tool: Tool, handler: F)
-    where
-        F: Fn(String) -> Fut + Send + Sync + 'static,
-        Fut: std::future::Future<Output = String> + Send + 'static,
-    {
-        let name = tool.name.clone();
-        let handler: Handler = Arc::new(move |args| Box::pin(handler(args)));
-        self.tools.insert(name, (tool, handler));
-    }
-
     /// Access the memory backend.
     pub fn memory(&self) -> &InMemory {
         &self.memory
@@ -87,6 +76,11 @@ impl GatewayHook {
 }
 
 impl Hook for GatewayHook {
+    fn register(&mut self, tool: Tool, handler: Handler) {
+        let name = tool.name.clone();
+        self.tools.insert(name, (tool, handler));
+    }
+
     fn on_build_agent(&self, config: AgentConfig) -> AgentConfig {
         // Skills enrich the system prompt based on agent tags.
         let config = self.skills.on_build_agent(config);

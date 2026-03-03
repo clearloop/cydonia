@@ -5,6 +5,7 @@
 //! an agent, `tools`/`dispatch` during each step, and `on_event` after each
 //! step completes.
 
+use crate::Handler;
 use anyhow::Result;
 use std::future::Future;
 use wcore::model::Tool;
@@ -43,6 +44,14 @@ pub trait Hook: Send + Sync {
         agent: &str,
         calls: &[(&str, &str)],
     ) -> impl Future<Output = Vec<Result<String>>> + Send;
+
+    /// Register a tool with its handler.
+    ///
+    /// Called during the builder phase (before the hook is wrapped in `Arc`).
+    /// Hooks that support dynamic tool registration override this method.
+    ///
+    /// Default: no-op — the tool is silently dropped.
+    fn register(&mut self, _tool: Tool, _handler: Handler) {}
 
     /// Called by Runtime after each agent step during execution.
     ///

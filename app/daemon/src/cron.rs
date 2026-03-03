@@ -5,10 +5,15 @@
 //! it produces events (fires jobs), and the Gateway wires them to
 //! agent dispatch.
 
+use crate::gateway::GatewayHook;
 use chrono::Utc;
 use compact_str::CompactString;
 use cron::Schedule;
+use model::ProviderManager;
+use runtime::Runtime;
+use std::path::Path;
 use std::str::FromStr;
+use std::sync::Arc;
 use tokio::{sync::broadcast, task::JoinHandle, time};
 
 /// A parsed cron job ready for scheduling.
@@ -137,4 +142,58 @@ impl CronScheduler {
     pub fn jobs(&self) -> &[CronJob] {
         &self.jobs
     }
+}
+
+/// Load cron entries from disk and start the scheduler.
+pub fn spawn(
+    cron_dir: &Path,
+    runtime: &Arc<Runtime<ProviderManager, GatewayHook>>,
+    shutdown: broadcast::Receiver<()>,
+) {
+    let entries = match crate::loader::load_cron_dir(cron_dir) {
+        Ok(e) => e,
+        Err(e) => {
+            tracing::warn!("failed to load cron entries: {e}");
+            return;
+        }
+    };
+
+    let mut jobs = Vec::new();
+    for entry in &entries {
+        match CronJob::from_entry(entry) {
+            Ok(job) => {
+                tracing::info!("registered cron job '{}' → agent '{}'", job.name, job.agent);
+                jobs.push(job);
+            }
+            Err(e) => {
+                tracing::warn!("skipping cron entry '{}': {e}", entry.name);
+            }
+        }
+    }
+
+    let scheduler = CronScheduler::new(jobs);
+    let rt = Arc::clone(runtime);
+
+    scheduler.start(
+        move |job| {
+            let rt = Arc::clone(&rt);
+            async move {
+                match rt.send_to(&job.agent, &job.message).await {
+                    Ok(response) => {
+                        let content = response.final_response.unwrap_or_default();
+                        tracing::info!(
+                            job = %job.name,
+                            agent = %job.agent,
+                            response_len = content.len(),
+                            "cron job completed"
+                        );
+                    }
+                    Err(e) => {
+                        tracing::error!(job = %job.name, "cron dispatch failed: {e}");
+                    }
+                }
+            }
+        },
+        shutdown,
+    );
 }
