@@ -2,6 +2,7 @@
 name = "walrus-channel"
 description = "Walrus channel adapters"
 documentation = "https://docs.rs/walrus-channel"
+readme = "README.md"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

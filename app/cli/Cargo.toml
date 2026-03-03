@@ -1,5 +1,8 @@
 [package]
 name = "walrus-cli"
+description = "Command-line interface for Walrus"
+documentation = "https://docs.rs/walrus-cli"
+readme = "README.md"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

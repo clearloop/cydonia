@@ -2,6 +2,7 @@
 name = "walrus-runtime"
 description = "Walrus runtime"
 documentation = "https://docs.rs/walrus-runtime"
+readme = "README.md"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

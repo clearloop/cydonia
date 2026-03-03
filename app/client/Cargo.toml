@@ -1,5 +1,8 @@
 [package]
 name = "walrus-client"
+description = "Client library for the Walrus daemon"
+documentation = "https://docs.rs/walrus-client"
+readme = "README.md"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

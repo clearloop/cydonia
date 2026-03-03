@@ -2,6 +2,7 @@
 name = "walrus-core"
 description = "Walrus agent library"
 documentation = "https://docs.rs/walrus-core"
+readme = "README.md"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

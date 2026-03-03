@@ -1,5 +1,8 @@
 [package]
 name = "walrus-daemon"
+description = "The Walrus daemon"
+documentation = "https://docs.rs/walrus-daemon"
+readme = "README.md"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

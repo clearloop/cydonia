@@ -1,5 +1,8 @@
 [package]
 name = "walrus-protocol"
+description = "Wire protocol for Walrus daemon communication"
+documentation = "https://docs.rs/walrus-protocol"
+readme = "README.md"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

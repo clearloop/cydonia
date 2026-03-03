@@ -6592,7 +6592,7 @@ dependencies = [
 
 [[package]]
 name = "walrus-channel"
-version = "0.0.9"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -6608,7 +6608,7 @@ dependencies = [
 
 [[package]]
 name = "walrus-cli"
-version = "0.0.9"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -6627,7 +6627,7 @@ dependencies = [
 
 [[package]]
 name = "walrus-client"
-version = "0.0.9"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -6640,7 +6640,7 @@ dependencies = [
 
 [[package]]
 name = "walrus-core"
-version = "0.0.9"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -6656,7 +6656,7 @@ dependencies = [
 
 [[package]]
 name = "walrus-daemon"
-version = "0.0.9"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -6684,7 +6684,7 @@ dependencies = [
 
 [[package]]
 name = "walrus-memory"
-version = "0.0.9"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "compact_str 0.8.1",
@@ -6695,7 +6695,7 @@ dependencies = [
 
 [[package]]
 name = "walrus-model"
-version = "0.0.9"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -6715,7 +6715,7 @@ dependencies = [
 
 [[package]]
 name = "walrus-protocol"
-version = "0.0.9"
+version = "0.0.1"
 dependencies = [
  "compact_str 0.8.1",
  "serde",
@@ -6725,7 +6725,7 @@ dependencies = [
 
 [[package]]
 name = "walrus-runtime"
-version = "0.0.9"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "chrono",

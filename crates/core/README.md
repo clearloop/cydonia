@@ -1,18 +1,12 @@
 # walrus-core
 
-Core abstractions for the Unified LLM Interface.
+Stateful agent execution library.
 
-## Overview
-
-This crate provides the foundational types and traits for building LLM applications:
-
-- `LLM` - Provider trait for LLM backends
-- `Agent` - Trait for building tool-using agents
-- `Chat` - Chat session management with streaming support
-- `Message` - Chat message types (user, assistant, system, tool)
-- `Tool` / `ToolCall` - Function calling abstractions
-- `StreamChunk` - Streaming response handling
+Provides `Agent<M: Model>` with step/run/run_stream execution, `AgentConfig`,
+`AgentBuilder`, the `Dispatcher` trait for tool dispatch, and event types
+(`AgentEvent`, `AgentStep`, `AgentResponse`). Also includes the unified `model`
+module with `Model` trait, `Message`, `Tool`, `Request`, and `Response`.
 
 ## License
 
-MIT
+GPL-3.0

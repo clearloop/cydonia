@@ -2,6 +2,7 @@
 name = "walrus-model"
 description = "Walrus LLM provider implementations"
 documentation = "https://docs.rs/walrus-model"
+readme = "README.md"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

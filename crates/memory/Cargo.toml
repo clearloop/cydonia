@@ -2,6 +2,7 @@
 name = "walrus-memory"
 description = "Memory backends for Walrus agents"
 documentation = "https://docs.rs/walrus-memory"
+readme = "README.md"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
