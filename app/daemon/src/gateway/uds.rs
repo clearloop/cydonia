@@ -120,6 +120,54 @@ async fn receiver_loop<H: Hook + 'static>(
                 let _ = tx.send(ServerMessage::StreamEnd { agent });
             }
 
+            // Download blocks this connection's receiver loop for the
+            // duration (same pattern as Stream). Other connections are
+            // unaffected — each has its own receiver task.
+            ClientMessage::Download { model } => {
+                let _ = tx.send(ServerMessage::DownloadStart {
+                    model: model.clone(),
+                });
+
+                let (dtx, mut drx) = mpsc::unbounded_channel();
+                let model_str = model.to_string();
+                let download_handle = tokio::spawn(async move {
+                    model::local::download::download_model(&model_str, dtx).await
+                });
+
+                while let Some(event) = drx.recv().await {
+                    let msg = match event {
+                        model::local::download::DownloadEvent::FileStart { filename, size } => {
+                            ServerMessage::DownloadFileStart { filename, size }
+                        }
+                        model::local::download::DownloadEvent::Progress { bytes } => {
+                            ServerMessage::DownloadProgress { bytes }
+                        }
+                        model::local::download::DownloadEvent::FileEnd { filename } => {
+                            ServerMessage::DownloadFileEnd { filename }
+                        }
+                    };
+                    let _ = tx.send(msg);
+                }
+
+                match download_handle.await {
+                    Ok(Ok(())) => {
+                        let _ = tx.send(ServerMessage::DownloadEnd { model });
+                    }
+                    Ok(Err(e)) => {
+                        let _ = tx.send(ServerMessage::Error {
+                            code: 500,
+                            message: format!("download failed: {e}"),
+                        });
+                    }
+                    Err(e) => {
+                        let _ = tx.send(ServerMessage::Error {
+                            code: 500,
+                            message: format!("download task panicked: {e}"),
+                        });
+                    }
+                }
+            }
+
             ClientMessage::ClearSession { agent } => {
                 state.runtime.clear_session(&agent).await;
                 let _ = tx.send(ServerMessage::SessionCleared { agent });

@@ -50,6 +50,14 @@ impl GatewayRunner {
         }
     }
 
+    /// Send a download request and return a stream of progress messages.
+    pub fn download_stream(
+        &mut self,
+        msg: ClientMessage,
+    ) -> impl Stream<Item = Result<ServerMessage>> + '_ {
+        self.connection.download_stream(msg)
+    }
+
     /// Get a specific memory entry by key.
     pub async fn get_memory(&mut self, key: &str) -> Result<Option<String>> {
         let msg = ClientMessage::GetMemory {

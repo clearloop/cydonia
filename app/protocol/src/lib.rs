@@ -45,6 +45,11 @@ pub enum ClientMessage {
         /// Memory key.
         key: String,
     },
+    /// Request download of a model's files with progress reporting.
+    Download {
+        /// HuggingFace model ID (e.g. "microsoft/Phi-3.5-mini-instruct").
+        model: CompactString,
+    },
     /// Ping the server (keepalive).
     Ping,
 }
@@ -109,6 +114,33 @@ pub enum ServerMessage {
         key: String,
         /// Memory value (None if not found).
         value: Option<String>,
+    },
+    /// Download has started for a model.
+    DownloadStart {
+        /// Model being downloaded.
+        model: CompactString,
+    },
+    /// A file download has started.
+    DownloadFileStart {
+        /// Filename within the repo.
+        filename: String,
+        /// Total size in bytes.
+        size: u64,
+    },
+    /// Download progress for current file (delta, not cumulative).
+    DownloadProgress {
+        /// Bytes downloaded in this chunk (delta).
+        bytes: u64,
+    },
+    /// A file download has completed.
+    DownloadFileEnd {
+        /// Filename within the repo.
+        filename: String,
+    },
+    /// All downloads complete for a model.
+    DownloadEnd {
+        /// Model that was downloaded.
+        model: CompactString,
     },
     /// Error response.
     Error {

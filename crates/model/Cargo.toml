@@ -11,7 +11,7 @@ keywords.workspace = true
 
 [features]
 default = ["local"]
-local = ["dep:mistralrs", "dep:dirs"]
+local = ["dep:mistralrs", "dep:dirs", "dep:hf-hub"]
 
 [dependencies]
 wcore.workspace = true
@@ -26,4 +26,5 @@ serde_json.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 dirs = { workspace = true, optional = true }
+hf-hub = { workspace = true, optional = true }
 mistralrs = { workspace = true, optional = true }

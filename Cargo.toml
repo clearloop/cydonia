@@ -26,6 +26,7 @@ async-stream = "0.3"
 compact_str = { version = "0.8", features = ["serde"] }
 futures-core = "0.3"
 futures-util = "0.3"
+hf-hub = { version = "0.5.0", features = ["tokio"] }
 reqwest = { version = "0.12", features = ["json", "stream"] }
 rmcp = { version = "0.16", features = ["client", "transport-child-process"] }
 rusqlite = { version = "0.34", features = ["bundled"] }

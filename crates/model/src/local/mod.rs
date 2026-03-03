@@ -8,6 +8,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+pub mod download;
 mod provider;
 
 /// Local LLM provider wrapping a mistralrs `Model`.
@@ -97,10 +98,10 @@ impl Local {
     }
 }
 
-/// Walrus model cache directory: `~/.cache/walrus/models/`.
-fn cache_dir() -> PathBuf {
-    dirs::cache_dir()
-        .expect("no platform cache directory")
-        .join("walrus")
-        .join("models")
+/// Walrus HF cache directory: `~/.walrus/hf`.
+pub(crate) fn cache_dir() -> PathBuf {
+    dirs::home_dir()
+        .expect("no home directory")
+        .join(".walrus")
+        .join("hf")
 }

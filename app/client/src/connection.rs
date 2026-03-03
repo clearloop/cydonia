@@ -57,6 +57,35 @@ impl Connection {
         }
     }
 
+    /// Send a download request and return a stream of progress messages.
+    ///
+    /// The stream yields messages until `DownloadEnd` or `Error` is received.
+    pub fn download_stream(
+        &mut self,
+        msg: ClientMessage,
+    ) -> impl Stream<Item = Result<ServerMessage>> + '_ {
+        async_stream::try_stream! {
+            codec::write_message(&mut self.writer, &msg)
+                .await
+                .map_err(|e| anyhow::anyhow!("{e}"))?;
+
+            loop {
+                let server_msg = self.read_message().await?;
+                match &server_msg {
+                    ServerMessage::DownloadEnd { .. } => {
+                        yield server_msg;
+                        break;
+                    }
+                    ServerMessage::Error { .. } => {
+                        yield server_msg;
+                        break;
+                    }
+                    _ => yield server_msg,
+                }
+            }
+        }
+    }
+
     /// Close the connection by dropping both halves.
     pub fn close(self) {
         drop(self);
