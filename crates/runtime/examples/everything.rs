@@ -13,14 +13,52 @@
 
 mod common;
 
-use walrus_runtime::{Memory, Skill, SkillRegistry, SkillTier, build_team, prelude::*};
+use std::sync::Arc;
+use walrus_runtime::{Hook, Memory, Skill, SkillRegistry, SkillTier, build_team, prelude::*};
+
+/// Hook that wraps ExampleHook and adds skill enrichment.
+struct EverythingHook {
+    inner: common::ExampleHook,
+    skills: SkillRegistry,
+}
+
+impl Hook for EverythingHook {
+    type Model = model::ProviderManager;
+
+    fn model(&self) -> &model::ProviderManager {
+        self.inner.model()
+    }
+
+    fn tools(&self, agent: &str) -> Vec<Tool> {
+        self.inner.tools(agent)
+    }
+
+    fn dispatch(
+        &self,
+        agent: &str,
+        calls: &[(&str, &str)],
+    ) -> impl std::future::Future<Output = Vec<anyhow::Result<String>>> + Send {
+        self.inner.dispatch(agent, calls)
+    }
+
+    fn enrich_prompt(&self, config: &AgentConfig) -> String {
+        let mut prompt = config.system_prompt.clone();
+        for skill in self.skills.find_by_tags(&config.skill_tags) {
+            if !skill.body.is_empty() {
+                prompt.push_str("\n\n");
+                prompt.push_str(&skill.body);
+            }
+        }
+        prompt
+    }
+}
 
 #[tokio::main]
 async fn main() {
     common::init_tracing();
-    let mut runtime = common::build_runtime();
+    let mut inner = common::build_hook();
 
-    // 1. Register a custom tool — something the LLM can't do natively.
+    // 1. Register a custom tool.
     let time_tool = Tool {
         name: "current_time".into(),
         description: "Returns the current UTC date and time.".into(),
@@ -31,12 +69,12 @@ async fn main() {
         .unwrap(),
         strict: false,
     };
-    runtime.register(
+    inner.register(
         time_tool,
         |_| async move { chrono::Utc::now().to_rfc3339() },
     );
 
-    // 2. Load a skill — modifies system prompt to constrain response style.
+    // 2. Load a skill.
     let mut skills = SkillRegistry::new();
     skills.add(
         Skill {
@@ -51,10 +89,12 @@ async fn main() {
         SkillTier::Bundled,
     );
 
-    // 3. Store memory context — affects system prompt via compile_relevant().
-    runtime
+    // 3. Store memory context.
+    inner
         .memory()
         .set("preference", "User prefers direct answers with examples.");
+
+    let hook = Arc::new(EverythingHook { inner, skills });
 
     // 4. Build a team: leader delegates to analyst worker.
     let leader = AgentConfig::new("leader")
@@ -66,11 +106,16 @@ async fn main() {
         .system_prompt("You are a research analyst. Provide well-reasoned answers.")
         .tool("current_time");
 
-    let leader = build_team(leader, vec![analyst], &mut runtime, &skills).await;
+    let (leader, worker_entries) = build_team(leader, vec![analyst], &hook);
+
+    let mut runtime = Runtime::new(Arc::clone(&hook));
+    for (worker_config, _tool, _handler) in worker_entries {
+        runtime.add_agent(worker_config);
+    }
     runtime.add_agent(leader);
 
     println!("Everything REPL — leader + analyst team, tools, memory, skills");
     println!("(type 'exit' to quit)");
     println!("---");
-    common::repl(&runtime, "leader", &skills).await;
+    common::repl(&runtime, "leader").await;
 }

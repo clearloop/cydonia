@@ -5,16 +5,15 @@ use crate::gateway::Gateway;
 use memory::Memory;
 use protocol::codec::{self, FrameError};
 use protocol::{AgentSummary, ClientMessage, McpServerSummary, ServerMessage};
-use runtime::Hook;
 use tokio::net::UnixListener;
 use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::sync::{mpsc, oneshot};
 use wcore::model::Message;
 
 /// Accept connections on the given `UnixListener` until shutdown is signalled.
-pub async fn accept_loop<H: Hook + 'static>(
+pub async fn accept_loop(
     listener: UnixListener,
-    state: Gateway<H>,
+    state: Gateway,
     mut shutdown: oneshot::Receiver<()>,
 ) {
     loop {
@@ -41,7 +40,7 @@ pub async fn accept_loop<H: Hook + 'static>(
 }
 
 /// Handle an established Unix domain socket connection.
-async fn handle_connection<H: Hook + 'static>(stream: tokio::net::UnixStream, state: Gateway<H>) {
+async fn handle_connection(stream: tokio::net::UnixStream, state: Gateway) {
     let (reader, writer) = stream.into_split();
     let (tx, rx) = mpsc::unbounded_channel::<ServerMessage>();
 
@@ -67,10 +66,10 @@ async fn sender_loop(mut writer: OwnedWriteHalf, mut rx: mpsc::UnboundedReceiver
 }
 
 /// Reads client messages from the socket and dispatches them.
-async fn receiver_loop<H: Hook + 'static>(
+async fn receiver_loop(
     mut reader: OwnedReadHalf,
     tx: mpsc::UnboundedSender<ServerMessage>,
-    state: Gateway<H>,
+    state: Gateway,
 ) {
     loop {
         let client_msg: ClientMessage = match codec::read_message(&mut reader).await {
@@ -84,12 +83,7 @@ async fn receiver_loop<H: Hook + 'static>(
 
         match client_msg {
             ClientMessage::Send { agent, content } => {
-                let skills = state.skills.registry().read().await;
-                match state
-                    .runtime
-                    .send_to(&agent, Message::user(&content), &skills)
-                    .await
-                {
+                match state.runtime.send_to(&agent, Message::user(&content)).await {
                     Ok(response) => {
                         let content = response.content().cloned().unwrap_or_default();
                         let _ = tx.send(ServerMessage::Response { agent, content });
@@ -109,10 +103,7 @@ async fn receiver_loop<H: Hook + 'static>(
                 });
 
                 {
-                    let skills = state.skills.registry().read().await;
-                    let stream = state
-                        .runtime
-                        .stream_to(&agent, Message::user(&content), &skills);
+                    let stream = state.runtime.stream_to(&agent, Message::user(&content));
                     futures_util::pin_mut!(stream);
 
                     while let Some(event) = futures_util::StreamExt::next(&mut stream).await {
@@ -129,9 +120,6 @@ async fn receiver_loop<H: Hook + 'static>(
                 let _ = tx.send(ServerMessage::StreamEnd { agent });
             }
 
-            // Download blocks this connection's receiver loop for the
-            // duration (same pattern as Stream). Other connections are
-            // unaffected — each has its own receiver task.
             ClientMessage::Download { model } => {
                 let _ = tx.send(ServerMessage::DownloadStart {
                     model: model.clone(),
@@ -214,16 +202,16 @@ async fn receiver_loop<H: Hook + 'static>(
             },
 
             ClientMessage::ListMemory => {
-                let entries = state.runtime.memory().entries();
+                let entries = state.runtime.hook().memory().entries();
                 let _ = tx.send(ServerMessage::MemoryList { entries });
             }
 
             ClientMessage::GetMemory { key } => {
-                let value = state.runtime.memory().get(&key);
+                let value = state.runtime.hook().memory().get(&key);
                 let _ = tx.send(ServerMessage::MemoryEntry { key, value });
             }
 
-            ClientMessage::ReloadSkills => match state.skills.reload().await {
+            ClientMessage::ReloadSkills => match state.runtime.hook().skills().reload().await {
                 Ok(count) => {
                     tracing::info!("reloaded {count} skill(s)");
                     let _ = tx.send(ServerMessage::SkillsReloaded { count });
@@ -249,7 +237,7 @@ async fn receiver_loop<H: Hook + 'static>(
                     env,
                     auto_restart: true,
                 };
-                match state.mcp.add(config).await {
+                match state.runtime.hook().mcp().add(config).await {
                     Ok(tools) => {
                         let _ = tx.send(ServerMessage::McpAdded { name, tools });
                     }
@@ -262,24 +250,22 @@ async fn receiver_loop<H: Hook + 'static>(
                 }
             }
 
-            ClientMessage::McpRemove { name } => match state.mcp.remove(&name).await {
-                Ok(tools) => {
-                    let bridge = state.mcp.bridge().await;
-                    state.runtime.set_mcp_bridge(bridge).await;
-                    let _ = tx.send(ServerMessage::McpRemoved { name, tools });
+            ClientMessage::McpRemove { name } => {
+                match state.runtime.hook().mcp().remove(&name).await {
+                    Ok(tools) => {
+                        let _ = tx.send(ServerMessage::McpRemoved { name, tools });
+                    }
+                    Err(e) => {
+                        let _ = tx.send(ServerMessage::Error {
+                            code: 500,
+                            message: format!("failed to remove MCP server: {e}"),
+                        });
+                    }
                 }
-                Err(e) => {
-                    let _ = tx.send(ServerMessage::Error {
-                        code: 500,
-                        message: format!("failed to remove MCP server: {e}"),
-                    });
-                }
-            },
+            }
 
-            ClientMessage::McpReload => match state.mcp.reload().await {
+            ClientMessage::McpReload => match state.runtime.hook().mcp().reload().await {
                 Ok(servers) => {
-                    let bridge = state.mcp.bridge().await;
-                    state.runtime.set_mcp_bridge(bridge).await;
                     let servers = servers
                         .into_iter()
                         .map(|(name, tools)| McpServerSummary { name, tools })
@@ -296,7 +282,9 @@ async fn receiver_loop<H: Hook + 'static>(
 
             ClientMessage::McpList => {
                 let servers = state
-                    .mcp
+                    .runtime
+                    .hook()
+                    .mcp()
                     .list()
                     .await
                     .into_iter()

@@ -1,12 +1,6 @@
 //! Agent example — minimal streaming REPL.
 //!
 //! The simplest possible agent: one system prompt, streaming responses.
-//! For examples with tools, memory, skills, or MCP, see the other examples:
-//!   - `memory`  — memory context affecting responses + remember tool
-//!   - `skills`  — side-by-side skill comparison
-//!   - `tools`   — custom tool registration + REPL
-//!   - `mcp`     — MCP server integration
-//!   - `everything` — all features combined with team delegation
 //!
 //! Requires DEEPSEEK_API_KEY. Run with:
 //! ```sh
@@ -20,8 +14,7 @@ use walrus_runtime::prelude::*;
 #[tokio::main]
 async fn main() {
     common::init_tracing();
-    let mut runtime = common::build_runtime();
-    let skills = SkillRegistry::new();
+    let (mut runtime, _hook) = common::build_runtime();
 
     runtime.add_agent(
         AgentConfig::new("assistant").system_prompt("You are a helpful assistant. Be concise."),
@@ -29,5 +22,5 @@ async fn main() {
 
     println!("Agent REPL (type 'exit' to quit)");
     println!("---");
-    common::repl(&runtime, "assistant", &skills).await;
+    common::repl(&runtime, "assistant").await;
 }

@@ -3,7 +3,7 @@
 
 pub mod channel;
 pub mod config;
-mod feature;
+pub mod feature;
 pub mod gateway;
 pub mod utils;
 

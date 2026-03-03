@@ -1,18 +1,21 @@
-//! Runtime builder — constructs a fully-configured Runtime from DaemonConfig.
+//! Hook builder — constructs a fully-configured GatewayHook from DaemonConfig.
 
 use crate::MemoryBackend;
 use crate::config;
+use crate::feature::mcp::McpHandler;
+use crate::feature::skill::SkillHandler;
 use crate::gateway::GatewayHook;
 use anyhow::Result;
+use memory::Memory;
 use model::ProviderManager;
-use runtime::{Memory, Request, Runtime, Tool};
+use runtime::{Runtime, Tool};
 use std::path::Path;
 use std::sync::Arc;
 
 /// Build a fully-configured `Runtime<GatewayHook>` from config and directory.
 ///
-/// Loads agents from `config_dir/agents/*.md` and memory tools.
-/// MCP servers and skills are loaded separately by their respective handlers.
+/// Constructs GatewayHook with all backends (model, memory, skills, MCP),
+/// then wraps it in a Runtime with loaded agents.
 pub async fn build_runtime(
     config: &crate::DaemonConfig,
     config_dir: &Path,
@@ -28,14 +31,21 @@ pub async fn build_runtime(
         manager.active_model()
     );
 
-    // Build request template.
-    let request = Request::new(manager.active_model());
+    // Load skills.
+    let skills_dir = config_dir.join(config::SKILLS_DIR);
+    let skills = SkillHandler::load(skills_dir)?;
 
-    // Build runtime.
-    let mut runtime = Runtime::<GatewayHook>::new(request, manager, memory);
+    // Load MCP servers.
+    let mcp = McpHandler::load(config_dir.to_path_buf(), &config.mcp_servers).await;
 
-    // Register memory tools.
-    register_memory_tools(&mut runtime);
+    // Build GatewayHook.
+    let mut hook = GatewayHook::new(manager, memory, skills, mcp);
+
+    // Register memory tools on the hook.
+    register_memory_tools(&mut hook);
+
+    // Wrap in Runtime.
+    let mut runtime = Runtime::new(Arc::new(hook));
 
     // Load agents from markdown files.
     let agents = runtime::load_agents_dir(&config_dir.join(config::AGENTS_DIR))?;
@@ -47,11 +57,11 @@ pub async fn build_runtime(
     Ok(runtime)
 }
 
-/// Register memory-backed tools (remember, recall) into the runtime.
-fn register_memory_tools(runtime: &mut Runtime<GatewayHook>) {
+/// Register memory-backed tools (remember, recall) on the GatewayHook.
+fn register_memory_tools(hook: &mut GatewayHook) {
     // remember tool
     {
-        let mem = runtime.memory_arc();
+        let mem = hook.memory_arc();
         let schema = serde_json::json!({
             "type": "object",
             "properties": {
@@ -66,7 +76,7 @@ fn register_memory_tools(runtime: &mut Runtime<GatewayHook>) {
             parameters: serde_json::from_value(schema).unwrap(),
             strict: false,
         };
-        runtime.register(tool, move |args| {
+        hook.register(tool, move |args| {
             let mem = Arc::clone(&mem);
             async move {
                 let parsed: serde_json::Value = match serde_json::from_str(&args) {
@@ -85,7 +95,7 @@ fn register_memory_tools(runtime: &mut Runtime<GatewayHook>) {
 
     // recall tool
     {
-        let mem = runtime.memory_arc();
+        let mem = hook.memory_arc();
         let schema = serde_json::json!({
             "type": "object",
             "properties": {
@@ -100,7 +110,7 @@ fn register_memory_tools(runtime: &mut Runtime<GatewayHook>) {
             parameters: serde_json::from_value(schema).unwrap(),
             strict: false,
         };
-        runtime.register(tool, move |args| {
+        hook.register(tool, move |args| {
             let mem = Arc::clone(&mem);
             async move {
                 let parsed: serde_json::Value = match serde_json::from_str(&args) {

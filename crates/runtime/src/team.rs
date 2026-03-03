@@ -1,84 +1,73 @@
-//! Team composition: register workers as tools in the runtime.
+//! Team composition: build worker tools for a leader agent.
 //!
 //! Each worker agent is exposed as a tool on the leader. When the leader
 //! calls a worker tool, the handler creates an ephemeral Agent instance
-//! and runs it with a captured RuntimeDispatcher.
+//! and runs it using the Hook for dispatch and model access.
 //!
 //! # Example
 //!
 //! ```rust,ignore
 //! use walrus_core::AgentConfig;
-//! use walrus_runtime::{Runtime, build_team};
+//! use walrus_runtime::{build_team, worker_tool};
 //!
 //! let leader = AgentConfig::new("leader").system_prompt("You coordinate.");
 //! let analyst = AgentConfig::new("analyst").description("Market analysis");
 //!
-//! let leader = build_team(leader, vec![analyst], &mut runtime);
+//! let (leader, worker_tools) = build_team(leader, vec![analyst], &hook);
+//! // Register worker_tools on your Hook implementation, then:
 //! runtime.add_agent(leader);
 //! ```
 
-use crate::{Hook, RuntimeDispatcher, SkillRegistry};
+use crate::{Handler, Hook};
 use compact_str::CompactString;
 use std::sync::Arc;
 use wcore::AgentConfig;
-use wcore::model::{Message, Model, Tool};
+use wcore::model::{Message, Tool};
 
-/// Build a team: register each worker as a tool and add to the leader.
+/// Build a team: create worker tool definitions and handlers for a leader.
 ///
-/// Each worker's handler captures everything it needs to independently run
-/// a conversation: provider, agent config, and a RuntimeDispatcher.
-/// Workers create ephemeral Agent instances per invocation (no cross-call state).
-pub async fn build_team<H: Hook + 'static>(
+/// Returns the leader config (with worker tool names appended) and a list
+/// of `(AgentConfig, Tool, Handler)` triples for each worker. The caller
+/// is responsible for registering the tools on their Hook implementation
+/// and adding the worker AgentConfigs to the Runtime.
+pub fn build_team<H: Hook + 'static>(
     mut leader: AgentConfig,
     workers: Vec<AgentConfig>,
-    runtime: &mut crate::Runtime<H>,
-    skills: &SkillRegistry,
-) -> AgentConfig {
-    let provider = runtime.provider().clone();
+    hook: &Arc<H>,
+) -> (AgentConfig, Vec<(AgentConfig, Tool, Handler)>) {
+    let mut worker_entries = Vec::with_capacity(workers.len());
 
     for worker in workers {
         let tool_def = worker_tool(worker.name.clone(), worker.description.to_string());
-        let dispatcher = runtime.build_dispatcher(&worker).await;
 
-        let ctx = Arc::new(WorkerCtx {
-            provider: provider.clone(),
-            skills: skills.clone(),
-            agent: worker.clone(),
-            dispatcher,
-        });
-
-        runtime.register(tool_def, move |args| {
-            let ctx = Arc::clone(&ctx);
-            async move {
+        let hook = Arc::clone(hook);
+        let worker_config = worker.clone();
+        let handler: Handler = Arc::new(move |args| {
+            let hook = Arc::clone(&hook);
+            let config = worker_config.clone();
+            Box::pin(async move {
                 let input = match extract_input(&args) {
                     Ok(input) => input,
                     Err(e) => return format!("invalid arguments: {e}"),
                 };
-                worker_send(&ctx, input).await
-            }
+                worker_send(&*hook, &config, input).await
+            })
         });
 
         leader.tools.push(worker.name.clone());
-        runtime.add_agent(worker);
+        worker_entries.push((worker, tool_def, handler));
     }
-    leader
-}
 
-/// Shared immutable state for a worker handler.
-struct WorkerCtx<P: Model> {
-    provider: P,
-    skills: SkillRegistry,
-    agent: AgentConfig,
-    dispatcher: RuntimeDispatcher,
+    (leader, worker_entries)
 }
 
 /// Run a worker agent using Agent.run().
 ///
 /// Creates an ephemeral Agent with a fresh event channel, enriches the
-/// system prompt with skills, pushes the user input, and runs to completion.
-async fn worker_send<P: Model>(ctx: &WorkerCtx<P>, input: String) -> String {
-    let mut config = ctx.agent.clone();
-    config.system_prompt = crate::build_system_prompt(&config, &ctx.skills);
+/// system prompt via Hook, pushes the user input, and runs to completion.
+async fn worker_send<H: Hook>(hook: &H, config: &AgentConfig, input: String) -> String {
+    let mut config = config.clone();
+    config.system_prompt = hook.enrich_prompt(&config);
 
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     let mut agent = wcore::AgentBuilder::new(tx).config(config).build();
@@ -87,7 +76,13 @@ async fn worker_send<P: Model>(ctx: &WorkerCtx<P>, input: String) -> String {
     // Drain events (discard for workers).
     tokio::spawn(async move { while rx.recv().await.is_some() {} });
 
-    let response = agent.run(&ctx.provider, &ctx.dispatcher).await;
+    // Workers use the hook directly as their context for model access.
+    let agent_name = agent.config.name.clone();
+    let dispatcher = crate::AgentDispatcher {
+        hook,
+        agent: &agent_name,
+    };
+    let response = agent.run(hook.model(), &dispatcher).await;
     response.final_response.unwrap_or_default()
 }
 

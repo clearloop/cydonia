@@ -1,14 +1,13 @@
 //! Walrus runtime: the top-level orchestrator.
 //!
-//! The [`Runtime`] holds the model provider, agent configurations, tool handlers,
-//! and manages sessions. Agents are created as ephemeral execution units per
-//! request, driven via `Agent::run()` and `Agent::run_stream()`.
+//! The [`Runtime`] holds agent configurations and session state. All backend
+//! concerns (model, tools, skills, MCP) are delegated to the [`Hook`] trait.
+//! Agents are created as ephemeral execution units per request, driven via
+//! `Agent::run()` and `Agent::run_stream()`.
 
-pub use dispatcher::RuntimeDispatcher;
 pub use hook::Hook;
 pub use listener::{IncomingMessage, Listener};
 pub use loader::{CronEntry, load_agents_dir, load_cron_dir, parse_agent_md, parse_cron_md};
-pub use mcp::McpBridge;
 pub use memory::{InMemory, Memory, NoEmbedder};
 pub use skills::{Skill, SkillRegistry, SkillTier, parse_skill_md};
 pub use team::{build_team, extract_input, worker_tool};
@@ -18,16 +17,13 @@ pub use wcore::model::{Message, Request, Response, Role, StreamChunk, Tool};
 use anyhow::Result;
 use compact_str::CompactString;
 use futures_core::Stream;
-use std::{collections::BTreeMap, future::Future, pin::Pin, sync::Arc};
+use std::{collections::BTreeMap, future::Future, sync::Arc};
 use tokio::sync::RwLock;
 use wcore::AgentEvent;
-use wcore::model::Model;
 
-pub mod dispatcher;
 pub mod hook;
 pub mod listener;
 pub mod loader;
-pub mod mcp;
 pub mod skills;
 pub mod team;
 
@@ -41,7 +37,7 @@ pub mod prelude {
 
 /// A type-erased async tool handler.
 pub type Handler =
-    Arc<dyn Fn(String) -> Pin<Box<dyn Future<Output = String> + Send>> + Send + Sync>;
+    Arc<dyn Fn(String) -> std::pin::Pin<Box<dyn Future<Output = String> + Send>> + Send + Sync>;
 
 /// Private session state, keyed by agent name in the sessions map.
 struct Session {
@@ -56,54 +52,45 @@ impl Session {
     }
 }
 
+/// Thin wrapper that implements wcore's `Dispatcher` by forwarding to Hook.
+pub(crate) struct AgentDispatcher<'a, H: Hook> {
+    pub(crate) hook: &'a H,
+    pub(crate) agent: &'a str,
+}
+
+impl<H: Hook> wcore::Dispatcher for AgentDispatcher<'_, H> {
+    fn dispatch(&self, calls: &[(&str, &str)]) -> impl Future<Output = Vec<Result<String>>> + Send {
+        self.hook.dispatch(self.agent, calls)
+    }
+
+    fn tools(&self) -> Vec<Tool> {
+        self.hook.tools(self.agent)
+    }
+}
+
 /// The walrus runtime — top-level orchestrator.
 ///
-/// Generic over `H: Hook` for type-level configuration of the model provider.
-/// Stores agent configurations, tool handlers, skill registry, and MCP bridge.
-/// Creates ephemeral [`wcore::Agent`] instances per request.
+/// Generic over `H: Hook` for the runtime backend. Stores agent configurations
+/// and manages sessions. Creates ephemeral [`wcore::Agent`] instances per request.
 pub struct Runtime<H: Hook> {
-    provider: H::Model,
-    request: Request,
-    memory: Arc<H::Memory>,
-    mcp: RwLock<Option<Arc<McpBridge>>>,
-    tools: BTreeMap<CompactString, (Tool, Handler)>,
+    hook: Arc<H>,
     agents: BTreeMap<CompactString, AgentConfig>,
     sessions: RwLock<BTreeMap<CompactString, Session>>,
 }
 
-/// Build a system prompt enriched with skills for the given agent config.
-pub fn build_system_prompt(agent_config: &AgentConfig, skills: &SkillRegistry) -> String {
-    let mut prompt = agent_config.system_prompt.clone();
-    for skill in skills.find_by_tags(&agent_config.skill_tags) {
-        if !skill.body.is_empty() {
-            prompt.push_str("\n\n");
-            prompt.push_str(&skill.body);
-        }
-    }
-    prompt
-}
-
 impl<H: Hook + 'static> Runtime<H> {
-    /// Create a new runtime with the given request template, provider, and memory.
-    pub fn new(request: Request, provider: H::Model, memory: H::Memory) -> Self {
-        let memory = Arc::new(memory);
+    /// Create a new runtime with the given hook backend.
+    pub fn new(hook: Arc<H>) -> Self {
         Self {
-            provider,
-            request,
-            memory,
-            mcp: RwLock::new(None),
-            tools: BTreeMap::new(),
+            hook,
             agents: BTreeMap::new(),
             sessions: RwLock::new(BTreeMap::new()),
         }
     }
 
-    /// Set the MCP bridge for this runtime (dynamic update via `&self`).
-    ///
-    /// Agents mid-execution keep the old bridge via their `Arc<McpBridge>`
-    /// clone — new agents pick up the new bridge on next `build_dispatcher`.
-    pub async fn set_mcp_bridge(&self, bridge: Arc<McpBridge>) {
-        *self.mcp.write().await = Some(bridge);
+    /// Access the hook backend.
+    pub fn hook(&self) -> &H {
+        &self.hook
     }
 
     /// Register an agent configuration.
@@ -121,109 +108,19 @@ impl<H: Hook + 'static> Runtime<H> {
         self.agents.values()
     }
 
-    /// Register a tool with its handler.
-    pub fn register<F, Fut>(&mut self, tool: Tool, handler: F)
-    where
-        F: Fn(String) -> Fut + Send + Sync + 'static,
-        Fut: Future<Output = String> + Send + 'static,
-    {
-        let name = tool.name.clone();
-        let handler: Handler = Arc::new(move |args| Box::pin(handler(args)));
-        self.tools.insert(name, (tool, handler));
-    }
-
-    /// Context window limit for a specific model.
-    pub fn context_limit(&self, model: &str) -> usize {
-        self.provider.context_limit(model)
-    }
-
     /// Clear the session for a named agent, resetting conversation history.
     pub async fn clear_session(&self, agent: &str) {
         self.sessions.write().await.remove(agent);
     }
 
-    /// Resolve tool schemas and handlers for the given tool names.
-    ///
-    /// Supports glob prefixes: a name ending in `*` expands against
-    /// all registered tool names by prefix match.
-    pub fn resolve_tools(&self, names: &[CompactString]) -> Vec<(Tool, Handler)> {
-        let mut resolved = Vec::new();
-        for name in names {
-            if let Some(prefix) = name.strip_suffix('*') {
-                let mut matched = false;
-                for (tool_name, (tool, handler)) in &self.tools {
-                    if tool_name.starts_with(prefix) {
-                        resolved.push((tool.clone(), Arc::clone(handler)));
-                        matched = true;
-                    }
-                }
-                if !matched {
-                    tracing::warn!("glob pattern '{name}' matched no registered tools");
-                }
-            } else if let Some((tool, handler)) = self.tools.get(name.as_str()) {
-                resolved.push((tool.clone(), Arc::clone(handler)));
-            }
-        }
-        resolved
-    }
-
-    /// Get a reference to the memory backend.
-    pub fn memory(&self) -> &H::Memory {
-        &self.memory
-    }
-
-    /// Get a clone of the memory Arc.
-    pub fn memory_arc(&self) -> Arc<H::Memory> {
-        Arc::clone(&self.memory)
-    }
-
-    /// Get a reference to the model provider.
-    pub fn provider(&self) -> &H::Model {
-        &self.provider
-    }
-
-    /// Get a reference to the request template.
-    pub fn request(&self) -> &Request {
-        &self.request
-    }
-
-    /// Build a RuntimeDispatcher for the given agent config.
-    ///
-    /// Resolves the agent's tool names against the registry and includes
-    /// the MCP bridge if connected. MCP tool schemas are merged into the
-    /// dispatcher's tool list so the LLM can see them.
-    pub async fn build_dispatcher(&self, agent_config: &AgentConfig) -> RuntimeDispatcher {
-        let resolved = self.resolve_tools(&agent_config.tools);
-        let mut tools = Vec::with_capacity(resolved.len());
-        let mut handlers = BTreeMap::new();
-        for (tool, handler) in resolved {
-            handlers.insert(tool.name.clone(), handler);
-            tools.push(tool);
-        }
-
-        let mcp = self.mcp.read().await.clone();
-        if let Some(ref bridge) = mcp {
-            let mcp_tools = bridge.tools().await;
-            for tool in mcp_tools {
-                if !handlers.contains_key(&tool.name) {
-                    tools.push(tool);
-                }
-            }
-        }
-
-        RuntimeDispatcher::new(tools, handlers, mcp)
-    }
-
     /// Create an ephemeral Agent from config with a fresh event channel.
-    ///
-    /// Returns the Agent and a receiver for draining events.
     fn create_agent(
+        hook: &H,
         agent_config: &AgentConfig,
         history: Vec<Message>,
-        skills: &SkillRegistry,
     ) -> (wcore::Agent, tokio::sync::mpsc::Receiver<AgentEvent>) {
         let (tx, rx) = tokio::sync::mpsc::channel(64);
-        let enriched_prompt = build_system_prompt(agent_config, skills);
+        let enriched_prompt = hook.enrich_prompt(agent_config);
         let mut config = agent_config.clone();
         config.system_prompt = enriched_prompt;
         let mut agent = wcore::AgentBuilder::new(tx).config(config).build();
@@ -235,20 +132,17 @@ impl<H: Hook + 'static> Runtime<H> {
 
     /// Send a message to a named agent using Agent.run().
     ///
-    /// Creates an ephemeral Agent, runs it with a RuntimeDispatcher,
+    /// Creates an ephemeral Agent, runs it with the Hook as dispatcher,
     /// and returns the final response. Events are emitted via Hook::on_event().
-    pub async fn send_to(
-        &self,
-        agent: &str,
-        message: Message,
-        skills: &SkillRegistry,
-    ) -> Result<Response> {
+    pub async fn send_to(&self, agent: &str, message: Message) -> Result<Response> {
         let agent_config = self
             .agents
             .get(agent)
             .ok_or_else(|| anyhow::anyhow!("agent '{agent}' not registered"))?
             .clone();
         let key = CompactString::from(agent);
+
+        self.hook.on_build_agent(&agent_config);
 
         let mut session = {
             self.sessions
@@ -259,18 +153,22 @@ impl<H: Hook + 'static> Runtime<H> {
         };
         session.messages.push(message);
 
-        let dispatcher = self.build_dispatcher(&agent_config).await;
+        let dispatcher = AgentDispatcher {
+            hook: &*self.hook,
+            agent,
+        };
         let (mut agent_instance, mut rx) =
-            Self::create_agent(&agent_config, session.messages, skills);
+            Self::create_agent(&self.hook, &agent_config, session.messages);
 
         // Spawn event drain task.
+        let hook = Arc::clone(&self.hook);
         tokio::spawn(async move {
             while let Some(event) = rx.recv().await {
-                H::on_event(&event);
+                hook.on_event(&event);
             }
         });
 
-        let agent_response = agent_instance.run(&self.provider, &dispatcher).await;
+        let agent_response = agent_instance.run(self.hook.model(), &dispatcher).await;
         let messages = agent_instance.messages().to_vec();
         self.sessions
             .write()
@@ -291,7 +189,6 @@ impl<H: Hook + 'static> Runtime<H> {
         &'a self,
         agent: &'a str,
         message: Message,
-        skills: &'a SkillRegistry,
     ) -> impl Stream<Item = AgentEvent> + 'a {
         async_stream::stream! {
             let agent_config = match self.agents.get(agent) {
@@ -310,21 +207,26 @@ impl<H: Hook + 'static> Runtime<H> {
             };
             let key = CompactString::from(agent);
 
+            self.hook.on_build_agent(&agent_config);
+
             let mut session = {
                 self.sessions.write().await.remove(&key).unwrap_or_else(Session::new)
             };
             session.messages.push(message);
 
-            let dispatcher = self.build_dispatcher(&agent_config).await;
+            let dispatcher = AgentDispatcher {
+                hook: &*self.hook,
+                agent,
+            };
             let (mut agent_instance, _rx) =
-                Self::create_agent(&agent_config, session.messages, skills);
+                Self::create_agent(&self.hook, &agent_config, session.messages);
 
             {
-                let stream = agent_instance.run_stream(&self.provider, &dispatcher);
+                let stream = agent_instance.run_stream(self.hook.model(), &dispatcher);
                 futures_util::pin_mut!(stream);
 
                 while let Some(event) = futures_util::StreamExt::next(&mut stream).await {
-                    H::on_event(&event);
+                    self.hook.on_event(&event);
                     yield event;
                 }
             }

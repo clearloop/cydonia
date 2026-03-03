@@ -11,12 +11,50 @@
 
 mod common;
 
-use walrus_runtime::{Skill, SkillRegistry, SkillTier, prelude::*};
+use std::sync::Arc;
+use walrus_runtime::{Hook, Skill, SkillRegistry, SkillTier, prelude::*};
+
+/// Hook that wraps ExampleHook but enriches prompts with a SkillRegistry.
+struct SkillHook {
+    inner: common::ExampleHook,
+    skills: SkillRegistry,
+}
+
+impl Hook for SkillHook {
+    type Model = model::ProviderManager;
+
+    fn model(&self) -> &model::ProviderManager {
+        self.inner.model()
+    }
+
+    fn tools(&self, agent: &str) -> Vec<Tool> {
+        self.inner.tools(agent)
+    }
+
+    fn dispatch(
+        &self,
+        agent: &str,
+        calls: &[(&str, &str)],
+    ) -> impl std::future::Future<Output = Vec<anyhow::Result<String>>> + Send {
+        self.inner.dispatch(agent, calls)
+    }
+
+    fn enrich_prompt(&self, config: &AgentConfig) -> String {
+        let mut prompt = config.system_prompt.clone();
+        for skill in self.skills.find_by_tags(&config.skill_tags) {
+            if !skill.body.is_empty() {
+                prompt.push_str("\n\n");
+                prompt.push_str(&skill.body);
+            }
+        }
+        prompt
+    }
+}
 
 #[tokio::main]
 async fn main() {
     common::init_tracing();
-    let mut runtime = common::build_runtime();
+    let inner = common::build_hook();
 
     // Register a "concise" skill that constrains response length.
     let mut skills = SkillRegistry::new();
@@ -32,6 +70,9 @@ async fn main() {
         },
         SkillTier::Bundled,
     );
+
+    let hook = Arc::new(SkillHook { inner, skills });
+    let mut runtime = Runtime::new(Arc::clone(&hook));
 
     // Two agents: same base prompt, different skill tags.
     runtime.add_agent(
@@ -56,7 +97,7 @@ async fn main() {
 
         // Send to default agent (no skill).
         let default_response = runtime
-            .send_to("default", Message::user(prompt), &skills)
+            .send_to("default", Message::user(prompt))
             .await
             .expect("default agent failed");
         println!(
@@ -66,7 +107,7 @@ async fn main() {
 
         // Send to concise agent (with skill).
         let concise_response = runtime
-            .send_to("concise", Message::user(prompt), &skills)
+            .send_to("concise", Message::user(prompt))
             .await
             .expect("concise agent failed");
         println!(
