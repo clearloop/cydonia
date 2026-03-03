@@ -1,4 +1,4 @@
-//! Gateway — daemon core composing runtime, MCP, skills, and memory.
+//! Gateway — daemon core composing runtime, MCP, skills, cron, and memory.
 
 use anyhow::Result;
 use compact_str::CompactString;
@@ -9,6 +9,7 @@ use runtime::{Handler, Hook, Runtime, Tool};
 use skill::SkillHandler;
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use walrus_cron::CronHandler;
 use wcore::{AgentConfig, AgentEvent};
 
 pub mod builder;
@@ -40,16 +41,18 @@ pub struct GatewayHook {
     memory: Arc<InMemory>,
     skills: SkillHandler,
     mcp: McpHandler,
+    cron: CronHandler,
     tools: BTreeMap<CompactString, (Tool, Handler)>,
 }
 
 impl GatewayHook {
     /// Create a new GatewayHook with the given backends.
-    pub fn new(memory: InMemory, skills: SkillHandler, mcp: McpHandler) -> Self {
+    pub fn new(memory: InMemory, skills: SkillHandler, mcp: McpHandler, cron: CronHandler) -> Self {
         Self {
             memory: Arc::new(memory),
             skills,
             mcp,
+            cron,
             tools: BTreeMap::new(),
         }
     }
@@ -73,6 +76,11 @@ impl GatewayHook {
     pub fn mcp(&self) -> &McpHandler {
         &self.mcp
     }
+
+    /// Access the cron handler.
+    pub fn cron(&self) -> &CronHandler {
+        &self.cron
+    }
 }
 
 impl Hook for GatewayHook {
@@ -91,6 +99,8 @@ impl Hook for GatewayHook {
     fn tools(&self, agent: &str) -> Vec<Tool> {
         // Daemon-registered tools (memory, etc).
         let mut tools: Vec<Tool> = self.tools.values().map(|(t, _)| t.clone()).collect();
+        // Cron tools.
+        tools.extend(Hook::tools(&self.cron, agent));
         // MCP tools.
         tools.extend(self.mcp.tools(agent));
         // Skill tools (currently empty).
@@ -103,6 +113,10 @@ impl Hook for GatewayHook {
         _agent: &str,
         calls: &[(&str, &str)],
     ) -> impl std::future::Future<Output = Vec<Result<String>>> + Send {
+        let cron_tool_names: Vec<CompactString> = Hook::tools(&self.cron, _agent)
+            .into_iter()
+            .map(|t| t.name)
+            .collect();
         let calls: Vec<(String, String)> = calls
             .iter()
             .map(|(m, p)| (m.to_string(), p.to_string()))
@@ -112,11 +126,14 @@ impl Hook for GatewayHook {
             .map(|(method, _)| self.tools.get(method.as_str()).map(|(_, h)| Arc::clone(h)))
             .collect();
         let mcp = self.mcp.try_bridge();
+        let cron_jobs = self.cron.jobs_arc();
 
         async move {
             let mut results = Vec::with_capacity(calls.len());
             for (i, (method, params)) in calls.iter().enumerate() {
-                let output = if let Some(ref handler) = handlers[i] {
+                let output = if cron_tool_names.iter().any(|n| n == method) {
+                    walrus_cron::hook::dispatch_call(&cron_jobs, method, params).await
+                } else if let Some(ref handler) = handlers[i] {
                     Ok(handler(params.clone()).await)
                 } else if let Some(ref bridge) = mcp {
                     Ok(bridge.call(method, params).await)

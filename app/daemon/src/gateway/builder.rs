@@ -35,8 +35,12 @@ pub async fn build_runtime(
     // Load MCP servers.
     let mcp_handler = mcp::McpHandler::load(config_dir.to_path_buf(), &config.mcp_servers).await;
 
+    // Load cron jobs.
+    let cron_dir = config_dir.join(config::CRON_DIR);
+    let cron_handler = build_cron_handler(&cron_dir);
+
     // Build GatewayHook.
-    let mut hook = GatewayHook::new(memory, skills, mcp_handler);
+    let mut hook = GatewayHook::new(memory, skills, mcp_handler, cron_handler);
 
     // Register memory tools on the hook.
     register_memory_tools(&mut hook);
@@ -63,4 +67,30 @@ fn register_memory_tools(hook: &mut GatewayHook) {
     ] {
         hook.register(mt.tool, mt.handler);
     }
+}
+
+/// Load cron entries from disk and build a CronHandler.
+fn build_cron_handler(cron_dir: &Path) -> walrus_cron::CronHandler {
+    let entries = match crate::loader::load_cron_dir(cron_dir) {
+        Ok(e) => e,
+        Err(e) => {
+            tracing::warn!("failed to load cron entries: {e}");
+            return walrus_cron::CronHandler::new(Vec::new());
+        }
+    };
+
+    let mut jobs = Vec::new();
+    for entry in entries {
+        match walrus_cron::CronJob::new(entry.name, &entry.schedule, entry.agent, entry.message) {
+            Ok(job) => {
+                tracing::info!("registered cron job '{}' → agent '{}'", job.name, job.agent);
+                jobs.push(job);
+            }
+            Err(e) => {
+                tracing::warn!("skipping cron entry: {e}");
+            }
+        }
+    }
+
+    walrus_cron::CronHandler::new(jobs)
 }

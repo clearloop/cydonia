@@ -43,6 +43,5 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 anyhow = { workspace = true }
-cron = { workspace = true }
-chrono = { workspace = true }
+walrus_cron = { workspace = true }
 dirs = { workspace = true }

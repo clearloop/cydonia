@@ -80,7 +80,7 @@ pub async fn serve_with_config(config: &DaemonConfig, config_dir: &Path) -> Resu
     let socket_shutdown = bridge_shutdown(shutdown_tx.subscribe());
     let socket_join = tokio::spawn(socket::server::accept_loop(
         listener,
-        state,
+        state.clone(),
         socket_shutdown,
     ));
 
@@ -100,8 +100,8 @@ pub async fn serve_with_config(config: &DaemonConfig, config_dir: &Path) -> Resu
     channel_router::spawn_channels(&config.channels, router, on_message).await;
 
     // --- Cron scheduler ---
-    let cron_dir = config_dir.join(crate::config::CRON_DIR);
-    crate::cron::spawn(&cron_dir, &runtime, shutdown_tx.subscribe());
+    let cron_jobs = runtime.hook().cron().jobs().await;
+    walrus_cron::spawn(cron_jobs, state.clone(), shutdown_tx.subscribe());
 
     Ok(ServeHandle {
         socket_path: resolved_path,

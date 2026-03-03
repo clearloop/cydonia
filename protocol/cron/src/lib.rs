@@ -1,20 +1,24 @@
-//! Cron scheduler for periodic agent tasks.
+//! Cron scheduler — protocol client + hook for periodic agent tasks.
 //!
-//! Each cron job runs in an isolated session with no state carried
-//! between runs. The scheduler is decoupled from the runtime —
-//! it produces events (fires jobs), and the Gateway wires them to
-//! agent dispatch.
+//! Implements [`Client`](protocol::api::Client) to fire scheduled jobs via
+//! `SendRequest`, and [`Hook`](runtime::Hook) to expose a `create_cron` tool
+//! that agents can use to schedule new jobs dynamically.
 
-use crate::gateway::GatewayHook;
 use chrono::Utc;
 use compact_str::CompactString;
 use cron::Schedule;
-use model::ProviderManager;
-use runtime::Runtime;
-use std::path::Path;
+use protocol::api::{Client, Server};
+use protocol::message::SendRequest;
 use std::str::FromStr;
 use std::sync::Arc;
-use tokio::{sync::broadcast, task::JoinHandle, time};
+use tokio::{
+    sync::{RwLock, broadcast},
+    task::JoinHandle,
+    time,
+};
+
+mod client;
+pub mod hook;
 
 /// A parsed cron job ready for scheduling.
 #[derive(Debug, Clone)]
@@ -25,12 +29,12 @@ pub struct CronJob {
     pub schedule: Schedule,
     /// Target agent name.
     pub agent: CompactString,
-    /// Message template to send.
+    /// Message to send on each fire.
     pub message: String,
 }
 
 impl CronJob {
-    /// Parse a [`CronJob`] from its fields.
+    /// Parse a [`CronJob`] from raw fields.
     pub fn new(
         name: CompactString,
         schedule_expr: &str,
@@ -46,38 +50,49 @@ impl CronJob {
             message,
         })
     }
+}
 
-    /// Create a [`CronJob`] from a [`CronEntry`](crate::loader::CronEntry).
-    pub fn from_entry(entry: &crate::loader::CronEntry) -> anyhow::Result<Self> {
-        Self::new(
-            entry.name.clone(),
-            &entry.schedule,
-            entry.agent.clone(),
-            entry.message.clone(),
-        )
+/// Cron handler — owns the live job list for dynamic scheduling.
+pub struct CronHandler {
+    jobs: Arc<RwLock<Vec<CronJob>>>,
+}
+
+impl CronHandler {
+    /// Create a handler from an initial set of jobs.
+    pub fn new(jobs: Vec<CronJob>) -> Self {
+        Self {
+            jobs: Arc::new(RwLock::new(jobs)),
+        }
+    }
+
+    /// Get a clone of the jobs arc (for the scheduler task).
+    pub fn jobs_arc(&self) -> Arc<RwLock<Vec<CronJob>>> {
+        Arc::clone(&self.jobs)
+    }
+
+    /// Snapshot the current job list.
+    pub async fn jobs(&self) -> Vec<CronJob> {
+        self.jobs.read().await.clone()
     }
 }
 
 /// Cron scheduler that fires jobs on their schedules.
-pub struct CronScheduler {
+struct CronScheduler {
     jobs: Vec<CronJob>,
 }
 
 impl CronScheduler {
     /// Create a scheduler from a list of cron jobs.
-    pub fn new(jobs: Vec<CronJob>) -> Self {
+    fn new(jobs: Vec<CronJob>) -> Self {
         Self { jobs }
     }
 
     /// Start the scheduler. Calls `on_fire` for each job when it fires.
     ///
-    /// Returns a [`JoinHandle`]. The scheduler stops when `shutdown` is
-    /// received or the handle is aborted.
-    ///
     /// Before sleeping, the scheduler identifies which jobs are due at the
     /// soonest upcoming time. After waking it fires exactly those jobs,
     /// avoiding the ambiguity of re-querying `upcoming()` post-sleep.
-    pub fn start<F, Fut>(self, on_fire: F, mut shutdown: broadcast::Receiver<()>) -> JoinHandle<()>
+    fn start<F, Fut>(self, on_fire: F, mut shutdown: broadcast::Receiver<()>) -> JoinHandle<()>
     where
         F: Fn(CronJob) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = ()> + Send + 'static,
@@ -137,54 +152,35 @@ impl CronScheduler {
             }
         })
     }
-
-    /// Get the list of jobs.
-    pub fn jobs(&self) -> &[CronJob] {
-        &self.jobs
-    }
 }
 
-/// Load cron entries from disk and start the scheduler.
-pub fn spawn(
-    cron_dir: &Path,
-    runtime: &Arc<Runtime<ProviderManager, GatewayHook>>,
+/// Start the cron scheduler with an in-process protocol client.
+///
+/// Takes a snapshot of jobs and a `Server` impl (e.g. `Gateway`) to dispatch
+/// `SendRequest`s through the protocol layer. Jobs added dynamically via the
+/// `create_cron` tool are not picked up by a running scheduler — they take
+/// effect after the next daemon restart.
+pub fn spawn<S: Server + Clone + Send + 'static>(
+    jobs: Vec<CronJob>,
+    server: S,
     shutdown: broadcast::Receiver<()>,
 ) {
-    let entries = match crate::loader::load_cron_dir(cron_dir) {
-        Ok(e) => e,
-        Err(e) => {
-            tracing::warn!("failed to load cron entries: {e}");
-            return;
-        }
-    };
-
-    let mut jobs = Vec::new();
-    for entry in &entries {
-        match CronJob::from_entry(entry) {
-            Ok(job) => {
-                tracing::info!("registered cron job '{}' → agent '{}'", job.name, job.agent);
-                jobs.push(job);
-            }
-            Err(e) => {
-                tracing::warn!("skipping cron entry '{}': {e}", entry.name);
-            }
-        }
-    }
-
     let scheduler = CronScheduler::new(jobs);
-    let rt = Arc::clone(runtime);
 
     scheduler.start(
         move |job| {
-            let rt = Arc::clone(&rt);
+            let mut client = client::CronClient::new(server.clone());
             async move {
-                match rt.send_to(&job.agent, &job.message).await {
+                let req = SendRequest {
+                    agent: job.agent.clone(),
+                    content: job.message.clone(),
+                };
+                match client.send(req).await {
                     Ok(response) => {
-                        let content = response.final_response.unwrap_or_default();
                         tracing::info!(
                             job = %job.name,
                             agent = %job.agent,
-                            response_len = content.len(),
+                            response_len = response.content.len(),
                             "cron job completed"
                         );
                     }
