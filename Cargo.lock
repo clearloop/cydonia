@@ -6637,24 +6637,39 @@ dependencies = [
  "dirs",
  "futures-core",
  "futures-util",
- "rmcp",
- "schemars 1.2.1",
  "serde",
  "serde_json",
  "serde_yaml",
- "smallvec 1.15.1",
  "tokio",
  "toml 0.8.23",
  "tracing",
  "tracing-subscriber",
  "walrus-core",
+ "walrus-mcp",
  "walrus-memory",
  "walrus-model",
  "walrus-pchannel",
  "walrus-protocol",
  "walrus-runtime",
+ "walrus-skill",
  "walrus-socket",
  "walrus-telegram",
+]
+
+[[package]]
+name = "walrus-mcp"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "compact_str 0.8.1",
+ "rmcp",
+ "schemars 1.2.1",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "walrus-core",
+ "walrus-runtime",
 ]
 
 [[package]]
@@ -6718,9 +6733,11 @@ name = "walrus-runtime"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "async-stream",
  "chrono",
  "compact_str 0.8.1",
  "dotenvy",
+ "futures-core",
  "futures-util",
  "serde_json",
  "tokio",
@@ -6729,6 +6746,20 @@ dependencies = [
  "walrus-core",
  "walrus-memory",
  "walrus-model",
+]
+
+[[package]]
+name = "walrus-skill"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "compact_str 0.8.1",
+ "serde",
+ "serde_yaml",
+ "tokio",
+ "tracing",
+ "walrus-core",
+ "walrus-runtime",
 ]
 
 [[package]]

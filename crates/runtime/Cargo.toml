@@ -16,7 +16,9 @@ memory.workspace = true
 
 # crates-io dependencies
 anyhow.workspace = true
+async-stream.workspace = true
 compact_str.workspace = true
+futures-core.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 

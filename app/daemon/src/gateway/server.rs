@@ -1,6 +1,5 @@
 //! Server trait implementation for the Gateway.
 
-use crate::config::McpServerConfig;
 use crate::gateway::Gateway;
 use crate::gateway::dispatch;
 use memory::Memory;
@@ -145,7 +144,7 @@ impl Server for Gateway {
     }
 
     async fn mcp_add(&self, req: McpAddRequest) -> Result<McpAdded, ProtocolError> {
-        let config = McpServerConfig {
+        let config = mcp::McpServerConfig {
             name: req.name.clone(),
             command: req.command,
             args: req.args,
@@ -178,7 +177,26 @@ impl Server for Gateway {
     }
 
     async fn mcp_reload(&self) -> Result<McpReloaded, ProtocolError> {
-        match self.runtime.hook().mcp().reload().await {
+        match self
+            .runtime
+            .hook()
+            .mcp()
+            .reload(|path| {
+                let config = crate::DaemonConfig::load(path)?;
+                Ok(config
+                    .mcp_servers
+                    .iter()
+                    .map(|s| mcp::McpServerConfig {
+                        name: s.name.clone(),
+                        command: s.command.clone(),
+                        args: s.args.clone(),
+                        env: s.env.clone(),
+                        auto_restart: s.auto_restart,
+                    })
+                    .collect())
+            })
+            .await
+        {
             Ok(servers) => {
                 let servers = servers
                     .into_iter()

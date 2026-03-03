@@ -4,6 +4,7 @@
 use crate::gateway::GatewayHook;
 use crate::gateway::dispatch::{AgentLock, dispatch_send};
 use channel::{ChannelMessage, ChannelRouter, ChannelSender};
+use model::ProviderManager;
 use runtime::Runtime;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -16,7 +17,7 @@ use tracing::{info, warn};
 pub async fn channel_loop(
     mut rx: mpsc::UnboundedReceiver<ChannelMessage>,
     sender: ChannelSender,
-    runtime: Arc<Runtime<GatewayHook>>,
+    runtime: Arc<Runtime<ProviderManager, GatewayHook>>,
     locks: Arc<AgentLock>,
     router: Arc<ChannelRouter>,
 ) {

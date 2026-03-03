@@ -26,6 +26,8 @@ runtime = { workspace = true }
 wcore = { workspace = true }
 model = { workspace = true }
 memory = { workspace = true }
+skill = { workspace = true }
+mcp = { workspace = true }
 protocol = { workspace = true }
 socket = { workspace = true }
 channel = { workspace = true }
@@ -33,7 +35,6 @@ telegram = { workspace = true }
 compact_str = { workspace = true }
 futures-core = { workspace = true }
 futures-util = { workspace = true }
-schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
@@ -42,8 +43,6 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 anyhow = { workspace = true }
-smallvec = { workspace = true }
 cron = { workspace = true }
 chrono = { workspace = true }
-rmcp = { workspace = true }
 dirs = { workspace = true }

@@ -1,29 +1,37 @@
-//! Hook trait — stateful runtime backend.
+//! Hook trait — lifecycle backend for agent building and execution.
 //!
-//! Hook is the single abstraction that Runtime delegates all backend concerns
-//! to: model access, tool dispatch, prompt enrichment, and event observation.
-//! Implementations own the concrete backends (model provider, memory, MCP,
-//! tool registry, skill registry).
+//! Hook abstracts the lifecycle of building and calling agents. Runtime
+//! delegates to Hook at specific points: `on_build_agent` before registering
+//! an agent, `tools`/`dispatch` during each step, and `on_event` after each
+//! step completes.
 
 use anyhow::Result;
 use std::future::Future;
-use wcore::AgentConfig;
-use wcore::AgentEvent;
-use wcore::model::{Model, Tool};
+use wcore::model::Tool;
+use wcore::{AgentConfig, AgentEvent};
 
-/// Stateful runtime backend.
+/// Lifecycle backend for agent building and execution.
 ///
-/// Owns the model provider, tool registry, skill registry, MCP bridge, and
-/// any other backend state. Runtime holds `Arc<H>` and delegates through
-/// these methods.
+/// Implementations provide tool schemas, tool dispatch, prompt enrichment
+/// (via `on_build_agent`), and event observation. Runtime holds `Arc<H>`
+/// and calls these methods at the appropriate lifecycle points.
+///
+/// Model ownership is separate — Runtime owns the model directly.
 pub trait Hook: Send + Sync {
-    /// The model provider for this hook.
-    type Model: Model + Send + Sync;
-
-    /// Access the model provider.
-    fn model(&self) -> &Self::Model;
+    /// Called by `Runtime::add_agent()` before building the `Agent`.
+    ///
+    /// Enriches the agent config: appends skill instructions to the system
+    /// prompt, validates tool names, adjusts settings, etc. The returned
+    /// config is passed to `AgentBuilder`.
+    ///
+    /// Default: returns config unchanged.
+    fn on_build_agent(&self, config: AgentConfig) -> AgentConfig {
+        config
+    }
 
     /// Return tool schemas available to the named agent.
+    ///
+    /// Called once per step to populate the LLM request.
     fn tools(&self, agent: &str) -> Vec<Tool>;
 
     /// Dispatch tool calls for the named agent.
@@ -36,27 +44,16 @@ pub trait Hook: Send + Sync {
         calls: &[(&str, &str)],
     ) -> impl Future<Output = Vec<Result<String>>> + Send;
 
-    /// Build an enriched system prompt for the given agent config.
+    /// Called by Runtime after each agent step during execution.
     ///
-    /// Default implementation returns the config's system prompt unchanged.
-    /// Override to inject skills, MCP context, or other prompt augmentation.
-    fn enrich_prompt(&self, config: &AgentConfig) -> String {
-        config.system_prompt.clone()
-    }
-
-    /// Called when an agent emits an event during execution.
+    /// Receives every `AgentEvent` produced during `send_to` and
+    /// `stream_to`. Use for logging, metrics, persistence, or forwarding.
     ///
-    /// Default is a no-op.
-    fn on_event(&self, _event: &AgentEvent) {}
+    /// Default: no-op.
+    fn on_event(&self, _agent: &str, _event: &AgentEvent) {}
 }
 
 impl Hook for () {
-    type Model = ();
-
-    fn model(&self) -> &() {
-        &()
-    }
-
     fn tools(&self, _agent: &str) -> Vec<Tool> {
         vec![]
     }

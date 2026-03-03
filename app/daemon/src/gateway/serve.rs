@@ -11,6 +11,7 @@ use crate::gateway::{Gateway, GatewayHook};
 use crate::{DaemonConfig, loader};
 use anyhow::Result;
 use channel::{ChannelRouter, RoutingRule, parse_platform};
+use model::ProviderManager;
 use runtime::Runtime;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -142,7 +143,7 @@ fn build_router(channels: &[ChannelConfig]) -> ChannelRouter {
 /// Connect and spawn channel loops for all configured channels.
 async fn spawn_channels(
     channels: &[ChannelConfig],
-    runtime: &Arc<Runtime<GatewayHook>>,
+    runtime: &Arc<Runtime<ProviderManager, GatewayHook>>,
     locks: &Arc<AgentLock>,
     router: &Arc<ChannelRouter>,
 ) {
@@ -193,7 +194,7 @@ async fn spawn_channels(
 /// Load cron entries and start the scheduler.
 fn spawn_cron(
     cron_dir: &Path,
-    runtime: &Arc<Runtime<GatewayHook>>,
+    runtime: &Arc<Runtime<ProviderManager, GatewayHook>>,
     locks: &Arc<AgentLock>,
     shutdown: broadcast::Receiver<()>,
 ) {

@@ -7,14 +7,14 @@
 use crate::gateway::GatewayHook;
 use compact_str::CompactString;
 use futures_util::StreamExt;
+use model::ProviderManager;
 use protocol::error::ProtocolError;
 use protocol::message::StreamEvent;
-use runtime::{AgentDispatcher, Runtime};
+use runtime::Runtime;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 use wcore::AgentEvent;
-use wcore::model::Message;
 
 /// Per-agent execution lock.
 ///
@@ -56,36 +56,23 @@ impl AgentLock {
 
 /// Send a message to an agent and get the complete response.
 pub async fn dispatch_send(
-    runtime: &Runtime<GatewayHook>,
+    runtime: &Runtime<ProviderManager, GatewayHook>,
     locks: &AgentLock,
     agent: &str,
     content: &str,
 ) -> Result<String, ProtocolError> {
     let _guard = locks.acquire(agent).await;
 
-    let Some(mut agent_instance) = runtime.take_agent(agent).await else {
-        return Err(ProtocolError::new(
-            404,
-            format!("agent '{agent}' not registered"),
-        ));
-    };
-
-    agent_instance.push_message(Message::user(content));
-    let dispatcher = AgentDispatcher {
-        hook: runtime.hook(),
-        agent,
-    };
-
-    let response = agent_instance.run(&dispatcher).await;
-    let content = response.final_response.unwrap_or_default();
-    runtime.put_agent(agent_instance).await;
-
-    Ok(content)
+    runtime
+        .send_to(agent, content)
+        .await
+        .map(|r| r.final_response.unwrap_or_default())
+        .map_err(|e| ProtocolError::new(404, e.to_string()))
 }
 
 /// Send a message to an agent and stream response events.
 pub fn dispatch_stream(
-    runtime: Arc<Runtime<GatewayHook>>,
+    runtime: Arc<Runtime<ProviderManager, GatewayHook>>,
     locks: Arc<AgentLock>,
     agent: CompactString,
     content: String,
@@ -93,33 +80,20 @@ pub fn dispatch_stream(
     async_stream::try_stream! {
         let _guard = locks.acquire(&agent).await;
 
-        let Some(mut agent_instance) = runtime.take_agent(&agent).await else {
-            Err(ProtocolError::new(404, format!("agent '{agent}' not registered")))?;
-            return;
-        };
-
         yield StreamEvent::Start { agent: agent.clone() };
 
-        agent_instance.push_message(Message::user(&content));
-        {
-            let dispatcher = AgentDispatcher {
-                hook: runtime.hook(),
-                agent: &agent,
-            };
-            let stream = agent_instance.run_stream(&dispatcher);
-            futures_util::pin_mut!(stream);
-            while let Some(event) = stream.next().await {
-                match event {
-                    AgentEvent::TextDelta(text) => {
-                        yield StreamEvent::Chunk { content: text };
-                    }
-                    AgentEvent::Done(_) => break,
-                    _ => {}
+        let stream = runtime.stream_to(&agent, &content);
+        futures_util::pin_mut!(stream);
+        while let Some(event) = stream.next().await {
+            match event {
+                AgentEvent::TextDelta(text) => {
+                    yield StreamEvent::Chunk { content: text };
                 }
+                AgentEvent::Done(_) => break,
+                _ => {}
             }
         }
 
         yield StreamEvent::End { agent: agent.clone() };
-        runtime.put_agent(agent_instance).await;
     }
 }
