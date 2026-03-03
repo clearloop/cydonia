@@ -2,3 +2,4 @@
 
 pub mod cron;
 pub mod memory;
+pub mod skill;

@@ -19,8 +19,8 @@ async fn main() {
     let mut runtime = common::build_runtime();
 
     // Register a "concise" skill that constrains response length.
-    let mut registry = SkillRegistry::new();
-    registry.add(
+    let mut skills = SkillRegistry::new();
+    skills.add(
         Skill {
             name: "concise".into(),
             description: "Constrains responses to exactly 2 sentences.".into(),
@@ -32,7 +32,6 @@ async fn main() {
         },
         SkillTier::Bundled,
     );
-    runtime.set_skills(registry);
 
     // Two agents: same base prompt, different skill tags.
     runtime.add_agent(
@@ -57,7 +56,7 @@ async fn main() {
 
         // Send to default agent (no skill).
         let default_response = runtime
-            .send_to("default", Message::user(prompt))
+            .send_to("default", Message::user(prompt), &skills)
             .await
             .expect("default agent failed");
         println!(
@@ -67,7 +66,7 @@ async fn main() {
 
         // Send to concise agent (with skill).
         let concise_response = runtime
-            .send_to("concise", Message::user(prompt))
+            .send_to("concise", Message::user(prompt), &skills)
             .await
             .expect("concise agent failed");
         println!(

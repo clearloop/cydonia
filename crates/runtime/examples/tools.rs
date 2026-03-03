@@ -17,6 +17,7 @@ use walrus_runtime::prelude::*;
 async fn main() {
     common::init_tracing();
     let mut runtime = common::build_runtime();
+    let skills = SkillRegistry::new();
 
     // current_time: LLMs don't know the current time.
     let time_tool = Tool {
@@ -49,5 +50,5 @@ async fn main() {
     println!("  'What day of the week is it today?'");
     println!("(type 'exit' to quit)");
     println!("---");
-    common::repl(&runtime, "assistant").await;
+    common::repl(&runtime, "assistant", &skills).await;
 }

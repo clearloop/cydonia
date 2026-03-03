@@ -50,6 +50,8 @@ pub enum ClientMessage {
         /// HuggingFace model ID (e.g. "microsoft/Phi-3.5-mini-instruct").
         model: CompactString,
     },
+    /// Reload skills from disk.
+    ReloadSkills,
     /// Ping the server (keepalive).
     Ping,
 }
@@ -148,6 +150,11 @@ pub enum ServerMessage {
         code: u16,
         /// Error message.
         message: String,
+    },
+    /// Skills were reloaded successfully.
+    SkillsReloaded {
+        /// Number of skills loaded.
+        count: usize,
     },
     /// Pong response to client ping.
     Pong,

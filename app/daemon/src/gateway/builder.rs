@@ -5,15 +5,14 @@ use crate::config;
 use crate::gateway::GatewayHook;
 use anyhow::Result;
 use model::ProviderManager;
-use runtime::{McpBridge, Memory, Request, Runtime, SkillRegistry, Tool};
+use runtime::{McpBridge, Memory, Request, Runtime, Tool};
 use std::path::Path;
 use std::sync::Arc;
 
 /// Build a fully-configured `Runtime<GatewayHook>` from config and directory.
 ///
-/// Loads agents from `config_dir/agents/*.md`, skills from `config_dir/skills/`,
-/// memory from `config_dir/data/memory.db` (when sqlite), and MCP servers
-/// from TOML config. Registers memory tools (remember) backed by the memory backend.
+/// Loads agents from `config_dir/agents/*.md`, memory tools, and MCP servers
+/// from TOML config. Skills are loaded separately by the `SkillHandler`.
 pub async fn build_runtime(
     config: &crate::DaemonConfig,
     config_dir: &Path,
@@ -43,18 +42,6 @@ pub async fn build_runtime(
     for agent in agents {
         tracing::info!("registered agent '{}'", agent.name);
         runtime.add_agent(agent);
-    }
-
-    // Load skills if directory exists.
-    let skills_dir = config_dir.join(config::SKILLS_DIR);
-    match SkillRegistry::load_dir(&skills_dir, runtime::SkillTier::Workspace) {
-        Ok(registry) => {
-            tracing::info!("loaded {} skill(s)", registry.len());
-            runtime.set_skills(registry);
-        }
-        Err(e) => {
-            tracing::warn!("could not load skills from {}: {e}", skills_dir.display());
-        }
     }
 
     // Connect MCP servers if configured.

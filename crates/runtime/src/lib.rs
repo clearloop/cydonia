@@ -65,11 +65,22 @@ pub struct Runtime<H: Hook> {
     provider: H::Model,
     request: Request,
     memory: Arc<H::Memory>,
-    skills: Option<Arc<SkillRegistry>>,
     mcp: Option<Arc<McpBridge>>,
     tools: BTreeMap<CompactString, (Tool, Handler)>,
     agents: BTreeMap<CompactString, AgentConfig>,
     sessions: RwLock<BTreeMap<CompactString, Session>>,
+}
+
+/// Build a system prompt enriched with skills for the given agent config.
+pub fn build_system_prompt(agent_config: &AgentConfig, skills: &SkillRegistry) -> String {
+    let mut prompt = agent_config.system_prompt.clone();
+    for skill in skills.find_by_tags(&agent_config.skill_tags) {
+        if !skill.body.is_empty() {
+            prompt.push_str("\n\n");
+            prompt.push_str(&skill.body);
+        }
+    }
+    prompt
 }
 
 impl<H: Hook + 'static> Runtime<H> {
@@ -80,23 +91,11 @@ impl<H: Hook + 'static> Runtime<H> {
             provider,
             request,
             memory,
-            skills: None,
             mcp: None,
             tools: BTreeMap::new(),
             agents: BTreeMap::new(),
             sessions: RwLock::new(BTreeMap::new()),
         }
-    }
-
-    /// Set the skill registry for this runtime (builder-style).
-    pub fn with_skills(mut self, registry: SkillRegistry) -> Self {
-        self.skills = Some(Arc::new(registry));
-        self
-    }
-
-    /// Set the skill registry for this runtime (mutable setter).
-    pub fn set_skills(&mut self, registry: SkillRegistry) {
-        self.skills = Some(Arc::new(registry));
     }
 
     /// Connect an MCP bridge to this runtime.
@@ -215,11 +214,6 @@ impl<H: Hook + 'static> Runtime<H> {
         &self.request
     }
 
-    /// Get a shared reference to the skill registry, if one is set.
-    pub fn skills(&self) -> Option<&Arc<SkillRegistry>> {
-        self.skills.as_ref()
-    }
-
     /// Build a RuntimeDispatcher for the given agent config.
     ///
     /// Resolves the agent's tool names against the registry and includes
@@ -235,30 +229,16 @@ impl<H: Hook + 'static> Runtime<H> {
         RuntimeDispatcher::new(tools, handlers, self.mcp.clone())
     }
 
-    /// Build a system prompt enriched with skills for the given agent config.
-    fn build_system_prompt(&self, agent_config: &AgentConfig) -> String {
-        let mut prompt = agent_config.system_prompt.clone();
-        if let Some(registry) = &self.skills {
-            for skill in registry.find_by_tags(&agent_config.skill_tags) {
-                if !skill.body.is_empty() {
-                    prompt.push_str("\n\n");
-                    prompt.push_str(&skill.body);
-                }
-            }
-        }
-        prompt
-    }
-
     /// Create an ephemeral Agent from config with a fresh event channel.
     ///
     /// Returns the Agent and a receiver for draining events.
     fn create_agent(
-        &self,
         agent_config: &AgentConfig,
         history: Vec<Message>,
+        skills: &SkillRegistry,
     ) -> (wcore::Agent, tokio::sync::mpsc::Receiver<AgentEvent>) {
         let (tx, rx) = tokio::sync::mpsc::channel(64);
-        let enriched_prompt = self.build_system_prompt(agent_config);
+        let enriched_prompt = build_system_prompt(agent_config, skills);
         let mut config = agent_config.clone();
         config.system_prompt = enriched_prompt;
         let mut agent = wcore::AgentBuilder::new(tx).config(config).build();
@@ -272,7 +252,12 @@ impl<H: Hook + 'static> Runtime<H> {
     ///
     /// Creates an ephemeral Agent, runs it with a RuntimeDispatcher,
     /// and returns the final response. Events are emitted via Hook::on_event().
-    pub async fn send_to(&self, agent: &str, message: Message) -> Result<Response> {
+    pub async fn send_to(
+        &self,
+        agent: &str,
+        message: Message,
+        skills: &SkillRegistry,
+    ) -> Result<Response> {
         let agent_config = self
             .agents
             .get(agent)
@@ -290,7 +275,8 @@ impl<H: Hook + 'static> Runtime<H> {
         session.messages.push(message);
 
         let dispatcher = self.build_dispatcher(&agent_config);
-        let (mut agent_instance, mut rx) = self.create_agent(&agent_config, session.messages);
+        let (mut agent_instance, mut rx) =
+            Self::create_agent(&agent_config, session.messages, skills);
 
         // Spawn event drain task.
         tokio::spawn(async move {
@@ -320,6 +306,7 @@ impl<H: Hook + 'static> Runtime<H> {
         &'a self,
         agent: &'a str,
         message: Message,
+        skills: &'a SkillRegistry,
     ) -> impl Stream<Item = AgentEvent> + 'a {
         async_stream::stream! {
             let agent_config = match self.agents.get(agent) {
@@ -344,7 +331,8 @@ impl<H: Hook + 'static> Runtime<H> {
             session.messages.push(message);
 
             let dispatcher = self.build_dispatcher(&agent_config);
-            let (mut agent_instance, _rx) = self.create_agent(&agent_config, session.messages);
+            let (mut agent_instance, _rx) =
+                Self::create_agent(&agent_config, session.messages, skills);
 
             {
                 let stream = agent_instance.run_stream(&self.provider, &dispatcher);

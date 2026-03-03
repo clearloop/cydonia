@@ -17,6 +17,7 @@ use walrus_runtime::{Memory, prelude::*};
 async fn main() {
     common::init_tracing();
     let mut runtime = common::build_runtime();
+    let skills = SkillRegistry::new();
 
     // Pre-seed memory with user context.
     runtime.memory().set("user_name", "Alex");
@@ -50,5 +51,5 @@ async fn main() {
     }
     println!();
 
-    common::repl_with_memory(&runtime, "assistant").await;
+    common::repl_with_memory(&runtime, "assistant", &skills).await;
 }

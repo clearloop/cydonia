@@ -16,6 +16,7 @@ use walrus_runtime::{McpBridge, prelude::*};
 async fn main() {
     common::init_tracing();
     let mut runtime = common::build_runtime();
+    let skills = SkillRegistry::new();
     let bridge = McpBridge::new();
 
     // Connect to Playwright MCP server (headless browser automation).
@@ -56,5 +57,5 @@ async fn main() {
     println!("  'Search for Rust programming on Wikipedia'");
     println!("(type 'exit' to quit)");
     println!("---");
-    common::repl(&runtime, "assistant").await;
+    common::repl(&runtime, "assistant", &skills).await;
 }

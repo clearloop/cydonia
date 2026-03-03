@@ -43,6 +43,7 @@ pub async fn serve(config_dir: &Path) -> Result<ServeHandle> {
 /// Serve with an already-loaded config. Useful when the caller resolves
 /// config separately (e.g. CLI with scaffold logic).
 pub async fn serve_with_config(config: &DaemonConfig, config_dir: &Path) -> Result<ServeHandle> {
+    use crate::feature::skill::SkillHandler;
     use crate::gateway::uds;
     use std::sync::Arc;
 
@@ -51,9 +52,12 @@ pub async fn serve_with_config(config: &DaemonConfig, config_dir: &Path) -> Resu
     let hf_endpoint = model::local::download::probe_endpoint().await;
     tracing::info!("using hf endpoint: {hf_endpoint}");
 
+    let skills_dir = config_dir.join(crate::config::SKILLS_DIR);
+    let skills = SkillHandler::load(skills_dir)?;
     let state = Gateway {
         runtime: Arc::new(runtime),
         hf_endpoint: Arc::from(hf_endpoint),
+        skills: Arc::new(skills),
     };
 
     let resolved_path = crate::config::socket_path();

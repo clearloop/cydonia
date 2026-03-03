@@ -72,7 +72,7 @@ struct SkillFrontmatter {
 }
 
 /// A registry of loaded skills with tag and trigger indices.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SkillRegistry {
     skills: Vec<IndexedSkill>,
     tag_index: BTreeMap<CompactString, Vec<usize>>,

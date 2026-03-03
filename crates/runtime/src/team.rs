@@ -32,9 +32,9 @@ pub fn build_team<H: Hook + 'static>(
     mut leader: AgentConfig,
     workers: Vec<AgentConfig>,
     runtime: &mut crate::Runtime<H>,
+    skills: &SkillRegistry,
 ) -> AgentConfig {
     let provider = runtime.provider().clone();
-    let skills = runtime.skills().map(Arc::clone);
 
     for worker in workers {
         let tool_def = worker_tool(worker.name.clone(), worker.description.to_string());
@@ -67,7 +67,7 @@ pub fn build_team<H: Hook + 'static>(
 /// Shared immutable state for a worker handler.
 struct WorkerCtx<P: Model> {
     provider: P,
-    skills: Option<Arc<SkillRegistry>>,
+    skills: SkillRegistry,
     agent: AgentConfig,
     dispatcher: RuntimeDispatcher,
 }
@@ -78,16 +78,7 @@ struct WorkerCtx<P: Model> {
 /// system prompt with skills, pushes the user input, and runs to completion.
 async fn worker_send<P: Model>(ctx: &WorkerCtx<P>, input: String) -> String {
     let mut config = ctx.agent.clone();
-
-    // Inject skill bodies matching the agent's skill tags.
-    if let Some(registry) = &ctx.skills {
-        for skill in registry.find_by_tags(&config.skill_tags) {
-            if !skill.body.is_empty() {
-                config.system_prompt.push_str("\n\n");
-                config.system_prompt.push_str(&skill.body);
-            }
-        }
-    }
+    config.system_prompt = crate::build_system_prompt(&config, &ctx.skills);
 
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     let mut agent = wcore::AgentBuilder::new(tx).config(config).build();

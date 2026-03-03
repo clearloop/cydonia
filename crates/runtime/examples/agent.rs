@@ -21,6 +21,7 @@ use walrus_runtime::prelude::*;
 async fn main() {
     common::init_tracing();
     let mut runtime = common::build_runtime();
+    let skills = SkillRegistry::new();
 
     runtime.add_agent(
         AgentConfig::new("assistant").system_prompt("You are a helpful assistant. Be concise."),
@@ -28,5 +29,5 @@ async fn main() {
 
     println!("Agent REPL (type 'exit' to quit)");
     println!("---");
-    common::repl(&runtime, "assistant").await;
+    common::repl(&runtime, "assistant", &skills).await;
 }

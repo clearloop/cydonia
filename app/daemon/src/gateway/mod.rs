@@ -1,6 +1,7 @@
 //! Protocol impls for the gateway.
 
 use crate::MemoryBackend;
+use crate::feature::skill::SkillHandler;
 use model::ProviderManager;
 use runtime::Hook;
 use runtime::Runtime;
@@ -17,6 +18,8 @@ pub struct Gateway<H: Hook + 'static> {
     pub runtime: Arc<Runtime<H>>,
     /// HuggingFace endpoint selected at startup (fastest of official/mirror).
     pub hf_endpoint: Arc<str>,
+    /// Skill registry with hot-reload support.
+    pub skills: Arc<SkillHandler>,
 }
 
 impl<H: Hook + 'static> Clone for Gateway<H> {
@@ -24,6 +27,7 @@ impl<H: Hook + 'static> Clone for Gateway<H> {
         Self {
             runtime: Arc::clone(&self.runtime),
             hf_endpoint: Arc::clone(&self.hf_endpoint),
+            skills: Arc::clone(&self.skills),
         }
     }
 }

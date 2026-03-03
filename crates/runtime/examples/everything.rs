@@ -37,8 +37,8 @@ async fn main() {
     );
 
     // 2. Load a skill — modifies system prompt to constrain response style.
-    let mut registry = SkillRegistry::new();
-    registry.add(
+    let mut skills = SkillRegistry::new();
+    skills.add(
         Skill {
             name: "concise".into(),
             description: "Encourages concise responses".into(),
@@ -50,7 +50,6 @@ async fn main() {
         },
         SkillTier::Bundled,
     );
-    runtime.set_skills(registry);
 
     // 3. Store memory context — affects system prompt via compile_relevant().
     runtime
@@ -67,11 +66,11 @@ async fn main() {
         .system_prompt("You are a research analyst. Provide well-reasoned answers.")
         .tool("current_time");
 
-    let leader = build_team(leader, vec![analyst], &mut runtime);
+    let leader = build_team(leader, vec![analyst], &mut runtime, &skills);
     runtime.add_agent(leader);
 
     println!("Everything REPL — leader + analyst team, tools, memory, skills");
     println!("(type 'exit' to quit)");
     println!("---");
-    common::repl(&runtime, "leader").await;
+    common::repl(&runtime, "leader", &skills).await;
 }

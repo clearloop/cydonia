@@ -83,7 +83,12 @@ async fn receiver_loop<H: Hook + 'static>(
 
         match client_msg {
             ClientMessage::Send { agent, content } => {
-                match state.runtime.send_to(&agent, Message::user(&content)).await {
+                let skills = state.skills.registry().read().await;
+                match state
+                    .runtime
+                    .send_to(&agent, Message::user(&content), &skills)
+                    .await
+                {
                     Ok(response) => {
                         let content = response.content().cloned().unwrap_or_default();
                         let _ = tx.send(ServerMessage::Response { agent, content });
@@ -103,7 +108,10 @@ async fn receiver_loop<H: Hook + 'static>(
                 });
 
                 {
-                    let stream = state.runtime.stream_to(&agent, Message::user(&content));
+                    let skills = state.skills.registry().read().await;
+                    let stream = state
+                        .runtime
+                        .stream_to(&agent, Message::user(&content), &skills);
                     futures_util::pin_mut!(stream);
 
                     while let Some(event) = futures_util::StreamExt::next(&mut stream).await {
@@ -213,6 +221,19 @@ async fn receiver_loop<H: Hook + 'static>(
                 let value = state.runtime.memory().get(&key);
                 let _ = tx.send(ServerMessage::MemoryEntry { key, value });
             }
+
+            ClientMessage::ReloadSkills => match state.skills.reload().await {
+                Ok(count) => {
+                    tracing::info!("reloaded {count} skill(s)");
+                    let _ = tx.send(ServerMessage::SkillsReloaded { count });
+                }
+                Err(e) => {
+                    let _ = tx.send(ServerMessage::Error {
+                        code: 500,
+                        message: format!("failed to reload skills: {e}"),
+                    });
+                }
+            },
 
             ClientMessage::Ping => {
                 let _ = tx.send(ServerMessage::Pong);
