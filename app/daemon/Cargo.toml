@@ -1,5 +1,8 @@
 [package]
 name = "walrus-daemon"
+description = "The Walrus daemon"
+documentation = "https://docs.rs/walrus-daemon"
+readme = "README.md"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -18,15 +21,20 @@ name = "walrusd"
 path = "src/bin/main.rs"
 
 [dependencies]
+async-stream = { workspace = true }
 runtime = { workspace = true }
 wcore = { workspace = true }
 model = { workspace = true }
 memory = { workspace = true }
-channel = { workspace = true }
+skill = { workspace = true }
+mcp = { workspace = true }
 protocol = { workspace = true }
+socket = { workspace = true }
+channel = { workspace = true }
+telegram = { workspace = true }
 compact_str = { workspace = true }
+futures-core = { workspace = true }
 futures-util = { workspace = true }
-schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
@@ -35,8 +43,6 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 anyhow = { workspace = true }
-smallvec = { workspace = true }
 cron = { workspace = true }
 chrono = { workspace = true }
-rmcp = { workspace = true }
 dirs = { workspace = true }

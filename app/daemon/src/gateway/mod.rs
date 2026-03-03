@@ -1,24 +1,28 @@
 //! Gateway — daemon core composing runtime, MCP, skills, and memory.
 
-use crate::MemoryBackend;
-use crate::feature::mcp::McpHandler;
-use crate::feature::skill::SkillHandler;
 use anyhow::Result;
 use compact_str::CompactString;
+use mcp::McpHandler;
+use memory::InMemory;
 use model::ProviderManager;
 use runtime::{Handler, Hook, Runtime, Tool};
+use skill::SkillHandler;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use wcore::{AgentConfig, AgentEvent};
 
 pub mod builder;
+pub mod channel;
+pub mod dispatch;
 pub mod serve;
-pub mod uds;
+pub mod server;
 
 /// Shared state available to all request handlers.
 pub struct Gateway {
     /// The walrus runtime.
-    pub runtime: Arc<Runtime<GatewayHook>>,
+    pub runtime: Arc<Runtime<ProviderManager, GatewayHook>>,
+    /// Per-agent execution locks shared across all message sources.
+    pub locks: Arc<dispatch::AgentLock>,
     /// HuggingFace endpoint selected at startup (fastest of official/mirror).
     pub hf_endpoint: Arc<str>,
 }
@@ -27,6 +31,7 @@ impl Clone for Gateway {
     fn clone(&self) -> Self {
         Self {
             runtime: Arc::clone(&self.runtime),
+            locks: Arc::clone(&self.locks),
             hf_endpoint: Arc::clone(&self.hf_endpoint),
         }
     }
@@ -34,11 +39,10 @@ impl Clone for Gateway {
 
 /// Stateful Hook implementation for the daemon.
 ///
-/// Owns the model provider, memory backend, skill registry, MCP bridge,
-/// and tool registry. Provides all backend services to Runtime.
+/// Composes MCP and Skills as sub-hooks, plus daemon-registered tools
+/// (memory, etc). Delegates lifecycle methods to each sub-hook.
 pub struct GatewayHook {
-    provider: ProviderManager,
-    memory: Arc<MemoryBackend>,
+    memory: Arc<InMemory>,
     skills: SkillHandler,
     mcp: McpHandler,
     tools: BTreeMap<CompactString, (Tool, Handler)>,
@@ -46,14 +50,8 @@ pub struct GatewayHook {
 
 impl GatewayHook {
     /// Create a new GatewayHook with the given backends.
-    pub fn new(
-        provider: ProviderManager,
-        memory: MemoryBackend,
-        skills: SkillHandler,
-        mcp: McpHandler,
-    ) -> Self {
+    pub fn new(memory: InMemory, skills: SkillHandler, mcp: McpHandler) -> Self {
         Self {
-            provider,
             memory: Arc::new(memory),
             skills,
             mcp,
@@ -73,12 +71,12 @@ impl GatewayHook {
     }
 
     /// Access the memory backend.
-    pub fn memory(&self) -> &MemoryBackend {
+    pub fn memory(&self) -> &InMemory {
         &self.memory
     }
 
     /// Get a clone of the memory Arc.
-    pub fn memory_arc(&self) -> Arc<MemoryBackend> {
+    pub fn memory_arc(&self) -> Arc<InMemory> {
         Arc::clone(&self.memory)
     }
 
@@ -94,22 +92,20 @@ impl GatewayHook {
 }
 
 impl Hook for GatewayHook {
-    type Model = ProviderManager;
-
-    fn model(&self) -> &ProviderManager {
-        &self.provider
+    fn on_build_agent(&self, config: AgentConfig) -> AgentConfig {
+        // Skills enrich the system prompt based on agent tags.
+        let config = self.skills.on_build_agent(config);
+        // MCP could enrich in the future (currently a no-op).
+        self.mcp.on_build_agent(config)
     }
 
-    fn tools(&self, _agent: &str) -> Vec<Tool> {
+    fn tools(&self, agent: &str) -> Vec<Tool> {
+        // Daemon-registered tools (memory, etc).
         let mut tools: Vec<Tool> = self.tools.values().map(|(t, _)| t.clone()).collect();
-        // Merge MCP tools, skipping duplicates.
-        if let Some(bridge) = self.mcp.try_bridge() {
-            for tool in bridge.try_tools() {
-                if !self.tools.contains_key(&tool.name) {
-                    tools.push(tool);
-                }
-            }
-        }
+        // MCP tools.
+        tools.extend(self.mcp.tools(agent));
+        // Skill tools (currently empty).
+        tools.extend(self.skills.tools(agent));
         tools
     }
 
@@ -144,30 +140,23 @@ impl Hook for GatewayHook {
         }
     }
 
-    fn enrich_prompt(&self, config: &AgentConfig) -> String {
-        if let Ok(skills) = self.skills.registry().try_read() {
-            build_system_prompt(config, &skills)
-        } else {
-            config.system_prompt.clone()
-        }
-    }
-
-    fn on_event(&self, event: &AgentEvent) {
+    fn on_event(&self, agent: &str, event: &AgentEvent) {
         match event {
             AgentEvent::TextDelta(text) => {
-                tracing::trace!(text_len = text.len(), "agent text delta");
+                tracing::trace!(%agent, text_len = text.len(), "agent text delta");
             }
             AgentEvent::ToolCallsStart(calls) => {
-                tracing::debug!(count = calls.len(), "agent tool calls started");
+                tracing::debug!(%agent, count = calls.len(), "agent tool calls started");
             }
             AgentEvent::ToolResult { call_id, .. } => {
-                tracing::debug!(%call_id, "agent tool result");
+                tracing::debug!(%agent, %call_id, "agent tool result");
             }
             AgentEvent::ToolCallsComplete => {
-                tracing::debug!("agent tool calls complete");
+                tracing::debug!(%agent, "agent tool calls complete");
             }
             AgentEvent::Done(response) => {
                 tracing::info!(
+                    %agent,
                     iterations = response.iterations,
                     stop_reason = ?response.stop_reason,
                     "agent run complete"
@@ -175,19 +164,4 @@ impl Hook for GatewayHook {
             }
         }
     }
-}
-
-/// Build a system prompt enriched with skills for the given agent config.
-fn build_system_prompt(
-    agent_config: &AgentConfig,
-    skills: &crate::feature::skill::SkillRegistry,
-) -> String {
-    let mut prompt = agent_config.system_prompt.clone();
-    for skill in skills.find_by_tags(&agent_config.skill_tags) {
-        if !skill.body.is_empty() {
-            prompt.push_str("\n\n");
-            prompt.push_str(&skill.body);
-        }
-    }
-    prompt
 }

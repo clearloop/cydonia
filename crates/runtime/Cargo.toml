@@ -2,6 +2,7 @@
 name = "walrus-runtime"
 description = "Walrus runtime"
 documentation = "https://docs.rs/walrus-runtime"
+readme = "README.md"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -15,7 +16,9 @@ memory.workspace = true
 
 # crates-io dependencies
 anyhow.workspace = true
+async-stream.workspace = true
 compact_str.workspace = true
+futures-core.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 

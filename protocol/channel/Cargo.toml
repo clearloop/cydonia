@@ -1,0 +1,19 @@
+[package]
+name = "walrus-pchannel"
+description = "Channel abstraction for Walrus protocol"
+documentation = "https://docs.rs/walrus-pchannel"
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords.workspace = true
+
+[dependencies]
+wcore = { workspace = true }
+anyhow = { workspace = true }
+compact_str = { workspace = true }
+futures-core = { workspace = true }
+serde = { workspace = true }
+tokio = { workspace = true }

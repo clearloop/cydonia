@@ -37,7 +37,7 @@ pub struct DaemonConfig {
     pub channels: Vec<ChannelConfig>,
     /// MCP server configurations.
     #[serde(default)]
-    pub mcp_servers: Vec<McpServerConfig>,
+    pub mcp_servers: Vec<mcp::McpServerConfig>,
 }
 
 impl Default for DaemonConfig {
@@ -45,7 +45,7 @@ impl Default for DaemonConfig {
         Self {
             models: vec![ProviderConfig {
                 model: "deepseek-chat".into(),
-                api_key: Some("${DEEPSEEK_API_KEY}".to_owned()),
+                api_key: None,
                 base_url: None,
                 loader: None,
                 quantization: None,
@@ -70,28 +70,6 @@ pub struct ChannelConfig {
     pub channel_id: Option<CompactString>,
 }
 
-/// MCP server configuration.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct McpServerConfig {
-    /// Server name.
-    pub name: CompactString,
-    /// Command to spawn.
-    pub command: String,
-    /// Command arguments.
-    #[serde(default)]
-    pub args: Vec<String>,
-    /// Environment variables.
-    #[serde(default)]
-    pub env: std::collections::BTreeMap<String, String>,
-    /// Auto-restart on failure.
-    #[serde(default = "default_true")]
-    pub auto_restart: bool,
-}
-
-fn default_true() -> bool {
-    true
-}
-
 /// Default agent markdown content for first-run scaffold.
 pub const DEFAULT_AGENT_MD: &str = r#"---
 name: assistant
@@ -104,11 +82,9 @@ You are a helpful assistant. Be concise.
 "#;
 
 impl DaemonConfig {
-    /// Parse a TOML string into a `DaemonConfig`, expanding environment
-    /// variables in supported fields.
+    /// Parse a TOML string into a `DaemonConfig`.
     pub fn from_toml(toml_str: &str) -> anyhow::Result<Self> {
-        let expanded = crate::utils::expand_env_vars(toml_str);
-        let config: Self = toml::from_str(&expanded)?;
+        let config: Self = toml::from_str(toml_str)?;
         Ok(config)
     }
 

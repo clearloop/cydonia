@@ -1,5 +1,8 @@
 [package]
 name = "walrus-cli"
+description = "Command-line interface for Walrus"
+documentation = "https://docs.rs/walrus-cli"
+readme = "README.md"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -12,8 +15,8 @@ name = "walrus"
 path = "src/bin/main.rs"
 
 [dependencies]
-client = { workspace = true }
 protocol = { workspace = true }
+socket = { workspace = true }
 clap = { workspace = true }
 compact_str = { workspace = true }
 tokio = { workspace = true }

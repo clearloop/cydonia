@@ -1,11 +1,17 @@
 //! Gateway mode — connect to walrusd via Unix domain socket.
 
 use crate::runner::Runner;
-use anyhow::{Result, bail};
-use client::{ClientConfig, Connection, WalrusClient};
+use anyhow::Result;
 use compact_str::CompactString;
 use futures_core::Stream;
-use protocol::{AgentSummary, ClientMessage, ServerMessage};
+use futures_util::StreamExt;
+use protocol::api::Client;
+use protocol::error::ProtocolError;
+use protocol::message::{
+    AgentDetail, AgentInfoRequest, AgentSummary, DownloadEvent, DownloadRequest, GetMemoryRequest,
+    SendRequest, StreamEvent, StreamRequest,
+};
+use socket::{ClientConfig, Connection, WalrusClient};
 use std::path::Path;
 
 /// Runs agents via a walrusd Unix domain socket connection.
@@ -26,64 +32,62 @@ impl GatewayRunner {
 
     /// List all registered agents.
     pub async fn list_agents(&mut self) -> Result<Vec<AgentSummary>> {
-        match self.connection.send(ClientMessage::ListAgents).await? {
-            ServerMessage::AgentList { agents } => Ok(agents),
-            ServerMessage::Error { code, message } => bail!("error ({code}): {message}"),
-            other => bail!("unexpected response: {other:?}"),
-        }
+        let resp = self.connection.list_agents().await.map_err(anyhow_from)?;
+        Ok(resp.agents)
     }
 
     /// Get detailed info for a specific agent.
-    pub async fn agent_info(&mut self, agent: &str) -> Result<ServerMessage> {
-        let msg = ClientMessage::AgentInfo {
-            agent: CompactString::from(agent),
-        };
-        self.connection.send(msg).await
+    pub async fn agent_info(&mut self, agent: &str) -> Result<AgentDetail> {
+        self.connection
+            .agent_info(AgentInfoRequest {
+                agent: CompactString::from(agent),
+            })
+            .await
+            .map_err(anyhow_from)
     }
 
     /// List all memory entries.
     pub async fn list_memory(&mut self) -> Result<Vec<(String, String)>> {
-        match self.connection.send(ClientMessage::ListMemory).await? {
-            ServerMessage::MemoryList { entries } => Ok(entries),
-            ServerMessage::Error { code, message } => bail!("error ({code}): {message}"),
-            other => bail!("unexpected response: {other:?}"),
-        }
+        let resp = self.connection.list_memory().await.map_err(anyhow_from)?;
+        Ok(resp.entries)
     }
 
-    /// Send a download request and return a stream of progress messages.
+    /// Send a download request and return a stream of progress events.
     pub fn download_stream(
         &mut self,
-        msg: ClientMessage,
-    ) -> impl Stream<Item = Result<ServerMessage>> + '_ {
-        self.connection.download_stream(msg)
+        model: &str,
+    ) -> impl Stream<Item = Result<DownloadEvent>> + '_ {
+        self.connection
+            .download(DownloadRequest {
+                model: CompactString::from(model),
+            })
+            .map(|r| r.map_err(anyhow_from))
     }
 
     /// Get a specific memory entry by key.
     pub async fn get_memory(&mut self, key: &str) -> Result<Option<String>> {
-        let msg = ClientMessage::GetMemory {
-            key: key.to_string(),
-        };
-        match self.connection.send(msg).await? {
-            ServerMessage::MemoryEntry { value, .. } => Ok(value),
-            ServerMessage::Error { code, message } => bail!("error ({code}): {message}"),
-            other => bail!("unexpected response: {other:?}"),
-        }
+        let resp = self
+            .connection
+            .get_memory(GetMemoryRequest {
+                key: key.to_string(),
+            })
+            .await
+            .map_err(anyhow_from)?;
+        Ok(resp.value)
     }
 }
 
 impl Runner for GatewayRunner {
     async fn send(&mut self, agent: &str, content: &str) -> Result<String> {
-        let msg = ClientMessage::Send {
-            agent: CompactString::from(agent),
-            content: content.to_string(),
-        };
-        match self.connection.send(msg).await? {
-            ServerMessage::Response { content, .. } => Ok(content),
-            ServerMessage::Error { code, message } => {
-                bail!("gateway error ({code}): {message}")
-            }
-            other => bail!("unexpected response: {other:?}"),
-        }
+        let resp = self
+            .connection
+            .send(SendRequest {
+                agent: CompactString::from(agent),
+                content: content.to_string(),
+            })
+            .await
+            .map_err(anyhow_from)?;
+        Ok(resp.content)
     }
 
     fn stream<'a>(
@@ -91,22 +95,23 @@ impl Runner for GatewayRunner {
         agent: &'a str,
         content: &'a str,
     ) -> impl Stream<Item = Result<String>> + Send + 'a {
-        use futures_util::StreamExt;
-
-        let msg = ClientMessage::Stream {
-            agent: CompactString::from(agent),
-            content: content.to_string(),
-        };
-        self.connection.stream(msg).filter_map(|result| async {
-            match result {
-                Ok(ServerMessage::StreamChunk { content }) => Some(Ok(content)),
-                Ok(ServerMessage::StreamStart { .. }) => None,
-                Ok(ServerMessage::Error { code, message }) => {
-                    Some(Err(anyhow::anyhow!("gateway error ({code}): {message}")))
+        self.connection
+            .stream(StreamRequest {
+                agent: CompactString::from(agent),
+                content: content.to_string(),
+            })
+            .filter_map(|result| async {
+                match result {
+                    Ok(StreamEvent::Chunk { content }) => Some(Ok(content)),
+                    Ok(StreamEvent::Start { .. }) => None,
+                    Ok(StreamEvent::End { .. }) => None,
+                    Err(e) => Some(Err(anyhow_from(e))),
                 }
-                Ok(_) => None,
-                Err(e) => Some(Err(e)),
-            }
-        })
+            })
     }
+}
+
+/// Convert a `ProtocolError` into `anyhow::Error`.
+fn anyhow_from(e: ProtocolError) -> anyhow::Error {
+    anyhow::anyhow!("{e}")
 }

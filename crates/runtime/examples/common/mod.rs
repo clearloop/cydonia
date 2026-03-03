@@ -10,18 +10,16 @@ use std::sync::Arc;
 use walrus_runtime::{AgentDispatcher, Handler, Hook, Memory, Tool, prelude::*};
 use wcore::AgentEvent;
 
-/// Example hook providing a model and optional tool dispatch.
+/// Example hook providing optional tool dispatch.
 pub struct ExampleHook {
-    provider: ProviderManager,
     memory: InMemory,
     tools: BTreeMap<CompactString, (Tool, Handler)>,
 }
 
 impl ExampleHook {
-    /// Create a new ExampleHook with the given provider.
-    pub fn new(provider: ProviderManager) -> Self {
+    /// Create a new ExampleHook.
+    pub fn new() -> Self {
         Self {
-            provider,
             memory: InMemory::new(),
             tools: BTreeMap::new(),
         }
@@ -45,12 +43,6 @@ impl ExampleHook {
 }
 
 impl Hook for ExampleHook {
-    type Model = ProviderManager;
-
-    fn model(&self) -> &ProviderManager {
-        &self.provider
-    }
-
     fn tools(&self, _agent: &str) -> Vec<Tool> {
         self.tools.values().map(|(t, _)| t.clone()).collect()
     }
@@ -99,8 +91,8 @@ pub fn load_api_key() -> String {
     std::env::var("DEEPSEEK_API_KEY").expect("DEEPSEEK_API_KEY must be set")
 }
 
-/// Build a default ExampleHook with DeepSeek provider and InMemory.
-pub fn build_hook() -> ExampleHook {
+/// Build a ProviderManager from the default DeepSeek config.
+pub fn build_provider() -> ProviderManager {
     let key = load_api_key();
     let config = model::ProviderConfig {
         model: "deepseek-chat".into(),
@@ -113,19 +105,27 @@ pub fn build_hook() -> ExampleHook {
     let provider =
         model::deepseek::DeepSeek::new(model::Client::new(), config.api_key.as_ref().unwrap())
             .expect("failed to create provider");
-    let manager = ProviderManager::single(config, model::Provider::DeepSeek(provider));
-    ExampleHook::new(manager)
+    ProviderManager::single(config, model::Provider::DeepSeek(provider))
 }
 
-/// Build a Runtime with the default ExampleHook.
-pub fn build_runtime() -> (Runtime<ExampleHook>, Arc<ExampleHook>) {
+/// Build a default ExampleHook (no tools, empty memory).
+pub fn build_hook() -> ExampleHook {
+    ExampleHook::new()
+}
+
+/// Build a Runtime with the default provider and ExampleHook.
+pub fn build_runtime() -> (Runtime<ProviderManager, ExampleHook>, Arc<ExampleHook>) {
     let hook = Arc::new(build_hook());
-    let runtime = Runtime::new(Arc::clone(&hook));
+    let provider = build_provider();
+    let runtime = Runtime::new(provider, Arc::clone(&hook));
     (runtime, hook)
 }
 
 /// Simple REPL loop: read lines from stdin, stream to agent.
-pub async fn repl<H: Hook + 'static>(runtime: &Runtime<H>, agent: &str) {
+pub async fn repl<M: wcore::model::Model + Send + Sync + Clone + 'static, H: Hook + 'static>(
+    runtime: &Runtime<M, H>,
+    agent: &str,
+) {
     use futures_util::StreamExt;
     use std::io::{BufRead, Write};
 
@@ -164,7 +164,11 @@ pub async fn repl<H: Hook + 'static>(runtime: &Runtime<H>, agent: &str) {
 }
 
 /// REPL loop that prints memory entries after each exchange.
-pub async fn repl_with_memory(runtime: &Runtime<ExampleHook>, hook: &ExampleHook, agent: &str) {
+pub async fn repl_with_memory(
+    runtime: &Runtime<ProviderManager, ExampleHook>,
+    hook: &ExampleHook,
+    agent: &str,
+) {
     use futures_util::StreamExt;
     use std::io::{BufRead, Write};
 

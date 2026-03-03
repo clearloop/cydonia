@@ -1,27 +1,25 @@
 //! Hook builder — constructs a fully-configured GatewayHook from DaemonConfig.
 
-use crate::MemoryBackend;
 use crate::config;
-use crate::feature::mcp::McpHandler;
-use crate::feature::skill::SkillHandler;
 use crate::gateway::GatewayHook;
 use anyhow::Result;
-use memory::Memory;
+use memory::{InMemory, Memory};
 use model::ProviderManager;
 use runtime::{Runtime, Tool};
 use std::path::Path;
 use std::sync::Arc;
 
-/// Build a fully-configured `Runtime<GatewayHook>` from config and directory.
+/// Build a fully-configured `Runtime` from config and directory.
 ///
-/// Constructs GatewayHook with all backends (model, memory, skills, MCP),
-/// then wraps it in a Runtime with loaded agents.
+/// Constructs GatewayHook with all backends (memory, skills, MCP),
+/// creates the model provider separately, then wraps both in a Runtime
+/// with loaded agents.
 pub async fn build_runtime(
     config: &crate::DaemonConfig,
     config_dir: &Path,
-) -> Result<Runtime<GatewayHook>> {
+) -> Result<Runtime<ProviderManager, GatewayHook>> {
     // Construct in-memory backend.
-    let memory = MemoryBackend::in_memory();
+    let memory = InMemory::new();
     tracing::info!("using in-memory backend");
 
     // Construct provider manager from config list.
@@ -33,19 +31,19 @@ pub async fn build_runtime(
 
     // Load skills.
     let skills_dir = config_dir.join(config::SKILLS_DIR);
-    let skills = SkillHandler::load(skills_dir)?;
+    let skills = skill::SkillHandler::load(skills_dir)?;
 
     // Load MCP servers.
-    let mcp = McpHandler::load(config_dir.to_path_buf(), &config.mcp_servers).await;
+    let mcp_handler = mcp::McpHandler::load(config_dir.to_path_buf(), &config.mcp_servers).await;
 
     // Build GatewayHook.
-    let mut hook = GatewayHook::new(manager, memory, skills, mcp);
+    let mut hook = GatewayHook::new(memory, skills, mcp_handler);
 
     // Register memory tools on the hook.
     register_memory_tools(&mut hook);
 
-    // Wrap in Runtime.
-    let runtime = Runtime::new(Arc::new(hook));
+    // Wrap in Runtime — model and hook are separate.
+    let runtime = Runtime::new(manager, Arc::new(hook));
 
     // Load agents from markdown files.
     let agents = crate::loader::load_agents_dir(&config_dir.join(config::AGENTS_DIR))?;

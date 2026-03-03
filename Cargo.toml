@@ -1,24 +1,28 @@
 [workspace]
 resolver = "3"
-members = ["app/*", "crates/*"]
+members = ["app/*", "crates/*", "protocol/*", "channel/*"]
 
 [workspace.package]
-version = "0.0.9"
+version = "0.0.1"
 edition = "2024"
 authors = ["clearloop <tianyi.gc@gmail.com>"]
 license = "GPL-3.0"
-repository = "https://github.com/clearloop/walrus"
+repository = "https://github.com/openwalrus/walrus"
 keywords = ["llm", "agent", "ai"]
 
 [workspace.dependencies]
-wcore = { path = "crates/core", package = "walrus-core", version = "0.0.9" }
-model = { path = "crates/model", package = "walrus-model", version = "0.0.9" }
-runtime = { path = "crates/runtime", package = "walrus-runtime", version = "0.0.9" }
-memory = { path = "crates/memory", package = "walrus-memory", version = "0.0.9" }
-channel = { path = "crates/channel", package = "walrus-channel", version = "0.0.9" }
-protocol = { path = "app/protocol", package = "walrus-protocol", version = "0.0.9" }
-daemon = { path = "app/daemon", package = "walrus-daemon", version = "0.0.9" }
-client = { path = "app/client", package = "walrus-client", version = "0.0.9" }
+wcore = { path = "crates/core", package = "walrus-core", version = "0.0.1" }
+model = { path = "crates/model", package = "walrus-model", version = "0.0.1" }
+runtime = { path = "crates/runtime", package = "walrus-runtime", version = "0.0.1" }
+memory = { path = "crates/memory", package = "walrus-memory", version = "0.0.1" }
+skill = { path = "crates/skill", package = "walrus-skill", version = "0.0.1" }
+mcp = { path = "crates/mcp", package = "walrus-mcp", version = "0.0.1" }
+channel = { path = "protocol/channel", package = "walrus-pchannel", version = "0.0.1" }
+protocol = { path = "app/protocol", package = "walrus-protocol", version = "0.0.1" }
+socket = { path = "protocol/socket", package = "walrus-socket", version = "0.0.1" }
+telegram = { path = "channel/telegram", package = "walrus-telegram", version = "0.0.1" }
+daemon = { path = "app/daemon", package = "walrus-daemon", version = "0.0.1" }
+cli = { path = "app/cli", package = "walrus-cli", version = "0.0.1" }
 
 # crates.io
 anyhow = "1"
@@ -56,3 +60,26 @@ rustyline = "15"
 crossterm = "0.29"
 dirs = "6"
 mistralrs = { version = "0.7", default-features = false }
+
+[profile.prod]
+inherits = "release"
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+debug = false
+debug-assertions = false
+overflow-checks = false
+strip = true
+
+[workspace.metadata.conta]
+packages = [
+    "core",
+    "model",
+    "memory",
+    "channel",
+    "runtime",
+    "protocol",
+    "daemon",
+    "cli",
+]
