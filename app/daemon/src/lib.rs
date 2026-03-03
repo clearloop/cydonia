@@ -9,10 +9,7 @@ pub mod loader;
 
 pub use channel::router::{ChannelRouter, RoutingRule};
 pub use config::DaemonConfig;
-pub use feature::{
-    cron::{CronJob, CronScheduler},
-    memory::MemoryBackend,
-};
+pub use feature::cron::{CronJob, CronScheduler};
 pub use gateway::{
     Gateway, GatewayHook,
     builder::build_runtime,

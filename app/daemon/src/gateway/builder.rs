@@ -1,12 +1,11 @@
 //! Hook builder — constructs a fully-configured GatewayHook from DaemonConfig.
 
-use crate::MemoryBackend;
 use crate::config;
 use crate::feature::mcp::McpHandler;
 use crate::feature::skill::SkillHandler;
 use crate::gateway::GatewayHook;
 use anyhow::Result;
-use memory::Memory;
+use memory::{InMemory, Memory};
 use model::ProviderManager;
 use runtime::{Runtime, Tool};
 use std::path::Path;
@@ -21,7 +20,7 @@ pub async fn build_runtime(
     config_dir: &Path,
 ) -> Result<Runtime<GatewayHook>> {
     // Construct in-memory backend.
-    let memory = MemoryBackend::in_memory();
+    let memory = InMemory::new();
     tracing::info!("using in-memory backend");
 
     // Construct provider manager from config list.

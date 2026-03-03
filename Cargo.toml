@@ -57,6 +57,17 @@ crossterm = "0.29"
 dirs = "6"
 mistralrs = { version = "0.7", default-features = false }
 
+[profile.prod]
+inherits = "release"
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+debug = false
+debug-assertions = false
+overflow-checks = false
+strip = true
+
 [workspace.metadata.conta]
 packages = [
     "core",

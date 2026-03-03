@@ -1,10 +1,10 @@
 //! Gateway — daemon core composing runtime, MCP, skills, and memory.
 
-use crate::MemoryBackend;
 use crate::feature::mcp::McpHandler;
 use crate::feature::skill::SkillHandler;
 use anyhow::Result;
 use compact_str::CompactString;
+use memory::InMemory;
 use model::ProviderManager;
 use runtime::{Handler, Hook, Runtime, Tool};
 use std::collections::BTreeMap;
@@ -39,7 +39,7 @@ impl Clone for Gateway {
 /// and tool registry. Provides all backend services to Runtime.
 pub struct GatewayHook {
     provider: ProviderManager,
-    memory: Arc<MemoryBackend>,
+    memory: Arc<InMemory>,
     skills: SkillHandler,
     mcp: McpHandler,
     tools: BTreeMap<CompactString, (Tool, Handler)>,
@@ -49,7 +49,7 @@ impl GatewayHook {
     /// Create a new GatewayHook with the given backends.
     pub fn new(
         provider: ProviderManager,
-        memory: MemoryBackend,
+        memory: InMemory,
         skills: SkillHandler,
         mcp: McpHandler,
     ) -> Self {
@@ -74,12 +74,12 @@ impl GatewayHook {
     }
 
     /// Access the memory backend.
-    pub fn memory(&self) -> &MemoryBackend {
+    pub fn memory(&self) -> &InMemory {
         &self.memory
     }
 
     /// Get a clone of the memory Arc.
-    pub fn memory_arc(&self) -> Arc<MemoryBackend> {
+    pub fn memory_arc(&self) -> Arc<InMemory> {
         Arc::clone(&self.memory)
     }
 
