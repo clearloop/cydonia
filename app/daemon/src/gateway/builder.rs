@@ -70,18 +70,18 @@ fn register_memory_tools(hook: &mut GatewayHook) {
 }
 
 /// Load cron entries from disk and build a CronHandler.
-fn build_cron_handler(cron_dir: &Path) -> walrus_cron::CronHandler {
+fn build_cron_handler(cron_dir: &Path) -> wcron::CronHandler {
     let entries = match crate::loader::load_cron_dir(cron_dir) {
         Ok(e) => e,
         Err(e) => {
             tracing::warn!("failed to load cron entries: {e}");
-            return walrus_cron::CronHandler::new(Vec::new());
+            return wcron::CronHandler::new(Vec::new());
         }
     };
 
     let mut jobs = Vec::new();
     for entry in entries {
-        match walrus_cron::CronJob::new(entry.name, &entry.schedule, entry.agent, entry.message) {
+        match wcron::CronJob::new(entry.name, &entry.schedule, entry.agent, entry.message) {
             Ok(job) => {
                 tracing::info!("registered cron job '{}' → agent '{}'", job.name, job.agent);
                 jobs.push(job);
@@ -92,5 +92,5 @@ fn build_cron_handler(cron_dir: &Path) -> walrus_cron::CronHandler {
         }
     }
 
-    walrus_cron::CronHandler::new(jobs)
+    wcron::CronHandler::new(jobs)
 }

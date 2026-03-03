@@ -9,8 +9,8 @@ use runtime::{Handler, Hook, Runtime, Tool};
 use skill::SkillHandler;
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use walrus_cron::CronHandler;
 use wcore::{AgentConfig, AgentEvent};
+use wcron::CronHandler;
 
 pub mod builder;
 pub mod serve;
@@ -132,7 +132,7 @@ impl Hook for GatewayHook {
             let mut results = Vec::with_capacity(calls.len());
             for (i, (method, params)) in calls.iter().enumerate() {
                 let output = if cron_tool_names.iter().any(|n| n == method) {
-                    walrus_cron::hook::dispatch_call(&cron_jobs, method, params).await
+                    wcron::hook::dispatch_call(&cron_jobs, method, params).await
                 } else if let Some(ref handler) = handlers[i] {
                     Ok(handler(params.clone()).await)
                 } else if let Some(ref bridge) = mcp {

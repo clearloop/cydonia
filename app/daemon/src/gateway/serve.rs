@@ -101,7 +101,7 @@ pub async fn serve_with_config(config: &DaemonConfig, config_dir: &Path) -> Resu
 
     // --- Cron scheduler ---
     let cron_jobs = runtime.hook().cron().jobs().await;
-    walrus_cron::spawn(cron_jobs, state.clone(), shutdown_tx.subscribe());
+    wcron::spawn(cron_jobs, state.clone(), shutdown_tx.subscribe());
 
     Ok(ServeHandle {
         socket_path: resolved_path,
