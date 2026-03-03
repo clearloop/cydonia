@@ -12,6 +12,8 @@ keywords.workspace = true
 [features]
 default = ["local"]
 local = ["dep:mistralrs", "dep:dirs", "dep:hf-hub"]
+metal = ["local", "mistralrs/metal"]
+cuda = ["local", "mistralrs/cuda"]
 
 [dependencies]
 wcore.workspace = true
@@ -28,9 +30,3 @@ tracing.workspace = true
 dirs = { workspace = true, optional = true }
 hf-hub = { workspace = true, optional = true }
 mistralrs = { workspace = true, optional = true }
-
-[target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.dependencies]
-mistralrs = { workspace = true, optional = true, features = ["metal"] }
-
-[target.'cfg(all(target_os = "linux", target_arch = "x86_64"))'.dependencies]
-mistralrs = { workspace = true, optional = true, features = ["cuda"] }

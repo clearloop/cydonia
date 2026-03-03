@@ -7,6 +7,12 @@ license.workspace = true
 repository.workspace = true
 keywords.workspace = true
 
+[features]
+default = ["local"]
+local = ["model/local"]
+metal = ["model/metal"]
+cuda = ["model/cuda"]
+
 [[bin]]
 name = "walrusd"
 path = "src/bin/main.rs"
