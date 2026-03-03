@@ -2,16 +2,86 @@
 
 #![allow(dead_code)]
 
+use anyhow::Result;
+use compact_str::CompactString;
 use model::ProviderManager;
-use walrus_runtime::{Hook, Memory, prelude::*};
+use std::collections::BTreeMap;
+use std::sync::Arc;
+use walrus_runtime::{AgentDispatcher, Handler, Hook, Memory, Tool, prelude::*};
 use wcore::AgentEvent;
 
-/// Example hook wiring ProviderManager as the model provider.
-pub struct ExampleHook;
+/// Example hook providing a model and optional tool dispatch.
+pub struct ExampleHook {
+    provider: ProviderManager,
+    memory: InMemory,
+    tools: BTreeMap<CompactString, (Tool, Handler)>,
+}
+
+impl ExampleHook {
+    /// Create a new ExampleHook with the given provider.
+    pub fn new(provider: ProviderManager) -> Self {
+        Self {
+            provider,
+            memory: InMemory::new(),
+            tools: BTreeMap::new(),
+        }
+    }
+
+    /// Register a tool with its handler.
+    pub fn register<F, Fut>(&mut self, tool: Tool, handler: F)
+    where
+        F: Fn(String) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = String> + Send + 'static,
+    {
+        let name = tool.name.clone();
+        let handler: Handler = Arc::new(move |args| Box::pin(handler(args)));
+        self.tools.insert(name, (tool, handler));
+    }
+
+    /// Access the memory backend.
+    pub fn memory(&self) -> &InMemory {
+        &self.memory
+    }
+}
 
 impl Hook for ExampleHook {
     type Model = ProviderManager;
-    type Memory = InMemory;
+
+    fn model(&self) -> &ProviderManager {
+        &self.provider
+    }
+
+    fn tools(&self, _agent: &str) -> Vec<Tool> {
+        self.tools.values().map(|(t, _)| t.clone()).collect()
+    }
+
+    fn dispatch(
+        &self,
+        _agent: &str,
+        calls: &[(&str, &str)],
+    ) -> impl std::future::Future<Output = Vec<Result<String>>> + Send {
+        let calls: Vec<(String, String)> = calls
+            .iter()
+            .map(|(m, p)| (m.to_string(), p.to_string()))
+            .collect();
+        let handlers: Vec<_> = calls
+            .iter()
+            .map(|(method, _)| self.tools.get(method.as_str()).map(|(_, h)| Arc::clone(h)))
+            .collect();
+
+        async move {
+            let mut results = Vec::with_capacity(calls.len());
+            for (i, (method, params)) in calls.iter().enumerate() {
+                let output = if let Some(ref handler) = handlers[i] {
+                    Ok(handler(params.clone()).await)
+                } else {
+                    Ok(format!("function {method} not available"))
+                };
+                results.push(output);
+            }
+            results
+        }
+    }
 }
 
 /// Initialize tracing with env-filter support.
@@ -29,22 +99,29 @@ pub fn load_api_key() -> String {
     std::env::var("DEEPSEEK_API_KEY").expect("DEEPSEEK_API_KEY must be set")
 }
 
-/// Build a default Runtime with DeepSeek provider and InMemory.
-pub fn build_runtime() -> Runtime<ExampleHook> {
+/// Build a default ExampleHook with DeepSeek provider and InMemory.
+pub fn build_hook() -> ExampleHook {
     let key = load_api_key();
     let config = model::ProviderConfig {
         model: "deepseek-chat".into(),
-        api_key: Some(key.into()),
+        api_key: Some(key),
         base_url: None,
         loader: None,
         quantization: None,
         chat_template: None,
     };
     let provider =
-        model::deepseek::DeepSeek::new(model::Client::new(), &config.api_key.as_ref().unwrap())
+        model::deepseek::DeepSeek::new(model::Client::new(), config.api_key.as_ref().unwrap())
             .expect("failed to create provider");
     let manager = ProviderManager::single(config, model::Provider::DeepSeek(provider));
-    Runtime::new(Request::default(), manager, InMemory::new())
+    ExampleHook::new(manager)
+}
+
+/// Build a Runtime with the default ExampleHook.
+pub fn build_runtime() -> (Runtime<ExampleHook>, Arc<ExampleHook>) {
+    let hook = Arc::new(build_hook());
+    let runtime = Runtime::new(Arc::clone(&hook));
+    (runtime, hook)
 }
 
 /// Simple REPL loop: read lines from stdin, stream to agent.
@@ -63,19 +140,31 @@ pub async fn repl<H: Hook + 'static>(runtime: &Runtime<H>, agent: &str) {
         if input.is_empty() || input == "exit" || input == "quit" {
             break;
         }
-        let mut stream = std::pin::pin!(runtime.stream_to(agent, Message::user(input)));
-        while let Some(event) = stream.next().await {
-            if let AgentEvent::TextDelta(text) = &event {
-                print!("{text}");
-                std::io::stdout().flush().ok();
+        let Some(mut agent_instance) = runtime.take_agent(agent).await else {
+            eprintln!("agent '{agent}' not registered");
+            break;
+        };
+        agent_instance.push_message(Message::user(input));
+        {
+            let dispatcher = AgentDispatcher {
+                hook: runtime.hook(),
+                agent,
+            };
+            let mut stream = std::pin::pin!(agent_instance.run_stream(&dispatcher));
+            while let Some(event) = stream.next().await {
+                if let AgentEvent::TextDelta(text) = &event {
+                    print!("{text}");
+                    std::io::stdout().flush().ok();
+                }
             }
         }
         println!();
+        runtime.put_agent(agent_instance).await;
     }
 }
 
 /// REPL loop that prints memory entries after each exchange.
-pub async fn repl_with_memory<H: Hook + 'static>(runtime: &Runtime<H>, agent: &str) {
+pub async fn repl_with_memory(runtime: &Runtime<ExampleHook>, hook: &ExampleHook, agent: &str) {
     use futures_util::StreamExt;
     use std::io::{BufRead, Write};
 
@@ -91,18 +180,30 @@ pub async fn repl_with_memory<H: Hook + 'static>(runtime: &Runtime<H>, agent: &s
             break;
         }
         {
-            let mut stream = std::pin::pin!(runtime.stream_to(agent, Message::user(input)));
-            while let Some(event) = stream.next().await {
-                if let AgentEvent::TextDelta(text) = &event {
-                    print!("{text}");
-                    std::io::stdout().flush().ok();
+            let Some(mut agent_instance) = runtime.take_agent(agent).await else {
+                eprintln!("agent '{agent}' not registered");
+                break;
+            };
+            agent_instance.push_message(Message::user(input));
+            {
+                let dispatcher = AgentDispatcher {
+                    hook: runtime.hook(),
+                    agent,
+                };
+                let mut stream = std::pin::pin!(agent_instance.run_stream(&dispatcher));
+                while let Some(event) = stream.next().await {
+                    if let AgentEvent::TextDelta(text) = &event {
+                        print!("{text}");
+                        std::io::stdout().flush().ok();
+                    }
                 }
             }
             println!();
+            runtime.put_agent(agent_instance).await;
         }
 
-        // Print current memory state (stream dropped, borrow released).
-        let entries = runtime.memory().entries();
+        // Print current memory state.
+        let entries = hook.memory().entries();
         if entries.is_empty() {
             println!("[Memory: empty]");
         } else {

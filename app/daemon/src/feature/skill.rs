@@ -1,13 +1,17 @@
-//! Skill registry — loads, indexes, and matches skills.
+//! Skill registry and hot-reload feature.
 //!
-//! Skills are directories containing a `SKILL.md` file with YAML frontmatter
-//! (agentskills.io format). The [`SkillRegistry`] loads them from a directory,
-//! builds tag/trigger indices, and returns ranked matches.
+//! Defines skill data types (`Skill`, `SkillTier`, `SkillRegistry`) and the
+//! daemon-side `SkillHandler` that owns the registry behind a `RwLock` for
+//! hot-reloading via the `ReloadSkills` protocol message.
 
+use crate::loader::load_skills_dir;
+use anyhow::Result;
 use compact_str::CompactString;
-use serde::Deserialize;
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::PathBuf;
+use tokio::sync::RwLock;
+
+// ── Skill data types ───────────────────────────────────────────────────
 
 /// Priority tier for skill resolution.
 ///
@@ -26,7 +30,7 @@ pub enum SkillTier {
 
 /// A named unit of agent behavior (agentskills.io format).
 ///
-/// Pure data struct — parsing and registry logic live alongside in this module.
+/// Pure data struct — parsing logic lives in the `loader` module.
 /// Fields mirror the agentskills.io specification. Runtime-only concepts
 /// like tier and priority live in the registry, not here.
 #[derive(Debug, Clone)]
@@ -55,24 +59,10 @@ struct IndexedSkill {
     priority: u8,
 }
 
-/// YAML frontmatter deserialization target.
-#[derive(Debug, Deserialize)]
-struct SkillFrontmatter {
-    name: String,
-    #[serde(default)]
-    description: String,
-    #[serde(default)]
-    license: Option<String>,
-    #[serde(default)]
-    compatibility: Option<String>,
-    #[serde(default)]
-    metadata: BTreeMap<String, String>,
-    #[serde(default, rename = "allowed-tools")]
-    allowed_tools: Option<String>,
-}
+// ── Skill registry ─────────────────────────────────────────────────────
 
 /// A registry of loaded skills with tag and trigger indices.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SkillRegistry {
     skills: Vec<IndexedSkill>,
     tag_index: BTreeMap<CompactString, Vec<usize>>,
@@ -93,38 +83,6 @@ impl SkillRegistry {
             tag_index: BTreeMap::new(),
             trigger_index: BTreeMap::new(),
         }
-    }
-
-    /// Load skills from a directory. Each subdirectory should contain a `SKILL.md`.
-    /// The given tier is assigned to all loaded skills.
-    pub fn load_dir(path: impl AsRef<Path>, tier: SkillTier) -> anyhow::Result<Self> {
-        let path = path.as_ref();
-        let mut registry = Self::new();
-
-        let entries = std::fs::read_dir(path).map_err(|e| {
-            anyhow::anyhow!("failed to read skill directory {}: {e}", path.display())
-        })?;
-
-        for entry in entries {
-            let entry = entry?;
-            let entry_path = entry.path();
-            if !entry_path.is_dir() {
-                continue;
-            }
-
-            let skill_file = entry_path.join("SKILL.md");
-            if !skill_file.exists() {
-                continue;
-            }
-
-            let content = std::fs::read_to_string(&skill_file)
-                .map_err(|e| anyhow::anyhow!("failed to read {}: {e}", skill_file.display()))?;
-
-            let skill = parse_skill_md(&content)?;
-            registry.add(skill, tier);
-        }
-
-        Ok(registry)
     }
 
     /// Add a skill to the registry with the given tier.
@@ -182,7 +140,6 @@ impl SkillRegistry {
         indices.sort_unstable();
         indices.dedup();
 
-        // Sort by tier desc, then priority desc.
         indices.sort_by(|&a, &b| {
             let sa = &self.skills[a];
             let sb = &self.skills[b];
@@ -207,7 +164,6 @@ impl SkillRegistry {
         indices.sort_unstable();
         indices.dedup();
 
-        // Sort by tier desc, then priority desc.
         indices.sort_by(|&a, &b| {
             let sa = &self.skills[a];
             let sb = &self.skills[b];
@@ -235,61 +191,53 @@ impl SkillRegistry {
     }
 }
 
-/// Parse a SKILL.md file (YAML frontmatter + Markdown body) into a Skill.
-pub fn parse_skill_md(content: &str) -> anyhow::Result<Skill> {
-    let (frontmatter, body) = split_yaml_frontmatter(content)?;
-    let fm: SkillFrontmatter = serde_yaml::from_str(frontmatter)?;
+// ── Skill handler (daemon hot-reload) ──────────────────────────────────
 
-    let allowed_tools = fm
-        .allowed_tools
-        .map(|s| {
-            s.split_whitespace()
-                .map(CompactString::from)
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-
-    let metadata = fm
-        .metadata
-        .into_iter()
-        .map(|(k, v)| (CompactString::from(k), v))
-        .collect();
-
-    Ok(Skill {
-        name: CompactString::from(fm.name),
-        description: fm.description,
-        license: fm.license.map(CompactString::from),
-        compatibility: fm.compatibility.map(CompactString::from),
-        metadata,
-        allowed_tools,
-        body: body.to_owned(),
-    })
+/// Daemon-side skill registry owner with hot-reload support.
+pub struct SkillHandler {
+    skills_dir: PathBuf,
+    registry: RwLock<SkillRegistry>,
 }
 
-/// Split YAML frontmatter from the body. Frontmatter is delimited by `---`.
-///
-/// Handles CRLF line endings and trailing whitespace on delimiter lines.
-pub fn split_yaml_frontmatter(content: &str) -> anyhow::Result<(&str, &str)> {
-    let content = content.trim_start();
-    if !content.starts_with("---") {
-        anyhow::bail!("missing YAML frontmatter delimiter (---)");
+impl SkillHandler {
+    /// Load skills from the given directory. Tolerates a missing directory
+    /// by creating an empty registry.
+    pub fn load(skills_dir: PathBuf) -> Result<Self> {
+        let registry = if skills_dir.exists() {
+            match load_skills_dir(&skills_dir, SkillTier::Workspace) {
+                Ok(r) => {
+                    tracing::info!("loaded {} skill(s)", r.len());
+                    r
+                }
+                Err(e) => {
+                    tracing::warn!("could not load skills from {}: {e}", skills_dir.display());
+                    SkillRegistry::new()
+                }
+            }
+        } else {
+            SkillRegistry::new()
+        };
+        Ok(Self {
+            skills_dir,
+            registry: RwLock::new(registry),
+        })
     }
 
-    // Skip opening delimiter and its trailing newline.
-    let after_first = content[3..].trim_start_matches(['\n', '\r']);
-
-    // Scan line-by-line for the closing `---` delimiter.
-    let mut pos = 0;
-    for line in after_first.lines() {
-        if line.trim() == "---" {
-            let frontmatter = &after_first[..pos].trim_end();
-            let body_start = pos + line.len();
-            // Skip the newline after `---` if present.
-            let body = after_first[body_start..].trim_start_matches(['\n', '\r']);
-            return Ok((frontmatter, body));
-        }
-        pos += line.len() + 1; // +1 for the newline consumed by lines()
+    /// Reload skills from disk, replacing the entire registry.
+    /// Returns the number of skills loaded.
+    pub async fn reload(&self) -> Result<usize> {
+        let registry = if self.skills_dir.exists() {
+            load_skills_dir(&self.skills_dir, SkillTier::Workspace)?
+        } else {
+            SkillRegistry::new()
+        };
+        let count = registry.len();
+        *self.registry.write().await = registry;
+        Ok(count)
     }
 
-    anyhow::bail!("missing closing YAML frontmatter delimiter (---)")
+    /// Access the skill registry lock for read.
+    pub fn registry(&self) -> &RwLock<SkillRegistry> {
+        &self.registry
+    }
 }

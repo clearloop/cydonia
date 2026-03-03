@@ -1,7 +1,7 @@
 //! Walrus agent library.
 //!
 //! - [`Agent`]: Stateful execution unit with step/run/run_stream.
-//! - [`AgentBuilder`]: Fluent construction requiring event sender.
+//! - [`AgentBuilder`]: Fluent construction with a model provider.
 //! - [`AgentConfig`]: Serializable agent parameters.
 //! - [`Dispatcher`]: Generic async trait for tool dispatch.
 //! - [`model`]: Unified LLM interface types and traits.

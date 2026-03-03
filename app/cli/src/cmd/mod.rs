@@ -9,6 +9,7 @@ use std::path::PathBuf;
 pub mod agent;
 pub mod chat;
 pub mod config;
+pub mod download;
 pub mod memory;
 pub mod send;
 
@@ -67,6 +68,10 @@ impl Cli {
                 let mut runner = connect(&socket_path).await?;
                 cmd.run(&mut runner).await
             }
+            Command::Download(cmd) => {
+                let mut runner = connect(&socket_path).await?;
+                cmd.run(&mut runner).await
+            }
         }
     }
 }
@@ -84,6 +89,8 @@ pub enum Command {
     /// Manage memory entries.
     #[command(subcommand)]
     Memory(memory::MemoryCommand),
+    /// Download a model from HuggingFace.
+    Download(download::Download),
     /// Manage configuration.
     #[command(subcommand)]
     Config(config::ConfigCommand),

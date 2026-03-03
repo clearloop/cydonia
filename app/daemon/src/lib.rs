@@ -3,8 +3,9 @@
 
 pub mod channel;
 pub mod config;
-mod feature;
+pub mod feature;
 pub mod gateway;
+pub mod loader;
 pub mod utils;
 
 pub use channel::router::{ChannelRouter, RoutingRule};

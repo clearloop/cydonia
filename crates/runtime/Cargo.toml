@@ -16,20 +16,13 @@ memory.workspace = true
 # crates-io dependencies
 anyhow.workspace = true
 compact_str.workspace = true
-async-stream.workspace = true
-futures-core.workspace = true
-futures-util.workspace = true
-reqwest.workspace = true
-rmcp.workspace = true
-schemars.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-serde_yaml.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
 model.workspace = true
+futures-util.workspace = true
 tracing-subscriber.workspace = true
 dotenvy.workspace = true
 chrono.workspace = true
+serde_json.workspace = true

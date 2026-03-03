@@ -42,8 +42,8 @@ impl CronJob {
         })
     }
 
-    /// Create a [`CronJob`] from a [`runtime::CronEntry`].
-    pub fn from_entry(entry: &runtime::CronEntry) -> anyhow::Result<Self> {
+    /// Create a [`CronJob`] from a [`CronEntry`](crate::loader::CronEntry).
+    pub fn from_entry(entry: &crate::loader::CronEntry) -> anyhow::Result<Self> {
         Self::new(
             entry.name.clone(),
             &entry.schedule,

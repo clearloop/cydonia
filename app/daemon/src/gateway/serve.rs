@@ -3,6 +3,7 @@
 use crate::{DaemonConfig, gateway::Gateway};
 use anyhow::Result;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tokio::sync::oneshot;
 
 /// Handle returned by [`serve`] — holds the socket path and shutdown trigger.
@@ -44,12 +45,15 @@ pub async fn serve(config_dir: &Path) -> Result<ServeHandle> {
 /// config separately (e.g. CLI with scaffold logic).
 pub async fn serve_with_config(config: &DaemonConfig, config_dir: &Path) -> Result<ServeHandle> {
     use crate::gateway::uds;
-    use std::sync::Arc;
 
     let runtime = crate::build_runtime(config, config_dir).await?;
 
+    let hf_endpoint = model::local::download::probe_endpoint().await;
+    tracing::info!("using hf endpoint: {hf_endpoint}");
+
     let state = Gateway {
         runtime: Arc::new(runtime),
+        hf_endpoint: Arc::from(hf_endpoint),
     };
 
     let resolved_path = crate::config::socket_path();
