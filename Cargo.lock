@@ -6617,6 +6617,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "walrus-channel"
+version = "0.0.2"
+dependencies = [
+ "anyhow",
+ "compact_str 0.8.1",
+ "futures-core",
+ "serde",
+ "tokio",
+ "walrus-core",
+]
+
+[[package]]
 name = "walrus-channel-router"
 version = "0.0.2"
 dependencies = [
@@ -6625,7 +6637,7 @@ dependencies = [
  "serde",
  "tokio",
  "tracing",
- "walrus-pchannel",
+ "walrus-channel",
  "walrus-telegram",
 ]
 
@@ -6682,13 +6694,13 @@ dependencies = [
  "toml 0.8.23",
  "tracing",
  "tracing-subscriber",
+ "walrus-channel",
  "walrus-channel-router",
  "walrus-core",
  "walrus-cron",
  "walrus-mcp",
  "walrus-memory",
  "walrus-model",
- "walrus-pchannel",
  "walrus-protocol",
  "walrus-runtime",
  "walrus-skill",
@@ -6738,18 +6750,6 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
- "walrus-core",
-]
-
-[[package]]
-name = "walrus-pchannel"
-version = "0.0.2"
-dependencies = [
- "anyhow",
- "compact_str 0.8.1",
- "futures-core",
- "serde",
- "tokio",
  "walrus-core",
 ]
 
@@ -6823,7 +6823,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
- "walrus-pchannel",
+ "walrus-channel",
 ]
 
 [[package]]
