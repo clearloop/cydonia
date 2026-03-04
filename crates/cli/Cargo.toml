@@ -15,16 +15,18 @@ name = "walrus"
 path = "src/bin/main.rs"
 
 [dependencies]
-protocol = { workspace = true }
-socket = { workspace = true }
-clap = { workspace = true }
-compact_str = { workspace = true }
-tokio = { workspace = true }
-anyhow = { workspace = true }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
-dirs = { workspace = true }
-toml = { workspace = true }
-rustyline = { workspace = true }
-futures-core = { workspace = true }
-futures-util = { workspace = true }
+protocol.workspace = true
+socket.workspace = true
+
+# crates.io
+anyhow.workspace = true
+clap.workspace = true
+compact_str.workspace = true
+dirs.workspace = true
+futures-core.workspace = true
+futures-util.workspace = true
+rustyline.workspace = true
+tokio.workspace = true
+toml.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

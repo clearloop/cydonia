@@ -11,9 +11,11 @@ repository.workspace = true
 keywords.workspace = true
 
 [dependencies]
-wcore = { workspace = true }
-anyhow = { workspace = true }
-compact_str = { workspace = true }
-futures-core = { workspace = true }
-serde = { workspace = true }
-tokio = { workspace = true }
+wcore.workspace = true
+
+# crates.io
+anyhow.workspace = true
+compact_str.workspace = true
+futures-core.workspace = true
+serde.workspace = true
+tokio.workspace = true

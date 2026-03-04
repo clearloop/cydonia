@@ -13,7 +13,7 @@ keywords.workspace = true
 [dependencies]
 wcore.workspace = true
 
-# crates-io dependencies
+# crates.io
 anyhow.workspace = true
 compact_str.workspace = true
 serde.workspace = true
