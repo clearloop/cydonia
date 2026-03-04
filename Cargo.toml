@@ -59,7 +59,7 @@ uuid = { version = "1", features = ["v4"] }
 cron = "0.15"
 toml = "0.8"
 clap = { version = "4", features = ["derive"] }
-rustyline = "15"
+rustyline = { version = "15", features = ["derive"] }
 crossterm = "0.29"
 dirs = "6"
 mistralrs = { version = "0.7", default-features = false }

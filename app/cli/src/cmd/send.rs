@@ -1,6 +1,6 @@
 //! One-shot message command.
 
-use crate::runner::Runner;
+use crate::repl::runner::Runner;
 use anyhow::Result;
 use clap::Args;
 
