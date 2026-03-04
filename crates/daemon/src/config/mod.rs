@@ -6,8 +6,7 @@ pub use ::model::{ProviderConfig, ProviderManager};
 use anyhow::Result;
 use compact_str::CompactString;
 pub use default::{
-    AGENTS_DIR, CRON_DIR, DATA_DIR, DEFAULT_AGENT_MD, SKILLS_DIR, global_config_dir,
-    scaffold_config_dir, socket_path,
+    AGENTS_DIR, CRON_DIR, DATA_DIR, SKILLS_DIR, global_config_dir, scaffold_config_dir, socket_path,
 };
 pub use router::ChannelConfig;
 use serde::{Deserialize, Serialize};

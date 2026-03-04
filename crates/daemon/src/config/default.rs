@@ -4,17 +4,6 @@ use crate::config::DaemonConfig;
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 
-/// Default agent markdown content for first-run scaffold.
-pub const DEFAULT_AGENT_MD: &str = r#"---
-name: assistant
-description: A helpful assistant
-tools:
-  - remember
----
-
-You are a helpful assistant. Be concise.
-"#;
-
 /// Agents subdirectory (contains *.md files).
 pub const AGENTS_DIR: &str = "agents";
 /// Skills subdirectory.
@@ -40,8 +29,7 @@ pub fn socket_path() -> PathBuf {
 
 /// Scaffold the full config directory structure on first run.
 ///
-/// Creates subdirectories (agents, skills, cron, data), writes a default
-/// walrus.toml and a default assistant agent markdown file.
+/// Creates subdirectories (agents, skills, cron, data) and writes a default walrus.toml.
 pub fn scaffold_config_dir(config_dir: &Path) -> Result<()> {
     std::fs::create_dir_all(config_dir.join(AGENTS_DIR))
         .context("failed to create agents directory")?;
@@ -57,10 +45,6 @@ pub fn scaffold_config_dir(config_dir: &Path) -> Result<()> {
         .context("failed to serialize default config")?;
     std::fs::write(&gateway_toml, contents)
         .with_context(|| format!("failed to write {}", gateway_toml.display()))?;
-
-    let agent_path = config_dir.join(AGENTS_DIR).join("assistant.md");
-    std::fs::write(&agent_path, DEFAULT_AGENT_MD)
-        .with_context(|| format!("failed to write {}", agent_path.display()))?;
 
     Ok(())
 }
