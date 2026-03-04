@@ -1386,12 +1386,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dotenvy"
-version = "0.15.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1aaf95b3e5c8f23aa320147307562d361db0ae0d51242340f558153b4eb2439b"
-
-[[package]]
 name = "dtoa"
 version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6778,18 +6772,13 @@ version = "0.0.2"
 dependencies = [
  "anyhow",
  "async-stream",
- "chrono",
  "compact_str 0.8.1",
- "dotenvy",
  "futures-core",
  "futures-util",
- "serde_json",
  "tokio",
  "tracing",
- "tracing-subscriber",
  "walrus-core",
  "walrus-memory",
- "walrus-model",
 ]
 
 [[package]]

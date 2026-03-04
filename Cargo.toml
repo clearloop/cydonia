@@ -41,7 +41,6 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
 smallvec = { version = "1", features = ["serde"] }
-tempfile = "3"
 tokio = { version = "1", features = [
     "rt-multi-thread",
     "macros",
@@ -55,12 +54,10 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 dotenvy = "0.15"
 chrono = "0.4"
-uuid = { version = "1", features = ["v4"] }
 cron = "0.15"
 toml = "0.8"
 clap = { version = "4", features = ["derive"] }
 rustyline = { version = "15", features = ["derive"] }
-crossterm = "0.29"
 dirs = "6"
 mistralrs = { version = "0.7", default-features = false }
 
