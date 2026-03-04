@@ -1,8 +1,8 @@
-//! Unified gateway event types for the central event loop.
+//! Unified daemon event types for the central event loop.
 //!
 //! All inbound stimuli (socket messages, channel messages, cron fires,
-//! tool side-effects) are represented as [`GatewayEvent`] variants sent
-//! through a single `mpsc::unbounded_channel`. See DD#7.
+//! tool side-effects) are represented as [`DaemonEvent`] variants sent
+//! through a single `mpsc::unbounded_channel`.
 
 use compact_str::CompactString;
 use protocol::message::client::ClientMessage;
@@ -11,8 +11,8 @@ use tokio::sync::{mpsc, oneshot};
 use wcron::CronJob;
 
 /// Inbound event from any source, processed by the central event loop.
-pub(crate) enum GatewayEvent {
-    /// A client message from a socket connection (DD#11).
+pub(crate) enum DaemonEvent {
+    /// A client message from a socket connection.
     Socket {
         /// The parsed client message.
         msg: ClientMessage,
@@ -39,14 +39,11 @@ pub(crate) enum GatewayEvent {
         /// Job name (for logging).
         job_name: CompactString,
     },
-    /// A tool dynamically created a cron job (DD#9).
+    /// A tool dynamically created a cron job.
     CronJobCreated(Box<CronJob>),
     /// Graceful shutdown request.
     Shutdown,
 }
 
-/// Shorthand for the event sender half of the gateway event channel.
-pub(crate) type EventSender = mpsc::UnboundedSender<GatewayEvent>;
-
-/// Shorthand for the event receiver half of the gateway event channel.
-pub(crate) type EventReceiver = mpsc::UnboundedReceiver<GatewayEvent>;
+/// Shorthand for the event sender half of the daemon event channel.
+pub(crate) type DaemonEventSender = mpsc::UnboundedSender<DaemonEvent>;

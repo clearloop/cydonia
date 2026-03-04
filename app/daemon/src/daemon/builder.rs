@@ -1,9 +1,9 @@
-//! Hook builder — constructs a fully-configured GatewayHook from DaemonConfig.
+//! Hook builder — constructs a fully-configured DaemonHook from DaemonConfig.
 
 use crate::{
     config,
-    gateway::event::{EventSender, GatewayEvent},
-    hook::GatewayHook,
+    daemon::event::{DaemonEvent, DaemonEventSender},
+    hook::DaemonHook,
 };
 use anyhow::Result;
 use model::ProviderManager;
@@ -13,14 +13,14 @@ use std::sync::Arc;
 
 /// Build a fully-configured `Runtime` from config and directory.
 ///
-/// Constructs GatewayHook with all backends (memory, skills, MCP, cron),
+/// Constructs DaemonHook with all backends (memory, skills, MCP, cron),
 /// creates the model provider separately, then wraps both in a Runtime.
 /// Registers all tools (memory, cron, MCP) on Runtime's tool registry.
 pub(crate) async fn build_runtime(
     config: &crate::DaemonConfig,
     config_dir: &Path,
-    event_tx: EventSender,
-) -> Result<Runtime<ProviderManager, GatewayHook>> {
+    event_tx: DaemonEventSender,
+) -> Result<Runtime<ProviderManager, DaemonHook>> {
     // Construct in-memory backend.
     let memory = memory::InMemory::new();
     tracing::info!("using in-memory backend");
@@ -43,8 +43,8 @@ pub(crate) async fn build_runtime(
     let cron_dir = config_dir.join(config::CRON_DIR);
     let cron_handler = build_cron_handler(&cron_dir);
 
-    // Build GatewayHook (no tools — those go on Runtime).
-    let hook = GatewayHook::new(memory, skills, mcp_handler, cron_handler);
+    // Build DaemonHook (no tools — those go on Runtime).
+    let hook = DaemonHook::new(memory, skills, mcp_handler, cron_handler);
     let mem = hook.memory_arc();
     let cron_jobs = hook.cron().jobs_arc();
 
@@ -61,10 +61,10 @@ pub(crate) async fn build_runtime(
         runtime.register_tool(mt.tool, mt.handler).await;
     }
 
-    // Cron tool (create_cron) — with event notification (DD#9).
+    // Cron tool (create_cron) — with event notification.
     let (cron_tool, cron_handler_fn) =
         wcron::hook::create_cron_handler_with_notify(cron_jobs, move |job| {
-            let _ = event_tx.send(GatewayEvent::CronJobCreated(Box::new(job)));
+            let _ = event_tx.send(DaemonEvent::CronJobCreated(Box::new(job)));
         });
     runtime.register_tool(cron_tool, cron_handler_fn).await;
 

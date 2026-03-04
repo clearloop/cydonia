@@ -1,6 +1,6 @@
 //! Stateful Hook implementation for the daemon.
 //!
-//! [`GatewayHook`] handles prompt enrichment (via skills) and event
+//! [`DaemonHook`] handles prompt enrichment (via skills) and event
 //! observation (logging). Tool registration and dispatch are handled
 //! by Runtime's tool registry.
 
@@ -16,15 +16,15 @@ use wcron::CronHandler;
 ///
 /// Handles prompt enrichment (via skills) and event observation (logging).
 /// Tool registration and dispatch are handled by Runtime's tool registry.
-pub struct GatewayHook {
+pub struct DaemonHook {
     memory: Arc<InMemory>,
-    pub(crate) skills: SkillHandler,
+    skills: SkillHandler,
     mcp: McpHandler,
     cron: CronHandler,
 }
 
-impl GatewayHook {
-    /// Create a new GatewayHook with the given backends.
+impl DaemonHook {
+    /// Create a new DaemonHook with the given backends.
     pub fn new(memory: InMemory, skills: SkillHandler, mcp: McpHandler, cron: CronHandler) -> Self {
         Self {
             memory: Arc::new(memory),
@@ -60,7 +60,7 @@ impl GatewayHook {
     }
 }
 
-impl Hook for GatewayHook {
+impl Hook for DaemonHook {
     fn on_build_agent(&self, config: AgentConfig) -> AgentConfig {
         // Skills enrich the system prompt based on agent tags.
         self.skills.on_build_agent(config)

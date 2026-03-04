@@ -1,8 +1,8 @@
-//! Server trait implementation for the Gateway.
+//! Server trait implementation for the Daemon.
 
-use crate::gateway::Gateway;
+use crate::daemon::Daemon;
 use anyhow::{Result, bail};
-use futures_util::StreamExt;
+use futures_util::{StreamExt, pin_mut};
 use memory::Memory;
 use protocol::api::Server;
 use protocol::message::{
@@ -14,7 +14,7 @@ use protocol::message::{
 use tokio::sync::mpsc;
 use wcore::AgentEvent;
 
-impl Server for Gateway {
+impl Server for Daemon {
     async fn send(&self, req: SendRequest) -> Result<SendResponse> {
         let response = self.runtime.send_to(&req.agent, &req.content).await?;
         Ok(SendResponse {
@@ -34,7 +34,7 @@ impl Server for Gateway {
             yield StreamEvent::Start { agent: agent.clone() };
 
             let stream = runtime.stream_to(&agent, &content);
-            futures_util::pin_mut!(stream);
+            pin_mut!(stream);
             while let Some(event) = stream.next().await {
                 match event {
                     AgentEvent::TextDelta(text) => {
