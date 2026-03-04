@@ -6,6 +6,7 @@
 use reqwest::{Client, header::HeaderMap};
 
 mod provider;
+mod request;
 
 /// OpenAI-compatible endpoint URLs.
 pub mod endpoint {

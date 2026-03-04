@@ -10,7 +10,6 @@ pub mod config;
 pub mod http;
 pub mod manager;
 mod provider;
-mod request;
 
 pub mod claude;
 #[cfg(feature = "local")]

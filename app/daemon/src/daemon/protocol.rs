@@ -98,15 +98,13 @@ impl Server for Daemon {
         &self,
         req: DownloadRequest,
     ) -> impl futures_core::Stream<Item = Result<DownloadEvent>> + Send {
-        let hf_endpoint = self.runtime.model.hf_endpoint();
         async_stream::try_stream! {
             yield DownloadEvent::Start { model: req.model.clone() };
 
             let (dtx, mut drx) = mpsc::unbounded_channel();
             let model_str = req.model.to_string();
-            let endpoint = hf_endpoint;
             let download_handle = tokio::spawn(async move {
-                model::local::download::download_model(&model_str, &endpoint, dtx).await
+                model::local::download::download_model(&model_str, dtx).await
             });
 
             while let Some(event) = drx.recv().await {

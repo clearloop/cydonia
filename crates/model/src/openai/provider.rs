@@ -11,7 +11,7 @@ use wcore::model::{Model, Response, StreamChunk};
 
 impl Model for OpenAI {
     async fn send(&self, request: &wcore::model::Request) -> Result<Response> {
-        let body = crate::request::Request::from(request.clone());
+        let body = super::request::Request::from(request.clone());
         tracing::trace!("request: {}", serde_json::to_string(&body)?);
         let response = self
             .client
@@ -35,7 +35,7 @@ impl Model for OpenAI {
         request: wcore::model::Request,
     ) -> impl Stream<Item = Result<StreamChunk>> + Send {
         let usage = request.usage;
-        let body = crate::request::Request::from(request).stream(usage);
+        let body = super::request::Request::from(request).stream(usage);
         if let Ok(body) = serde_json::to_string(&body) {
             tracing::trace!("request: {}", body);
         }
