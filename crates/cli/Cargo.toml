@@ -1,6 +1,6 @@
 [package]
 name = "openwalrus"
-description = "Command-line interface for Walrus"
+description = "Command-line interface for OpenWalrus"
 documentation = "https://docs.rs/walrus-cli"
 readme = "README.md"
 version.workspace = true
@@ -9,6 +9,10 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 keywords.workspace = true
+
+[[bin]]
+name = "openwalrus"
+path = "src/bin/main.rs"
 
 [features]
 default = ["daemon"]
