@@ -16,10 +16,6 @@ local = ["model/local"]
 metal = ["model/metal"]
 cuda = ["model/cuda"]
 
-[[bin]]
-name = "walrusd"
-path = "src/bin/main.rs"
-
 [dependencies]
 channel.workspace = true
 mcp.workspace = true

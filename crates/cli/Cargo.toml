@@ -10,11 +10,15 @@ license.workspace = true
 repository.workspace = true
 keywords.workspace = true
 
-[[bin]]
-name = "walrus"
-path = "src/bin/main.rs"
+[features]
+default = ["daemon"]
+daemon = ["dep:daemon"]
+local = ["daemon/local"]
+metal = ["daemon/metal"]
+cuda = ["daemon/cuda"]
 
 [dependencies]
+daemon = { workspace = true, optional = true }
 protocol.workspace = true
 socket.workspace = true
 

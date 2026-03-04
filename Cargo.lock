@@ -3828,6 +3828,7 @@ dependencies = [
  "toml 0.8.23",
  "tracing",
  "tracing-subscriber",
+ "walrus-daemon",
  "walrus-protocol",
  "walrus-socket",
 ]

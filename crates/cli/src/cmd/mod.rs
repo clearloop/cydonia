@@ -7,6 +7,8 @@ use compact_str::CompactString;
 use std::path::PathBuf;
 
 pub mod attach;
+#[cfg(feature = "daemon")]
+pub mod daemon;
 pub mod send;
 
 /// Walrus CLI client — connects to walrusd via Unix domain socket.
@@ -55,6 +57,8 @@ impl Cli {
                 let mut runner = connect(&socket_path).await?;
                 cmd.run(&mut runner, &agent).await
             }
+            #[cfg(feature = "daemon")]
+            Command::Daemon(cmd) => cmd.run().await,
         }
     }
 }
@@ -66,6 +70,9 @@ pub enum Command {
     Attach(attach::Attach),
     /// Send a one-shot message to an agent.
     Send(send::Send),
+    /// Start the walrus daemon in the foreground.
+    #[cfg(feature = "daemon")]
+    Daemon(daemon::Daemon),
 }
 
 /// Connect to walrusd, returning a helpful error if not running.
