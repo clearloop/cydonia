@@ -18,14 +18,14 @@ async fn main() {
     let hook = common::build_hook();
 
     // Pre-seed memory with user context.
-    hook.memory().set("user_name", "Alex");
-    hook.memory()
+    hook.memory.set("user_name", "Alex");
+    hook.memory
         .set("preference", "Prefers concise answers with code examples.");
-    hook.memory()
+    hook.memory
         .set("learning", "Currently learning Rust, focus on async.");
 
     let provider = common::build_provider();
-    let mut runtime = Runtime::new(provider, hook);
+    let mut runtime = Runtime::new(provider, hook).await;
 
     runtime.add_agent(AgentConfig::new("assistant").system_prompt(
         "You are a helpful assistant. Use any stored memory about the user \
@@ -38,7 +38,7 @@ async fn main() {
     println!("---");
 
     // Show initial memory state.
-    let entries = runtime.hook().memory().entries();
+    let entries = runtime.hook.memory.entries();
     println!("[Memory: {} entries]", entries.len());
     for (key, value) in &entries {
         println!("  {key} = {value}");

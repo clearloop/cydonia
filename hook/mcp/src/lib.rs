@@ -13,13 +13,13 @@ use rmcp::{
     service::{RoleClient, RunningService},
     transport::TokioChildProcess,
 };
-use runtime::Handler;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
+use wcore::Handler;
 use wcore::model::Tool;
 
 // ── Config ─────────────────────────────────────────────────────────────
@@ -387,5 +387,31 @@ impl McpHandler {
                 (tool, handler)
             })
             .collect()
+    }
+}
+
+impl wcore::Hook for McpHandler {
+    fn on_register_tools(
+        &self,
+        registry: &mut wcore::ToolRegistry,
+    ) -> impl std::future::Future<Output = ()> + Send {
+        // Capture the bridge Arc synchronously — bridge is initialized at construction
+        // so try_bridge() succeeds unless an in-progress reload holds the write lock.
+        let bridge = self.try_bridge();
+        async move {
+            let Some(bridge) = bridge else { return };
+            let tools = bridge.tools().await;
+            for tool in tools {
+                let b = Arc::clone(&bridge);
+                let name = tool.name.clone();
+                let handler: Handler = Arc::new(move |args: String| {
+                    let b = Arc::clone(&b);
+                    let name = name.clone();
+                    Box::pin(async move { b.call(&name, &args).await })
+                        as Pin<Box<dyn std::future::Future<Output = String> + Send>>
+                });
+                registry.insert(tool, handler);
+            }
+        }
     }
 }

@@ -172,7 +172,7 @@ async fn setup_cron(
     shutdown_tx: &broadcast::Sender<()>,
     event_tx: &DaemonEventSender,
 ) -> mpsc::UnboundedSender<wcron::CronJob> {
-    let cron_jobs = runtime.hook().cron().jobs().await;
+    let cron_jobs = runtime.hook.cron.jobs().await;
     let cron_tx = event_tx.clone();
     wcron::spawn_with_callback(
         cron_jobs,

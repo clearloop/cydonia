@@ -1,67 +1,59 @@
 //! Walrus runtime: agent registry, tool registry, and hook orchestration.
 //!
 //! The [`Runtime`] holds agents in a plain `BTreeMap` with per-agent
-//! `Mutex` for concurrent execution. Tools are stored in a shared registry
-//! (`Arc<RwLock>`) supporting post-startup registration (e.g. MCP hot-reload).
+//! `Mutex` for concurrent execution. Tools are stored in a shared
+//! [`ToolRegistry`] behind `Arc<RwLock>` supporting post-startup
+//! registration (e.g. MCP hot-reload).
 
-pub use hook::Hook;
 pub use memory::{InMemory, Memory, NoEmbedder};
 pub use wcore::AgentConfig;
 pub use wcore::model::{Message, Request, Response, Role, StreamChunk, Tool};
+pub use wcore::{Handler, Hook, ToolRegistry};
 
 use anyhow::Result;
 use async_stream::stream;
 use compact_str::CompactString;
 use futures_core::Stream;
 use futures_util::StreamExt;
-use std::{collections::BTreeMap, future::Future, pin::Pin, sync::Arc};
+use std::{collections::BTreeMap, sync::Arc};
 use tokio::sync::{Mutex, RwLock, mpsc};
-use wcore::{AgentEvent, ClosureDispatcher, DispatchFn};
-
-pub mod hook;
+use wcore::AgentEvent;
 
 /// Re-exports of the most commonly used types.
 pub mod prelude {
     pub use crate::{
-        AgentConfig, Hook, InMemory, Message, Request, Response, Role, Runtime, StreamChunk, Tool,
+        AgentConfig, Handler, Hook, InMemory, Message, Request, Response, Role, Runtime,
+        StreamChunk, Tool, ToolRegistry,
     };
 }
-
-/// A type-erased async tool handler.
-pub type Handler =
-    Arc<dyn Fn(String) -> Pin<Box<dyn Future<Output = String> + Send>> + Send + Sync>;
 
 /// The walrus runtime — agent registry, tool registry, and hook orchestration.
 ///
 /// Each agent is wrapped in a per-agent `Mutex` for concurrent execution.
-/// Tools are stored behind `Arc<RwLock>` — registered before or after
-/// wrapping in `Arc` (for MCP hot-reload).
+/// Tools are stored in a shared `ToolRegistry` behind `Arc<RwLock>`.
+/// `Runtime::new()` is async — it calls `hook.on_register_tools()` during
+/// construction so hooks self-register their tools.
 pub struct Runtime<M: wcore::model::Model, H: Hook> {
-    model: M,
-    hook: H,
+    pub model: M,
+    pub hook: H,
     agents: BTreeMap<CompactString, Arc<Mutex<wcore::Agent<M>>>>,
-    tools: Arc<RwLock<BTreeMap<CompactString, (Tool, Handler)>>>,
+    tools: Arc<RwLock<ToolRegistry>>,
 }
 
 impl<M: wcore::model::Model + Send + Sync + Clone + 'static, H: Hook + 'static> Runtime<M, H> {
     /// Create a new runtime with the given model and hook backend.
-    pub fn new(model: M, hook: H) -> Self {
+    ///
+    /// Calls `hook.on_register_tools()` to populate the tool registry before
+    /// returning. All hook crates self-register their tools here.
+    pub async fn new(model: M, hook: H) -> Self {
+        let mut registry = ToolRegistry::new();
+        hook.on_register_tools(&mut registry).await;
         Self {
             model,
             hook,
             agents: BTreeMap::new(),
-            tools: Arc::new(RwLock::new(BTreeMap::new())),
+            tools: Arc::new(RwLock::new(registry)),
         }
-    }
-
-    /// Access the model backend.
-    pub fn model(&self) -> &M {
-        &self.model
-    }
-
-    /// Access the hook backend.
-    pub fn hook(&self) -> &H {
-        &self.hook
     }
 
     // --- Tool registry ---
@@ -69,20 +61,20 @@ impl<M: wcore::model::Model + Send + Sync + Clone + 'static, H: Hook + 'static> 
     /// Register a tool with its handler.
     ///
     /// Works both before and after wrapping in `Arc` (the registry is
-    /// behind `RwLock`).
+    /// behind `RwLock`). Used for hot-reload (MCP add/remove/reload).
     pub async fn register_tool(&self, tool: Tool, handler: Handler) {
-        let name = tool.name.clone();
-        self.tools.write().await.insert(name, (tool, handler));
+        self.tools.write().await.insert(tool, handler);
     }
 
     /// Remove a tool by name. Returns `true` if it existed.
     pub async fn unregister_tool(&self, name: &str) -> bool {
-        self.tools.write().await.remove(name).is_some()
+        self.tools.write().await.remove(name)
     }
 
-    /// Atomically replace a set of tools. Removes `old_names` and inserts
-    /// `new_tools` under a single write lock — no window where agents see
-    /// partial state.
+    /// Atomically replace a set of tools.
+    ///
+    /// Removes `old_names` and inserts `new_tools` under a single write lock
+    /// — no window where agents see partial state.
     pub async fn replace_tools(
         &self,
         old_names: &[CompactString],
@@ -93,54 +85,25 @@ impl<M: wcore::model::Model + Send + Sync + Clone + 'static, H: Hook + 'static> 
             registry.remove(name);
         }
         for (tool, handler) in new_tools {
-            let name = tool.name.clone();
-            registry.insert(name, (tool, handler));
+            registry.insert(tool, handler);
         }
     }
 
-    /// Build a [`ClosureDispatcher`] for the named agent.
+    /// Build a filtered [`ToolRegistry`] snapshot for the named agent.
     ///
-    /// Reads the agent's `config.tools` list and filters the registry.
+    /// Reads the agent's `config.tools` list and filters the shared registry.
     /// If the list is empty, all registered tools are included.
-    async fn dispatcher_for(&self, agent: &str) -> ClosureDispatcher {
+    async fn dispatcher_for(&self, agent: &str) -> ToolRegistry {
         let registry = self.tools.read().await;
 
-        // Get the agent's tool filter list.
-        let filter: Option<Vec<CompactString>> = self
+        let filter: Vec<CompactString> = self
             .agents
             .get(agent)
             .and_then(|m| m.try_lock().ok())
             .map(|g| g.config.tools.to_vec())
-            .filter(|t| !t.is_empty());
+            .unwrap_or_default();
 
-        let tools: Vec<Tool> = match &filter {
-            Some(names) => registry
-                .values()
-                .filter(|(t, _)| names.iter().any(|n| n == &*t.name))
-                .map(|(t, _)| t.clone())
-                .collect(),
-            None => registry.values().map(|(t, _)| t.clone()).collect(),
-        };
-
-        let registry_arc = Arc::clone(&self.tools);
-        let dispatch_fn: DispatchFn = Arc::new(move |calls: Vec<(String, String)>| {
-            let registry = Arc::clone(&registry_arc);
-            Box::pin(async move {
-                let reg = registry.read().await;
-                let mut results = Vec::with_capacity(calls.len());
-                for (method, params) in &calls {
-                    let output = if let Some((_, handler)) = reg.get(method.as_str()) {
-                        Ok(handler(params.clone()).await)
-                    } else {
-                        Ok(format!("function {method} not available"))
-                    };
-                    results.push(output);
-                }
-                results
-            })
-        });
-
-        ClosureDispatcher::new(tools, dispatch_fn)
+        registry.filtered_snapshot(&filter)
     }
 
     // --- Agent registry ---
@@ -189,9 +152,9 @@ impl<M: wcore::model::Model + Send + Sync + Clone + 'static, H: Hook + 'static> 
 
     /// Send a message to an agent and run to completion.
     ///
-    /// Builds a dispatcher from the tool registry, locks the per-agent mutex,
-    /// pushes the user message, delegates to `agent.run()`, and forwards all
-    /// events to `hook.on_event()`.
+    /// Builds a dispatcher snapshot from the tool registry, locks the per-agent
+    /// mutex, pushes the user message, delegates to `agent.run()`, and forwards
+    /// all events to `hook.on_event()`.
     pub async fn send_to(&self, agent: &str, content: &str) -> Result<wcore::AgentResponse> {
         let mutex = self
             .agents
@@ -205,7 +168,6 @@ impl<M: wcore::model::Model + Send + Sync + Clone + 'static, H: Hook + 'static> 
         let (tx, mut rx) = mpsc::unbounded_channel();
         let response = guard.run(&dispatcher, tx).await;
 
-        // Drain buffered events and forward to hook.
         while let Ok(event) = rx.try_recv() {
             self.hook.on_event(agent, &event);
         }
@@ -215,8 +177,8 @@ impl<M: wcore::model::Model + Send + Sync + Clone + 'static, H: Hook + 'static> 
 
     /// Send a message to an agent and stream response events.
     ///
-    /// Builds a dispatcher from the tool registry, locks the per-agent mutex,
-    /// delegates to `agent.run_stream()`, and forwards each event to
+    /// Builds a dispatcher snapshot from the tool registry, locks the per-agent
+    /// mutex, delegates to `agent.run_stream()`, and forwards each event to
     /// `hook.on_event()`.
     pub fn stream_to<'a>(
         &'a self,

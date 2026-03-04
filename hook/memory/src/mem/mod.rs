@@ -1,12 +1,14 @@
 //! In-memory implementation of the Memory trait.
 
 use crate::Memory;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
-/// In-memory store backed by `Mutex<Vec<(String, String)>>`.
-#[derive(Default, Debug)]
+/// In-memory store backed by `Arc<Mutex<Vec<(String, String)>>>`.
+///
+/// `Clone` is cheap — clones share the same underlying storage.
+#[derive(Default, Debug, Clone)]
 pub struct InMemory {
-    entries: Mutex<Vec<(String, String)>>,
+    entries: Arc<Mutex<Vec<(String, String)>>>,
 }
 
 impl InMemory {
@@ -18,7 +20,7 @@ impl InMemory {
     /// Create a store pre-populated with entries.
     pub fn with_entries(entries: impl IntoIterator<Item = (String, String)>) -> Self {
         Self {
-            entries: Mutex::new(entries.into_iter().collect()),
+            entries: Arc::new(Mutex::new(entries.into_iter().collect())),
         }
     }
 }

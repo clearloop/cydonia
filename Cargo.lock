@@ -6657,7 +6657,6 @@ dependencies = [
  "tracing",
  "walrus-core",
  "walrus-protocol",
- "walrus-runtime",
 ]
 
 [[package]]
@@ -6702,7 +6701,6 @@ dependencies = [
  "tokio",
  "tracing",
  "walrus-core",
- "walrus-runtime",
 ]
 
 [[package]]
@@ -6793,7 +6791,6 @@ dependencies = [
  "tokio",
  "tracing",
  "walrus-core",
- "walrus-runtime",
 ]
 
 [[package]]

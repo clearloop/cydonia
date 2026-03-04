@@ -54,15 +54,23 @@ impl CronJob {
 }
 
 /// Cron handler — owns the live job list for dynamic scheduling.
+///
+/// The `on_create` callback is called whenever a new cron job is created
+/// via the `create_cron` tool. Callers that don't need side-effects pass `|_| {}`.
 pub struct CronHandler {
     jobs: Arc<RwLock<Vec<CronJob>>>,
+    on_create: Arc<dyn Fn(CronJob) + Send + Sync>,
 }
 
 impl CronHandler {
-    /// Create a handler from an initial set of jobs.
-    pub fn new(jobs: Vec<CronJob>) -> Self {
+    /// Create a handler from an initial set of jobs and a creation callback.
+    ///
+    /// `on_create` is called after each dynamic `create_cron` tool invocation.
+    /// Pass `|_| {}` if no side-effect is needed.
+    pub fn new<F: Fn(CronJob) + Send + Sync + 'static>(jobs: Vec<CronJob>, on_create: F) -> Self {
         Self {
             jobs: Arc::new(RwLock::new(jobs)),
+            on_create: Arc::new(on_create),
         }
     }
 
@@ -74,6 +82,20 @@ impl CronHandler {
     /// Snapshot the current job list.
     pub async fn jobs(&self) -> Vec<CronJob> {
         self.jobs.read().await.clone()
+    }
+}
+
+impl wcore::Hook for CronHandler {
+    fn on_register_tools(
+        &self,
+        registry: &mut wcore::ToolRegistry,
+    ) -> impl std::future::Future<Output = ()> + Send {
+        let (tool, handler) = hook::create_cron_handler_with_notify(Arc::clone(&self.jobs), {
+            let cb = Arc::clone(&self.on_create);
+            move |job| cb(job)
+        });
+        registry.insert(tool, handler);
+        async {}
     }
 }
 
