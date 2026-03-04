@@ -98,7 +98,7 @@ impl Server for Daemon {
         &self,
         req: DownloadRequest,
     ) -> impl futures_core::Stream<Item = Result<DownloadEvent>> + Send {
-        let hf_endpoint = self.hf_endpoint.clone();
+        let hf_endpoint = self.runtime.model().hf_endpoint();
         async_stream::try_stream! {
             yield DownloadEvent::Start { model: req.model.clone() };
 

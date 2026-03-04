@@ -54,6 +54,11 @@ impl<M: wcore::model::Model + Send + Sync + Clone + 'static, H: Hook + 'static> 
         }
     }
 
+    /// Access the model backend.
+    pub fn model(&self) -> &M {
+        &self.model
+    }
+
     /// Access the hook backend.
     pub fn hook(&self) -> &H {
         &self.hook

@@ -27,6 +27,8 @@ struct Inner {
     active: CompactString,
     /// Shared HTTP client for constructing new providers.
     client: reqwest::Client,
+    /// HuggingFace endpoint for local model downloads (fastest of official/mirror).
+    hf_endpoint: String,
 }
 
 /// Info about a single provider entry returned by `list()`.
@@ -59,12 +61,15 @@ impl ProviderManager {
         }
 
         let active = configs[0].model.clone();
+        let hf_endpoint = crate::local::download::probe_endpoint().await;
+        tracing::info!("using hf endpoint: {hf_endpoint}");
 
         Ok(Self {
             inner: Arc::new(RwLock::new(Inner {
                 providers,
                 active,
                 client,
+                hf_endpoint,
             })),
         })
     }
@@ -79,6 +84,7 @@ impl ProviderManager {
                 providers,
                 active: model,
                 client: reqwest::Client::new(),
+                hf_endpoint: "https://huggingface.co".to_owned(),
             })),
         }
     }
@@ -139,6 +145,12 @@ impl ProviderManager {
             bail!("provider '{}' not found", model);
         }
         Ok(())
+    }
+
+    /// Get the HuggingFace endpoint URL for local model downloads.
+    pub fn hf_endpoint(&self) -> String {
+        let inner = self.inner.read().expect("provider lock poisoned");
+        inner.hf_endpoint.clone()
     }
 
     /// List all providers with their active status.

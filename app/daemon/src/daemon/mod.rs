@@ -19,25 +19,13 @@ use tokio::sync::{broadcast, mpsc, oneshot};
 
 pub(crate) mod builder;
 pub(crate) mod event;
-mod event_loop;
-mod server;
+mod protocol;
 
-/// Shared daemon state — holds the runtime and config needed by all
-/// request handlers. Cheap to clone (all fields are `Arc`).
+/// Shared daemon state — holds the runtime. Cheap to clone (`Arc`-backed).
+#[derive(Clone)]
 pub struct Daemon {
     /// The walrus runtime.
     pub runtime: Arc<Runtime<ProviderManager, DaemonHook>>,
-    /// HuggingFace endpoint selected at startup (fastest of official/mirror).
-    pub hf_endpoint: Arc<str>,
-}
-
-impl Clone for Daemon {
-    fn clone(&self) -> Self {
-        Self {
-            runtime: Arc::clone(&self.runtime),
-            hf_endpoint: Arc::clone(&self.hf_endpoint),
-        }
-    }
 }
 
 /// Handle returned by [`Daemon::start`] — holds the socket path and shutdown trigger.
@@ -85,15 +73,12 @@ impl Daemon {
     ) -> Result<DaemonHandle> {
         let (event_tx, event_rx) = mpsc::unbounded_channel::<DaemonEvent>();
 
-        let runtime = builder::build_runtime(config, config_dir, event_tx.clone()).await?;
-
-        let hf_endpoint = model::local::download::probe_endpoint().await;
-        tracing::info!("using hf endpoint: {hf_endpoint}");
-
+        let runtime = builder::Builder::new(config, config_dir, event_tx.clone())
+            .build()
+            .await?;
         let runtime = Arc::new(runtime);
         let daemon = Daemon {
             runtime: Arc::clone(&runtime),
-            hf_endpoint: Arc::from(hf_endpoint),
         };
 
         // Broadcast shutdown — all subsystems subscribe.
@@ -111,7 +96,10 @@ impl Daemon {
         setup_channels(config, &event_tx).await;
         let cron_add_tx = setup_cron(&runtime, &shutdown_tx, &event_tx).await;
 
-        let event_loop_join = tokio::spawn(event_loop::event_loop(event_rx, daemon, cron_add_tx));
+        let d = daemon.clone();
+        let event_loop_join = tokio::spawn(async move {
+            d.handle_events(event_rx, cron_add_tx).await;
+        });
 
         Ok(DaemonHandle {
             socket_path,
