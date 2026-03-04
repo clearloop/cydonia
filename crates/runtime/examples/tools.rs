@@ -35,18 +35,16 @@ async fn main() {
     );
 
     let provider = common::build_provider();
-    let runtime = Runtime::new(provider, Arc::new(hook));
+    let mut runtime = Runtime::new(provider, Arc::new(hook));
 
-    runtime
-        .add_agent(
-            AgentConfig::new("assistant")
-                .system_prompt(
-                    "You are a helpful assistant with access to tools. \
-                     Use current_time when the user asks about the current time or date.",
-                )
-                .tool("current_time"),
-        )
-        .await;
+    runtime.add_agent(
+        AgentConfig::new("assistant")
+            .system_prompt(
+                "You are a helpful assistant with access to tools. \
+                 Use current_time when the user asks about the current time or date.",
+            )
+            .tool("current_time"),
+    );
 
     println!("Tools REPL — try asking:");
     println!("  'What time is it?'");

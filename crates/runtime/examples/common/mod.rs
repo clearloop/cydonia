@@ -129,6 +129,11 @@ pub async fn repl<M: wcore::model::Model + Send + Sync + Clone + 'static, H: Hoo
     use futures_util::StreamExt;
     use std::io::{BufRead, Write};
 
+    let Some(mutex) = runtime.agent_mutex(agent) else {
+        eprintln!("agent '{agent}' not registered");
+        return;
+    };
+
     loop {
         print!("> ");
         std::io::stdout().flush().unwrap();
@@ -140,26 +145,20 @@ pub async fn repl<M: wcore::model::Model + Send + Sync + Clone + 'static, H: Hoo
         if input.is_empty() || input == "exit" || input == "quit" {
             break;
         }
-        let Some(mut agent_instance) = runtime.take_agent(agent).await else {
-            eprintln!("agent '{agent}' not registered");
-            break;
+        let mut guard = mutex.lock().await;
+        guard.push_message(Message::user(input));
+        let dispatcher = AgentDispatcher {
+            hook: runtime.hook(),
+            agent,
         };
-        agent_instance.push_message(Message::user(input));
-        {
-            let dispatcher = AgentDispatcher {
-                hook: runtime.hook(),
-                agent,
-            };
-            let mut stream = std::pin::pin!(agent_instance.run_stream(&dispatcher));
-            while let Some(event) = stream.next().await {
-                if let AgentEvent::TextDelta(text) = &event {
-                    print!("{text}");
-                    std::io::stdout().flush().ok();
-                }
+        let mut stream = std::pin::pin!(guard.run_stream(&dispatcher));
+        while let Some(event) = stream.next().await {
+            if let AgentEvent::TextDelta(text) = &event {
+                print!("{text}");
+                std::io::stdout().flush().ok();
             }
         }
         println!();
-        runtime.put_agent(agent_instance).await;
     }
 }
 
@@ -172,6 +171,11 @@ pub async fn repl_with_memory(
     use futures_util::StreamExt;
     use std::io::{BufRead, Write};
 
+    let Some(mutex) = runtime.agent_mutex(agent) else {
+        eprintln!("agent '{agent}' not registered");
+        return;
+    };
+
     loop {
         print!("> ");
         std::io::stdout().flush().unwrap();
@@ -183,27 +187,22 @@ pub async fn repl_with_memory(
         if input.is_empty() || input == "exit" || input == "quit" {
             break;
         }
+
         {
-            let Some(mut agent_instance) = runtime.take_agent(agent).await else {
-                eprintln!("agent '{agent}' not registered");
-                break;
+            let mut guard = mutex.lock().await;
+            guard.push_message(Message::user(input));
+            let dispatcher = AgentDispatcher {
+                hook: runtime.hook(),
+                agent,
             };
-            agent_instance.push_message(Message::user(input));
-            {
-                let dispatcher = AgentDispatcher {
-                    hook: runtime.hook(),
-                    agent,
-                };
-                let mut stream = std::pin::pin!(agent_instance.run_stream(&dispatcher));
-                while let Some(event) = stream.next().await {
-                    if let AgentEvent::TextDelta(text) = &event {
-                        print!("{text}");
-                        std::io::stdout().flush().ok();
-                    }
+            let mut stream = std::pin::pin!(guard.run_stream(&dispatcher));
+            while let Some(event) = stream.next().await {
+                if let AgentEvent::TextDelta(text) = &event {
+                    print!("{text}");
+                    std::io::stdout().flush().ok();
                 }
             }
             println!();
-            runtime.put_agent(agent_instance).await;
         }
 
         // Print current memory state.

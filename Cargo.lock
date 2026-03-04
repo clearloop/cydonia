@@ -6630,6 +6630,7 @@ dependencies = [
  "async-stream",
  "compact_str 0.8.1",
  "futures-core",
+ "futures-util",
  "schemars 1.2.1",
  "serde",
  "serde_json",

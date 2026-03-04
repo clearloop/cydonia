@@ -19,12 +19,12 @@ anyhow.workspace = true
 async-stream.workspace = true
 compact_str.workspace = true
 futures-core.workspace = true
+futures-util.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
 model.workspace = true
-futures-util.workspace = true
 tracing-subscriber.workspace = true
 dotenvy.workspace = true
 chrono.workspace = true

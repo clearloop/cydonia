@@ -27,14 +27,12 @@ async fn main() {
 
     let hook = Arc::new(hook);
     let provider = common::build_provider();
-    let runtime = Runtime::new(provider, Arc::clone(&hook));
+    let mut runtime = Runtime::new(provider, Arc::clone(&hook));
 
-    runtime
-        .add_agent(AgentConfig::new("assistant").system_prompt(
-            "You are a helpful assistant. Use any stored memory about the user \
-                     to personalize your responses.",
-        ))
-        .await;
+    runtime.add_agent(AgentConfig::new("assistant").system_prompt(
+        "You are a helpful assistant. Use any stored memory about the user \
+                 to personalize your responses.",
+    ));
 
     println!("Memory REPL — the assistant knows your stored context.");
     println!("Try: 'What do you know about me?' or tell it something new.");
