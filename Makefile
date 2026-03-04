@@ -23,10 +23,10 @@ tar-all: tar-walrus
 # make tarballs for walrus
 tar-walrus:
 	mkdir -p target/bundle
-	tar -czf target/bundle/walrus-$(VERSION)-macos-arm64.tar.gz -C target/aarch64-apple-darwin/prod openwalrus
-	tar -czf target/bundle/walrus-$(VERSION)-macos-amd64.tar.gz -C target/x86_64-apple-darwin/prod openwalrus
-	tar -czf target/bundle/walrus-$(VERSION)-linux-amd64.tar.gz -C target/x86_64-unknown-linux-gnu/prod openwalrus
-	tar -czf target/bundle/walrus-$(VERSION)-linux-arm64.tar.gz -C target/aarch64-unknown-linux-gnu/prod openwalrus
+	tar -czf target/bundle/walrus-$(VERSION)-macos-arm64.tar.gz -C target/aarch64-apple-darwin/prod walrus
+	tar -czf target/bundle/walrus-$(VERSION)-macos-amd64.tar.gz -C target/x86_64-apple-darwin/prod walrus
+	tar -czf target/bundle/walrus-$(VERSION)-linux-amd64.tar.gz -C target/x86_64-unknown-linux-gnu/prod walrus
+	tar -czf target/bundle/walrus-$(VERSION)-linux-arm64.tar.gz -C target/aarch64-unknown-linux-gnu/prod walrus
 
 # build macos-arm64 (Metal acceleration)
 macos-arm64:

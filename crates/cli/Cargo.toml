@@ -11,7 +11,7 @@ repository.workspace = true
 keywords.workspace = true
 
 [[bin]]
-name = "openwalrus"
+name = "walrus"
 path = "src/bin/main.rs"
 
 [features]
