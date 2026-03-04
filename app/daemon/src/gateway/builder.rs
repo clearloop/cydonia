@@ -1,7 +1,10 @@
 //! Hook builder — constructs a fully-configured GatewayHook from DaemonConfig.
 
-use crate::config;
-use crate::hook::GatewayHook;
+use crate::{
+    config,
+    gateway::event::{EventSender, GatewayEvent},
+    hook::GatewayHook,
+};
 use anyhow::Result;
 use model::ProviderManager;
 use runtime::Runtime;
@@ -13,9 +16,10 @@ use std::sync::Arc;
 /// Constructs GatewayHook with all backends (memory, skills, MCP, cron),
 /// creates the model provider separately, then wraps both in a Runtime.
 /// Registers all tools (memory, cron, MCP) on Runtime's tool registry.
-pub async fn build_runtime(
+pub(crate) async fn build_runtime(
     config: &crate::DaemonConfig,
     config_dir: &Path,
+    event_tx: EventSender,
 ) -> Result<Runtime<ProviderManager, GatewayHook>> {
     // Construct in-memory backend.
     let memory = memory::InMemory::new();
@@ -45,7 +49,7 @@ pub async fn build_runtime(
     let cron_jobs = hook.cron().jobs_arc();
 
     // Wrap in Runtime — model and hook are separate.
-    let mut runtime = Runtime::new(manager, Arc::new(hook));
+    let mut runtime = Runtime::new(manager, hook);
 
     // --- Register tools on Runtime ---
 
@@ -57,8 +61,11 @@ pub async fn build_runtime(
         runtime.register_tool(mt.tool, mt.handler).await;
     }
 
-    // Cron tool (create_cron).
-    let (cron_tool, cron_handler_fn) = wcron::hook::create_cron_handler(cron_jobs);
+    // Cron tool (create_cron) — with event notification (DD#9).
+    let (cron_tool, cron_handler_fn) =
+        wcron::hook::create_cron_handler_with_notify(cron_jobs, move |job| {
+            let _ = event_tx.send(GatewayEvent::CronJobCreated(Box::new(job)));
+        });
     runtime.register_tool(cron_tool, cron_handler_fn).await;
 
     // MCP tools — each MCP server tool becomes a registered handler.

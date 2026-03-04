@@ -8,7 +8,6 @@ pub(crate) mod hook;
 pub use config::DaemonConfig;
 pub use gateway::{
     Gateway,
-    builder::build_runtime,
     handle::{ServeHandle, serve, serve_with_config},
 };
 pub use hook::GatewayHook;

@@ -5,7 +5,8 @@ use model::ProviderManager;
 use runtime::Runtime;
 use std::sync::Arc;
 
-pub mod builder;
+pub(crate) mod builder;
+pub(crate) mod event;
 pub mod handle;
 mod server;
 

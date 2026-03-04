@@ -10,7 +10,7 @@ use wcore::{AgentConfig, AgentEvent};
 /// Lifecycle backend for agent building and event observation.
 ///
 /// Implementations provide prompt enrichment (via `on_build_agent`) and event
-/// observation. Runtime holds `Arc<H>` and calls these methods at the
+/// observation. Runtime holds `H` directly and calls these methods at the
 /// appropriate lifecycle points.
 pub trait Hook: Send + Sync {
     /// Called by `Runtime::add_agent()` before building the `Agent`.

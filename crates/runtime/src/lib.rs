@@ -34,18 +34,18 @@ pub type Handler =
 /// The walrus runtime — agent registry, tool registry, and hook orchestration.
 ///
 /// Each agent is wrapped in a per-agent `Mutex` for concurrent execution.
-/// Tools are stored behind `Arc<RwLock>` — registered before startup via
-/// `&mut self` or after startup via `&self` (for MCP hot-reload).
+/// Tools are stored behind `Arc<RwLock>` — registered before or after
+/// wrapping in `Arc` (for MCP hot-reload).
 pub struct Runtime<M: wcore::model::Model, H: Hook> {
     model: M,
-    hook: Arc<H>,
+    hook: H,
     agents: BTreeMap<CompactString, Arc<Mutex<wcore::Agent<M>>>>,
     tools: Arc<RwLock<BTreeMap<CompactString, (Tool, Handler)>>>,
 }
 
 impl<M: wcore::model::Model + Send + Sync + Clone + 'static, H: Hook + 'static> Runtime<M, H> {
     /// Create a new runtime with the given model and hook backend.
-    pub fn new(model: M, hook: Arc<H>) -> Self {
+    pub fn new(model: M, hook: H) -> Self {
         Self {
             model,
             hook,

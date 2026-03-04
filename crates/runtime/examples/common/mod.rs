@@ -3,7 +3,6 @@
 #![allow(dead_code)]
 
 use model::ProviderManager;
-use std::sync::Arc;
 use walrus_runtime::{Hook, Memory, prelude::*};
 use wcore::AgentEvent;
 
@@ -68,11 +67,10 @@ pub fn build_hook() -> ExampleHook {
 }
 
 /// Build a Runtime with the default provider and ExampleHook.
-pub fn build_runtime() -> (Runtime<ProviderManager, ExampleHook>, Arc<ExampleHook>) {
-    let hook = Arc::new(build_hook());
+pub fn build_runtime() -> Runtime<ProviderManager, ExampleHook> {
+    let hook = build_hook();
     let provider = build_provider();
-    let runtime = Runtime::new(provider, Arc::clone(&hook));
-    (runtime, hook)
+    Runtime::new(provider, hook)
 }
 
 /// Simple REPL loop: read lines from stdin, stream to agent.
@@ -106,11 +104,7 @@ pub async fn repl<M: wcore::model::Model + Send + Sync + Clone + 'static, H: Hoo
 }
 
 /// REPL loop that prints memory entries after each exchange.
-pub async fn repl_with_memory(
-    runtime: &Runtime<ProviderManager, ExampleHook>,
-    hook: &ExampleHook,
-    agent: &str,
-) {
+pub async fn repl_with_memory(runtime: &Runtime<ProviderManager, ExampleHook>, agent: &str) {
     use futures_util::StreamExt;
     use std::io::{BufRead, Write};
 
@@ -138,7 +132,7 @@ pub async fn repl_with_memory(
         }
 
         // Print current memory state.
-        let entries = hook.memory().entries();
+        let entries = runtime.hook().memory().entries();
         if entries.is_empty() {
             println!("[Memory: empty]");
         } else {

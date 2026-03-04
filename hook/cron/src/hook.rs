@@ -36,12 +36,31 @@ pub fn create_cron_tool() -> Tool {
 /// The handler captures the live job list and adds new jobs dynamically.
 /// Register the returned pair on Runtime.
 pub fn create_cron_handler(jobs: Arc<RwLock<Vec<CronJob>>>) -> (Tool, Handler) {
+    create_cron_handler_with_notify(jobs, |_| {})
+}
+
+/// Create a `(Tool, Handler)` pair with a notification callback (DD#9).
+///
+/// After adding a new job to the live list, calls `on_create(job.clone())`
+/// so the caller can route the side-effect (e.g. send a `GatewayEvent`).
+pub fn create_cron_handler_with_notify<F>(
+    jobs: Arc<RwLock<Vec<CronJob>>>,
+    on_create: F,
+) -> (Tool, Handler)
+where
+    F: Fn(CronJob) + Send + Sync + 'static,
+{
     let tool = create_cron_tool();
+    let on_create = Arc::new(on_create);
     let handler: Handler = Arc::new(move |args: String| {
         let jobs = Arc::clone(&jobs);
+        let on_create = Arc::clone(&on_create);
         Box::pin(async move {
             match handle_create_cron(&jobs, &args).await {
-                Ok(msg) => msg,
+                Ok((msg, job)) => {
+                    on_create(job);
+                    msg
+                }
                 Err(e) => format!("create_cron failed: {e}"),
             }
         }) as Pin<Box<dyn std::future::Future<Output = String> + Send>>
@@ -50,7 +69,9 @@ pub fn create_cron_handler(jobs: Arc<RwLock<Vec<CronJob>>>) -> (Tool, Handler) {
 }
 
 /// Handle a `create_cron` tool call — parse args, create job, add to live list.
-async fn handle_create_cron(jobs: &RwLock<Vec<CronJob>>, args: &str) -> Result<String> {
+///
+/// Returns both the success message and the created job (for notification).
+async fn handle_create_cron(jobs: &RwLock<Vec<CronJob>>, args: &str) -> Result<(String, CronJob)> {
     let parsed: serde_json::Value = serde_json::from_str(args)?;
     let name = parsed["name"]
         .as_str()
@@ -72,9 +93,8 @@ async fn handle_create_cron(jobs: &RwLock<Vec<CronJob>>, args: &str) -> Result<S
         name,
         agent
     );
-    jobs.write().await.push(job);
+    let msg = format!("created cron job '{name}' → agent '{agent}' on schedule '{schedule}'");
+    jobs.write().await.push(job.clone());
 
-    Ok(format!(
-        "created cron job '{name}' → agent '{agent}' on schedule '{schedule}'"
-    ))
+    Ok((msg, job))
 }
