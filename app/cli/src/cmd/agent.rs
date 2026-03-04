@@ -1,6 +1,6 @@
 //! Agent management commands: list, info.
 
-use crate::runner::gateway::GatewayRunner;
+use crate::runner::Runner;
 use anyhow::Result;
 use clap::Subcommand;
 
@@ -18,7 +18,7 @@ pub enum AgentCommand {
 
 impl AgentCommand {
     /// Dispatch agent management subcommands.
-    pub async fn run(&self, runner: &mut GatewayRunner) -> Result<()> {
+    pub async fn run(&self, runner: &mut Runner) -> Result<()> {
         match self {
             Self::List => list(runner).await,
             Self::Info { name } => info(runner, name).await,
@@ -26,7 +26,7 @@ impl AgentCommand {
     }
 }
 
-async fn list(runner: &mut GatewayRunner) -> Result<()> {
+async fn list(runner: &mut Runner) -> Result<()> {
     let agents = runner.list_agents().await?;
     if agents.is_empty() {
         println!("No agents registered.");
@@ -43,7 +43,7 @@ async fn list(runner: &mut GatewayRunner) -> Result<()> {
     Ok(())
 }
 
-async fn info(runner: &mut GatewayRunner, name: &str) -> Result<()> {
+async fn info(runner: &mut Runner, name: &str) -> Result<()> {
     let detail = runner.agent_info(name).await?;
     println!("Name:        {}", detail.name);
     println!("Description: {}", detail.description);

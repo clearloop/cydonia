@@ -1,6 +1,6 @@
 //! CLI argument parsing and command dispatch.
 
-use crate::runner::gateway::GatewayRunner;
+use crate::runner::Runner;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use compact_str::CompactString;
@@ -97,8 +97,8 @@ pub enum Command {
 }
 
 /// Connect to walrusd, returning a helpful error if not running.
-async fn connect(socket_path: &std::path::Path) -> Result<GatewayRunner> {
-    GatewayRunner::connect(socket_path).await.with_context(|| {
+async fn connect(socket_path: &std::path::Path) -> Result<Runner> {
+    Runner::connect(socket_path).await.with_context(|| {
         format!(
             "failed to connect to walrusd at {}. Is walrusd running?",
             socket_path.display()

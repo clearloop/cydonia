@@ -12,7 +12,7 @@ pub struct Chat;
 
 impl Chat {
     /// Enter the interactive REPL with the given runner and agent.
-    pub async fn run<R: Runner>(self, runner: R, agent: CompactString) -> Result<()> {
+    pub async fn run(self, runner: Runner, agent: CompactString) -> Result<()> {
         let mut repl = ChatRepl::new(runner, agent)?;
         repl.run().await
     }

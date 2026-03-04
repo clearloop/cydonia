@@ -8,17 +8,17 @@ use futures_util::StreamExt;
 use rustyline::error::ReadlineError;
 use std::{io::Write, path::PathBuf, pin::pin};
 
-/// Interactive chat REPL, generic over the execution backend.
-pub struct ChatRepl<R: Runner> {
-    runner: R,
+/// Interactive chat REPL.
+pub struct ChatRepl {
+    runner: Runner,
     agent: CompactString,
     editor: rustyline::DefaultEditor,
     history_path: Option<PathBuf>,
 }
 
-impl<R: Runner> ChatRepl<R> {
+impl ChatRepl {
     /// Create a new REPL with the given runner and agent name.
-    pub fn new(runner: R, agent: CompactString) -> Result<Self> {
+    pub fn new(runner: Runner, agent: CompactString) -> Result<Self> {
         let mut editor = rustyline::DefaultEditor::new()?;
         let history_path = history_file_path();
         if let Some(ref path) = history_path {

@@ -1,6 +1,6 @@
 //! `walrus download` — download a model from HuggingFace with progress.
 
-use crate::runner::gateway::GatewayRunner;
+use crate::runner::Runner;
 use anyhow::Result;
 use clap::Args;
 use futures_util::StreamExt;
@@ -16,7 +16,7 @@ pub struct Download {
 
 impl Download {
     /// Run the download, streaming progress to the terminal.
-    pub async fn run(self, runner: &mut GatewayRunner) -> Result<()> {
+    pub async fn run(self, runner: &mut Runner) -> Result<()> {
         let stream = runner.download_stream(&self.model);
         futures_util::pin_mut!(stream);
 
