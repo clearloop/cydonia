@@ -19,6 +19,7 @@ use tokio::{
 
 mod client;
 pub mod hook;
+pub mod parser;
 
 /// A parsed cron job ready for scheduling.
 #[derive(Debug, Clone)]

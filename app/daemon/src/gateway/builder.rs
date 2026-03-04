@@ -67,7 +67,7 @@ pub async fn build_runtime(
     }
 
     // Load agents from markdown files.
-    let agents = crate::loader::load_agents_dir(&config_dir.join(config::AGENTS_DIR))?;
+    let agents = crate::config::load_agents_dir(&config_dir.join(config::AGENTS_DIR))?;
     for agent in agents {
         tracing::info!("registered agent '{}'", agent.name);
         runtime.add_agent(agent);
@@ -78,7 +78,7 @@ pub async fn build_runtime(
 
 /// Load cron entries from disk and build a CronHandler.
 fn build_cron_handler(cron_dir: &Path) -> wcron::CronHandler {
-    let entries = match crate::loader::load_cron_dir(cron_dir) {
+    let entries = match crate::config::load_cron_dir(cron_dir) {
         Ok(e) => e,
         Err(e) => {
             tracing::warn!("failed to load cron entries: {e}");

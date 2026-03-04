@@ -15,9 +15,11 @@ use tokio::sync::mpsc;
 
 pub use builder::AgentBuilder;
 pub use config::AgentConfig;
+pub use parser::parse_agent_md;
 
 mod builder;
 pub mod config;
+mod parser;
 
 /// A stateful agent execution unit.
 ///

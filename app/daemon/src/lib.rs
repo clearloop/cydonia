@@ -3,7 +3,6 @@
 
 pub mod config;
 pub mod gateway;
-pub mod loader;
 
 pub use config::DaemonConfig;
 pub use gateway::{

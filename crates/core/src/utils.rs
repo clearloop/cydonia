@@ -1,13 +1,4 @@
-//! Markdown-based configuration loading for agents, cron jobs, and skills.
-//!
-//! All filesystem I/O and YAML frontmatter parsing lives here, keeping the
-//! runtime crate free of `std::fs` and `serde_yaml` dependencies.
-
-pub use agent::{load_agents_dir, parse_agent_md};
-pub use cron::{CronEntry, load_cron_dir, parse_cron_md};
-
-pub mod agent;
-pub mod cron;
+//! Shared utilities for markdown-based configuration parsing.
 
 /// Split YAML frontmatter from the body. Frontmatter is delimited by `---`.
 ///
