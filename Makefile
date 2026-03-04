@@ -30,7 +30,7 @@ tar-walrus:
 
 # build macos-arm64 (Metal acceleration)
 macos-arm64:
-	$(CARGO) --target aarch64-apple-darwin -p openwalrus --features metal
+	$(CARGO) --target aarch64-apple-darwin -p openwalrus
 
 # build macos-amd64
 macos-amd64:

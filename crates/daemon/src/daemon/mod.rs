@@ -13,8 +13,10 @@ use anyhow::Result;
 use compact_str::CompactString;
 use model::ProviderManager;
 use runtime::Runtime;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 use tokio::sync::{broadcast, mpsc, oneshot};
 
 pub(crate) mod builder;

@@ -6,10 +6,11 @@
 
 use crate::local::cache_dir;
 use hf_hub::api::tokio::{ApiBuilder, Progress};
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
-use tokio::sync::mpsc;
-use tokio::time::Instant;
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
+use tokio::{sync::mpsc, time::Instant};
 
 const HF_OFFICIAL: &str = "https://huggingface.co";
 const HF_MIRROR: &str = "https://hf-mirror.com";

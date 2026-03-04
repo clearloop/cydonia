@@ -1,12 +1,10 @@
 //! Server trait — one async method per protocol operation.
 
-use crate::message::client::ClientMessage;
-use crate::message::server::ServerMessage;
 use crate::message::{
     AgentDetail, AgentInfoRequest, AgentList, ClearSessionRequest, DownloadEvent, DownloadRequest,
     GetMemoryRequest, McpAddRequest, McpAdded, McpReloaded, McpRemoveRequest, McpRemoved,
     McpServerList, MemoryEntry, MemoryList, SendRequest, SendResponse, SessionCleared,
-    SkillsReloaded, StreamEvent, StreamRequest,
+    SkillsReloaded, StreamEvent, StreamRequest, client::ClientMessage, server::ServerMessage,
 };
 use anyhow::Result;
 use futures_core::Stream;

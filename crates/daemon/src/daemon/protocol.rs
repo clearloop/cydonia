@@ -4,12 +4,14 @@ use crate::daemon::Daemon;
 use anyhow::{Result, bail};
 use futures_util::{StreamExt, pin_mut};
 use memory::Memory;
-use protocol::api::Server;
-use protocol::message::{
-    AgentDetail, AgentInfoRequest, AgentList, AgentSummary, ClearSessionRequest, DownloadEvent,
-    DownloadRequest, GetMemoryRequest, McpAddRequest, McpAdded, McpReloaded, McpRemoveRequest,
-    McpRemoved, McpServerList, McpServerSummary, MemoryEntry, MemoryList, SendRequest,
-    SendResponse, SessionCleared, SkillsReloaded, StreamEvent, StreamRequest,
+use protocol::{
+    api::Server,
+    message::{
+        AgentDetail, AgentInfoRequest, AgentList, AgentSummary, ClearSessionRequest, DownloadEvent,
+        DownloadRequest, GetMemoryRequest, McpAddRequest, McpAdded, McpReloaded, McpRemoveRequest,
+        McpRemoved, McpServerList, McpServerSummary, MemoryEntry, MemoryList, SendRequest,
+        SendResponse, SessionCleared, SkillsReloaded, StreamEvent, StreamRequest,
+    },
 };
 use wcore::AgentEvent;
 

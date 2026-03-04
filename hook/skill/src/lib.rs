@@ -6,8 +6,7 @@
 
 use anyhow::Result;
 use compact_str::CompactString;
-use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::{collections::BTreeMap, path::PathBuf};
 use tokio::sync::RwLock;
 use wcore::Hook;
 

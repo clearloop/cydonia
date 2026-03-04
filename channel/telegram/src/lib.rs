@@ -8,8 +8,10 @@ use channel::{Attachment, AttachmentKind, Channel, ChannelHandle, ChannelMessage
 use compact_str::CompactString;
 use reqwest::Client;
 use serde::Deserialize;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::{
+    Arc,
+    atomic::{AtomicI64, Ordering},
+};
 use tokio::sync::mpsc;
 
 /// Telegram Bot API channel adapter.

@@ -5,8 +5,7 @@
 //! Provides per-builder constructors: `from_text()`, `from_gguf()`,
 //! `from_vision()`. All use the walrus model cache directory.
 
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 pub mod download;
 mod provider;

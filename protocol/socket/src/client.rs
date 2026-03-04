@@ -3,9 +3,10 @@
 use crate::codec;
 use anyhow::Result;
 use futures_core::Stream;
-use protocol::api::Client;
-use protocol::message::client::ClientMessage;
-use protocol::message::server::ServerMessage;
+use protocol::{
+    api::Client,
+    message::{client::ClientMessage, server::ServerMessage},
+};
 use std::path::{Path, PathBuf};
 use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
 

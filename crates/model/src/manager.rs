@@ -7,8 +7,10 @@ use async_stream::try_stream;
 use compact_str::CompactString;
 use futures_core::Stream;
 use futures_util::StreamExt;
-use std::collections::BTreeMap;
-use std::sync::{Arc, RwLock};
+use std::{
+    collections::BTreeMap,
+    sync::{Arc, RwLock},
+};
 use wcore::model::{Model, Response, StreamChunk, default_context_limit};
 
 /// Manages a set of named providers with an active selection.

@@ -5,9 +5,11 @@
 //! [`Agent::run_stream`]. `run_stream()` is the canonical step loop —
 //! `run()` collects its events and returns the final response.
 
-use crate::dispatch::Dispatcher;
-use crate::event::{AgentEvent, AgentResponse, AgentStep, AgentStopReason};
-use crate::model::{Message, Model, Request};
+use crate::{
+    dispatch::Dispatcher,
+    event::{AgentEvent, AgentResponse, AgentStep, AgentStopReason},
+    model::{Message, Model, Request},
+};
 use anyhow::Result;
 use async_stream::stream;
 use futures_core::Stream;

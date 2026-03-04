@@ -1,8 +1,9 @@
 //! Fluent builder for constructing an [`Agent`].
 
-use crate::agent::Agent;
-use crate::agent::config::AgentConfig;
-use crate::model::Model;
+use crate::{
+    agent::{Agent, config::AgentConfig},
+    model::Model,
+};
 
 /// Fluent builder for [`Agent<M>`].
 ///

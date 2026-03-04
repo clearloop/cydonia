@@ -6,9 +6,7 @@
 
 use anyhow::Result;
 use compact_str::CompactString;
-use std::future::Future;
-use std::pin::Pin;
-use std::sync::Arc;
+use std::{future::Future, pin::Pin, sync::Arc};
 use tokio::sync::mpsc;
 
 /// Type-erased async sender function.

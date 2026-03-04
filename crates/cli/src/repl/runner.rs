@@ -4,10 +4,12 @@ use anyhow::Result;
 use compact_str::CompactString;
 use futures_core::Stream;
 use futures_util::StreamExt;
-use protocol::api::Client;
-use protocol::message::{
-    AgentDetail, AgentInfoRequest, AgentSummary, DownloadEvent, DownloadRequest, GetMemoryRequest,
-    SendRequest, StreamEvent, StreamRequest,
+use protocol::{
+    api::Client,
+    message::{
+        AgentDetail, AgentInfoRequest, AgentSummary, DownloadEvent, DownloadRequest,
+        GetMemoryRequest, SendRequest, StreamEvent, StreamRequest,
+    },
 };
 use socket::{ClientConfig, Connection, WalrusClient};
 use std::path::Path;

@@ -1,9 +1,10 @@
 //! Memory trait implementation for SqliteMemory.
 
-use crate::sqlite::SqliteMemory;
-use crate::sqlite::sql;
-use crate::utils::now_unix;
-use crate::{Embedder, Memory, MemoryEntry, RecallOptions};
+use crate::{
+    Embedder, Memory, MemoryEntry, RecallOptions,
+    sqlite::{SqliteMemory, sql},
+    utils::now_unix,
+};
 use anyhow::Result;
 use std::future::Future;
 
