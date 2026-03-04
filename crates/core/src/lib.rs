@@ -8,7 +8,7 @@
 //! - Agent event types: [`AgentEvent`], [`AgentStep`], [`AgentResponse`], [`AgentStopReason`].
 
 pub use agent::{Agent, AgentBuilder, AgentConfig};
-pub use dispatch::Dispatcher;
+pub use dispatch::{ClosureDispatcher, DispatchFn, Dispatcher};
 pub use event::{AgentEvent, AgentResponse, AgentStep, AgentStopReason};
 
 mod agent;

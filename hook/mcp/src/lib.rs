@@ -3,7 +3,7 @@
 //! The [`McpBridge`] manages connections to MCP servers via the rmcp SDK,
 //! converts tool definitions to walrus-core format, and routes tool calls.
 //! [`McpHandler`] wraps the bridge with hot-reload and config persistence.
-//! Implements [`Hook`] so it can be composed into a runtime backend.
+//! Produces `(Tool, Handler)` pairs for registration on Runtime.
 
 use anyhow::Result;
 use compact_str::CompactString;
@@ -13,11 +13,11 @@ use rmcp::{
     service::{RoleClient, RunningService},
     transport::TokioChildProcess,
 };
-use runtime::Hook;
+use runtime::Handler;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::future::Future;
 use std::path::PathBuf;
+use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 use wcore::model::Tool;
@@ -365,39 +365,27 @@ impl McpHandler {
     pub fn try_bridge(&self) -> Option<Arc<McpBridge>> {
         self.bridge.try_read().ok().map(|g| Arc::clone(&*g))
     }
-}
 
-impl Hook for McpHandler {
-    fn tools(&self, _agent: &str) -> Vec<Tool> {
-        if let Some(bridge) = self.try_bridge() {
-            bridge.try_tools()
-        } else {
-            vec![]
-        }
-    }
-
-    fn dispatch(
-        &self,
-        _agent: &str,
-        calls: &[(&str, &str)],
-    ) -> impl Future<Output = Vec<Result<String>>> + Send {
-        let calls: Vec<(String, String)> = calls
-            .iter()
-            .map(|(m, p)| (m.to_string(), p.to_string()))
-            .collect();
-        let bridge = self.try_bridge();
-
-        async move {
-            let mut results = Vec::with_capacity(calls.len());
-            for (method, params) in &calls {
-                let output = if let Some(ref bridge) = bridge {
-                    Ok(bridge.call(method, params).await)
-                } else {
-                    Ok(format!("mcp not available for {method}"))
-                };
-                results.push(output);
-            }
-            results
-        }
+    /// Produce `(Tool, Handler)` pairs for all currently connected MCP tools.
+    ///
+    /// Each handler captures an `Arc<McpBridge>` and the tool name, routing
+    /// calls through `bridge.call()`. Register the returned pairs on Runtime.
+    pub async fn tool_handlers(&self) -> Vec<(Tool, Handler)> {
+        let bridge = self.bridge().await;
+        let tools = bridge.tools().await;
+        tools
+            .into_iter()
+            .map(|tool| {
+                let bridge = Arc::clone(&bridge);
+                let name = tool.name.clone();
+                let handler: Handler = Arc::new(move |args: String| {
+                    let bridge = Arc::clone(&bridge);
+                    let name = name.clone();
+                    Box::pin(async move { bridge.call(&name, &args).await })
+                        as Pin<Box<dyn std::future::Future<Output = String> + Send>>
+                });
+                (tool, handler)
+            })
+            .collect()
     }
 }

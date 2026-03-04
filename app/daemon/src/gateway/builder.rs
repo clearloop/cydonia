@@ -4,15 +4,15 @@ use crate::config;
 use crate::gateway::GatewayHook;
 use anyhow::Result;
 use model::ProviderManager;
-use runtime::{Hook, Runtime};
+use runtime::Runtime;
 use std::path::Path;
 use std::sync::Arc;
 
 /// Build a fully-configured `Runtime` from config and directory.
 ///
-/// Constructs GatewayHook with all backends (memory, skills, MCP),
-/// creates the model provider separately, then wraps both in a Runtime
-/// with loaded agents.
+/// Constructs GatewayHook with all backends (memory, skills, MCP, cron),
+/// creates the model provider separately, then wraps both in a Runtime.
+/// Registers all tools (memory, cron, MCP) on Runtime's tool registry.
 pub async fn build_runtime(
     config: &crate::DaemonConfig,
     config_dir: &Path,
@@ -39,14 +39,32 @@ pub async fn build_runtime(
     let cron_dir = config_dir.join(config::CRON_DIR);
     let cron_handler = build_cron_handler(&cron_dir);
 
-    // Build GatewayHook.
-    let mut hook = GatewayHook::new(memory, skills, mcp_handler, cron_handler);
-
-    // Register memory tools on the hook.
-    register_memory_tools(&mut hook);
+    // Build GatewayHook (no tools — those go on Runtime).
+    let hook = GatewayHook::new(memory, skills, mcp_handler, cron_handler);
+    let mem = hook.memory_arc();
+    let cron_jobs = hook.cron().jobs_arc();
 
     // Wrap in Runtime — model and hook are separate.
     let mut runtime = Runtime::new(manager, Arc::new(hook));
+
+    // --- Register tools on Runtime ---
+
+    // Memory tools (remember, recall).
+    for mt in [
+        memory::tools::remember(Arc::clone(&mem)),
+        memory::tools::recall(mem),
+    ] {
+        runtime.register_tool(mt.tool, mt.handler).await;
+    }
+
+    // Cron tool (create_cron).
+    let (cron_tool, cron_handler_fn) = wcron::hook::create_cron_handler(cron_jobs);
+    runtime.register_tool(cron_tool, cron_handler_fn).await;
+
+    // MCP tools — each MCP server tool becomes a registered handler.
+    for (tool, handler) in runtime.hook().mcp().tool_handlers().await {
+        runtime.register_tool(tool, handler).await;
+    }
 
     // Load agents from markdown files.
     let agents = crate::loader::load_agents_dir(&config_dir.join(config::AGENTS_DIR))?;
@@ -56,17 +74,6 @@ pub async fn build_runtime(
     }
 
     Ok(runtime)
-}
-
-/// Register memory-backed tools (remember, recall) on the GatewayHook.
-fn register_memory_tools(hook: &mut GatewayHook) {
-    let mem = hook.memory_arc();
-    for mt in [
-        memory::tools::remember(Arc::clone(&mem)),
-        memory::tools::recall(mem),
-    ] {
-        hook.register(mt.tool, mt.handler);
-    }
 }
 
 /// Load cron entries from disk and build a CronHandler.

@@ -1,8 +1,10 @@
-//! Hook implementation — exposes `create_cron` tool for dynamic job scheduling.
+//! Cron tool handler — exposes `create_cron` as a `(Tool, Handler)` pair.
 
-use crate::{CronHandler, CronJob};
+use crate::CronJob;
 use anyhow::Result;
-use std::future::Future;
+use runtime::Handler;
+use std::pin::Pin;
+use std::sync::Arc;
 use tokio::sync::RwLock;
 use wcore::model::Tool;
 
@@ -29,48 +31,22 @@ pub fn create_cron_tool() -> Tool {
     }
 }
 
-impl runtime::Hook for CronHandler {
-    fn tools(&self, _agent: &str) -> Vec<Tool> {
-        vec![create_cron_tool()]
-    }
-
-    fn dispatch(
-        &self,
-        _agent: &str,
-        calls: &[(&str, &str)],
-    ) -> impl Future<Output = Vec<Result<String>>> + Send {
-        let jobs = self.jobs_arc();
-        let calls: Vec<(String, String)> = calls
-            .iter()
-            .map(|(m, p)| (m.to_string(), p.to_string()))
-            .collect();
-
-        async move {
-            let mut results = Vec::with_capacity(calls.len());
-            for (method, params) in &calls {
-                let result = if method == CREATE_CRON {
-                    handle_create_cron(&jobs, params).await
-                } else {
-                    Ok(format!("unknown tool: {method}"))
-                };
-                results.push(result);
+/// Create a `(Tool, Handler)` pair for the `create_cron` tool.
+///
+/// The handler captures the live job list and adds new jobs dynamically.
+/// Register the returned pair on Runtime.
+pub fn create_cron_handler(jobs: Arc<RwLock<Vec<CronJob>>>) -> (Tool, Handler) {
+    let tool = create_cron_tool();
+    let handler: Handler = Arc::new(move |args: String| {
+        let jobs = Arc::clone(&jobs);
+        Box::pin(async move {
+            match handle_create_cron(&jobs, &args).await {
+                Ok(msg) => msg,
+                Err(e) => format!("create_cron failed: {e}"),
             }
-            results
-        }
-    }
-}
-
-/// Dispatch a single cron tool call by method name.
-pub async fn dispatch_call(
-    jobs: &RwLock<Vec<CronJob>>,
-    method: &str,
-    params: &str,
-) -> Result<String> {
-    if method == CREATE_CRON {
-        handle_create_cron(jobs, params).await
-    } else {
-        Ok(format!("unknown cron tool: {method}"))
-    }
+        }) as Pin<Box<dyn std::future::Future<Output = String> + Send>>
+    });
+    (tool, handler)
 }
 
 /// Handle a `create_cron` tool call — parse args, create job, add to live list.

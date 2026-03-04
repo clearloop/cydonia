@@ -153,6 +153,14 @@ impl Server for Gateway {
             auto_restart: true,
         };
         let tools = self.runtime.hook().mcp().add(config).await?;
+
+        // Register newly added MCP tools on Runtime's registry.
+        for (tool, handler) in self.runtime.hook().mcp().tool_handlers().await {
+            if tools.iter().any(|t| t == &*tool.name) {
+                self.runtime.register_tool(tool, handler).await;
+            }
+        }
+
         Ok(McpAdded {
             name: req.name,
             tools,
@@ -161,6 +169,12 @@ impl Server for Gateway {
 
     async fn mcp_remove(&self, req: McpRemoveRequest) -> Result<McpRemoved> {
         let tools = self.runtime.hook().mcp().remove(&req.name).await?;
+
+        // Unregister removed MCP tools from Runtime's registry.
+        for tool_name in &tools {
+            self.runtime.unregister_tool(tool_name).await;
+        }
+
         Ok(McpRemoved {
             name: req.name,
             tools,
@@ -168,6 +182,17 @@ impl Server for Gateway {
     }
 
     async fn mcp_reload(&self) -> Result<McpReloaded> {
+        // Collect old tool names before reload.
+        let old_tool_names: Vec<compact_str::CompactString> = self
+            .runtime
+            .hook()
+            .mcp()
+            .tool_handlers()
+            .await
+            .into_iter()
+            .map(|(t, _)| t.name)
+            .collect();
+
         let servers = self
             .runtime
             .hook()
@@ -177,6 +202,11 @@ impl Server for Gateway {
                 Ok(config.mcp_servers)
             })
             .await?;
+
+        // Atomically swap old MCP tools for new ones on Runtime.
+        let new_tools = self.runtime.hook().mcp().tool_handlers().await;
+        self.runtime.replace_tools(&old_tool_names, new_tools).await;
+
         let servers = servers
             .into_iter()
             .map(|(name, tools)| McpServerSummary { name, tools })

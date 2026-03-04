@@ -2,18 +2,16 @@
 
 #![allow(dead_code)]
 
-use anyhow::Result;
-use compact_str::CompactString;
 use model::ProviderManager;
-use std::collections::BTreeMap;
 use std::sync::Arc;
-use walrus_runtime::{AgentDispatcher, Handler, Hook, Memory, Tool, prelude::*};
+use walrus_runtime::{Hook, Memory, prelude::*};
 use wcore::AgentEvent;
 
-/// Example hook providing optional tool dispatch.
+/// Example hook providing event observation only.
+///
+/// Tools are registered on Runtime's tool registry, not on the hook.
 pub struct ExampleHook {
     memory: InMemory,
-    tools: BTreeMap<CompactString, (Tool, Handler)>,
 }
 
 impl ExampleHook {
@@ -21,19 +19,7 @@ impl ExampleHook {
     pub fn new() -> Self {
         Self {
             memory: InMemory::new(),
-            tools: BTreeMap::new(),
         }
-    }
-
-    /// Register a tool with its handler.
-    pub fn register<F, Fut>(&mut self, tool: Tool, handler: F)
-    where
-        F: Fn(String) -> Fut + Send + Sync + 'static,
-        Fut: std::future::Future<Output = String> + Send + 'static,
-    {
-        let name = tool.name.clone();
-        let handler: Handler = Arc::new(move |args| Box::pin(handler(args)));
-        self.tools.insert(name, (tool, handler));
     }
 
     /// Access the memory backend.
@@ -42,39 +28,7 @@ impl ExampleHook {
     }
 }
 
-impl Hook for ExampleHook {
-    fn tools(&self, _agent: &str) -> Vec<Tool> {
-        self.tools.values().map(|(t, _)| t.clone()).collect()
-    }
-
-    fn dispatch(
-        &self,
-        _agent: &str,
-        calls: &[(&str, &str)],
-    ) -> impl std::future::Future<Output = Vec<Result<String>>> + Send {
-        let calls: Vec<(String, String)> = calls
-            .iter()
-            .map(|(m, p)| (m.to_string(), p.to_string()))
-            .collect();
-        let handlers: Vec<_> = calls
-            .iter()
-            .map(|(method, _)| self.tools.get(method.as_str()).map(|(_, h)| Arc::clone(h)))
-            .collect();
-
-        async move {
-            let mut results = Vec::with_capacity(calls.len());
-            for (i, (method, params)) in calls.iter().enumerate() {
-                let output = if let Some(ref handler) = handlers[i] {
-                    Ok(handler(params.clone()).await)
-                } else {
-                    Ok(format!("function {method} not available"))
-                };
-                results.push(output);
-            }
-            results
-        }
-    }
-}
+impl Hook for ExampleHook {}
 
 /// Initialize tracing with env-filter support.
 pub fn init_tracing() {
@@ -108,7 +62,7 @@ pub fn build_provider() -> ProviderManager {
     ProviderManager::single(config, model::Provider::DeepSeek(provider))
 }
 
-/// Build a default ExampleHook (no tools, empty memory).
+/// Build a default ExampleHook (empty memory).
 pub fn build_hook() -> ExampleHook {
     ExampleHook::new()
 }
@@ -129,11 +83,6 @@ pub async fn repl<M: wcore::model::Model + Send + Sync + Clone + 'static, H: Hoo
     use futures_util::StreamExt;
     use std::io::{BufRead, Write};
 
-    let Some(mutex) = runtime.agent_mutex(agent) else {
-        eprintln!("agent '{agent}' not registered");
-        return;
-    };
-
     loop {
         print!("> ");
         std::io::stdout().flush().unwrap();
@@ -145,13 +94,7 @@ pub async fn repl<M: wcore::model::Model + Send + Sync + Clone + 'static, H: Hoo
         if input.is_empty() || input == "exit" || input == "quit" {
             break;
         }
-        let mut guard = mutex.lock().await;
-        guard.push_message(Message::user(input));
-        let dispatcher = AgentDispatcher {
-            hook: runtime.hook(),
-            agent,
-        };
-        let mut stream = std::pin::pin!(guard.run_stream(&dispatcher));
+        let mut stream = std::pin::pin!(runtime.stream_to(agent, input));
         while let Some(event) = stream.next().await {
             if let AgentEvent::TextDelta(text) = &event {
                 print!("{text}");
@@ -171,11 +114,6 @@ pub async fn repl_with_memory(
     use futures_util::StreamExt;
     use std::io::{BufRead, Write};
 
-    let Some(mutex) = runtime.agent_mutex(agent) else {
-        eprintln!("agent '{agent}' not registered");
-        return;
-    };
-
     loop {
         print!("> ");
         std::io::stdout().flush().unwrap();
@@ -189,13 +127,7 @@ pub async fn repl_with_memory(
         }
 
         {
-            let mut guard = mutex.lock().await;
-            guard.push_message(Message::user(input));
-            let dispatcher = AgentDispatcher {
-                hook: runtime.hook(),
-                agent,
-            };
-            let mut stream = std::pin::pin!(guard.run_stream(&dispatcher));
+            let mut stream = std::pin::pin!(runtime.stream_to(agent, input));
             while let Some(event) = stream.next().await {
                 if let AgentEvent::TextDelta(text) = &event {
                     print!("{text}");
