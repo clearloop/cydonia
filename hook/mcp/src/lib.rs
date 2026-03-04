@@ -23,7 +23,8 @@ use wcore::{Handler, model::Tool};
 /// MCP server configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpServerConfig {
-    /// Server name.
+    /// Server name. If empty, the name will be the command.
+    #[serde(default)]
     pub name: CompactString,
     /// Command to spawn.
     pub command: String,

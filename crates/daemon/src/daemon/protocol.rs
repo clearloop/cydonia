@@ -209,7 +209,7 @@ impl Server for Daemon {
             .mcp
             .reload(|path| {
                 let config = crate::DaemonConfig::load(path)?;
-                Ok(config.mcp_servers)
+                Ok(config.mcp_servers.into_values().collect::<Vec<_>>())
             })
             .await?;
 

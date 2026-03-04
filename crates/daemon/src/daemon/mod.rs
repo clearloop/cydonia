@@ -145,7 +145,8 @@ fn setup_socket(
 
 /// Build the channel router and spawn channel transports.
 async fn setup_channels(config: &DaemonConfig, event_tx: &DaemonEventSender) {
-    let router = router::build_router(&config.channels);
+    let channels = config.channels.values().cloned().collect::<Vec<_>>();
+    let router = router::build_router(&channels);
     let router = Arc::new(router);
     let channel_tx = event_tx.clone();
     let on_message = Arc::new(move |agent: CompactString, content: String| {
@@ -165,7 +166,7 @@ async fn setup_channels(config: &DaemonConfig, event_tx: &DaemonEventSender) {
                 .unwrap_or(Err("event loop dropped".to_owned()))
         }
     });
-    router::spawn_channels(&config.channels, router, on_message).await;
+    router::spawn_channels(&channels, router, on_message).await;
 }
 
 /// Spawn the cron scheduler wired into the event loop.

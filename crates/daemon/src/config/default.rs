@@ -1,23 +1,75 @@
 //! Default configuration and first-run scaffolding.
 
-use crate::config::{AGENTS_DIR, CRON_DIR, DATA_DIR, DaemonConfig, SKILLS_DIR};
+use crate::config::{AgentConfig, DaemonConfig};
 use anyhow::{Context, Result};
 use model::ProviderConfig;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
+/// Agents subdirectory (contains *.md files).
+pub const AGENTS_DIR: &str = "agents";
+/// Skills subdirectory.
+pub const SKILLS_DIR: &str = "skills";
+/// Cron subdirectory (contains *.md files).
+pub const CRON_DIR: &str = "cron";
+/// Data subdirectory.
+pub const DATA_DIR: &str = "data";
+
+#[allow(dead_code)]
+/// SQLite memory database filename.
+pub const MEMORY_DB: &str = "memory.db";
+
+/// Resolve the global configuration directory (`~/.walrus/`).
+pub fn global_config_dir() -> PathBuf {
+    dirs::home_dir().expect("no home directory").join(".walrus")
+}
+
+/// Pinned socket path (`~/.walrus/walrus.sock`).
+pub fn socket_path() -> PathBuf {
+    global_config_dir().join("walrus.sock")
+}
+
+#[cfg(not(feature = "local"))]
 impl Default for DaemonConfig {
     fn default() -> Self {
         Self {
-            models: vec![ProviderConfig {
-                model: "deepseek-chat".into(),
-                api_key: None,
-                base_url: None,
-                loader: None,
-                quantization: None,
-                chat_template: None,
-            }],
-            channels: Vec::new(),
-            mcp_servers: Vec::new(),
+            models: [(
+                "deepseek-chat".into(),
+                ProviderConfig {
+                    model: "deepseek-chat".into(),
+                    api_key: None,
+                    base_url: None,
+                    loader: None,
+                    quantization: None,
+                    chat_template: None,
+                },
+            )]
+            .into(),
+            channels: Default::default(),
+            mcp_servers: Default::default(),
+            agents: AgentConfig::default(),
+        }
+    }
+}
+
+#[cfg(feature = "local")]
+impl Default for DaemonConfig {
+    fn default() -> Self {
+        Self {
+            models: [(
+                "local".into(),
+                ProviderConfig {
+                    model: "Qwen/Qwen3-4B".into(),
+                    api_key: None,
+                    base_url: None,
+                    loader: Some(model::Loader::Text),
+                    quantization: None,
+                    chat_template: None,
+                },
+            )]
+            .into(),
+            channels: Default::default(),
+            mcp_servers: Default::default(),
+            agents: AgentConfig::default(),
         }
     }
 }

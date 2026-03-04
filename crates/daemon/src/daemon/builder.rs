@@ -45,7 +45,8 @@ impl<'a> Builder<'a> {
 
     /// Construct the provider manager from config.
     async fn build_providers(&self) -> Result<ProviderManager> {
-        let manager = ProviderManager::from_configs(&self.config.models).await?;
+        let models = self.config.models.values().cloned().collect::<Vec<_>>();
+        let manager = ProviderManager::from_configs(&models).await?;
         tracing::info!(
             "provider manager initialized — active model: {}",
             manager.active_model()
@@ -64,9 +65,13 @@ impl<'a> Builder<'a> {
             skill::SkillHandler::load(PathBuf::new()).expect("empty skill handler")
         });
 
-        let mcp_handler =
-            mcp::McpHandler::load(self.config_dir.to_path_buf(), &self.config.mcp_servers).await;
-
+        let mcp_servers = self
+            .config
+            .mcp_servers
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        let mcp_handler = mcp::McpHandler::load(self.config_dir.to_path_buf(), &mcp_servers).await;
         let cron_dir = self.config_dir.join(config::CRON_DIR);
         let event_tx = self.event_tx.clone();
         let cron_handler = build_cron_handler(&cron_dir, move |job| {
