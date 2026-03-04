@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 /// Agent configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
-    /// Model used for the main process
-    pub default: CompactString,
+    /// Model used for the general text process
+    pub text: CompactString,
 
     /// Model used for vision tasks
     pub vision: Option<CompactString>,
@@ -20,7 +20,7 @@ pub struct AgentConfig {
 impl Default for AgentConfig {
     fn default() -> Self {
         Self {
-            default: "deepseek-chat".into(),
+            text: "deepseek-chat".into(),
             vision: None,
             embedding: None,
         }
@@ -31,7 +31,7 @@ impl Default for AgentConfig {
 impl Default for AgentConfig {
     fn default() -> Self {
         Self {
-            default: "Qwen/Qwen3-4B".into(),
+            text: "Qwen/Qwen3-4B".into(),
             vision: None,
             embedding: None,
         }

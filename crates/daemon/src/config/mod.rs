@@ -67,3 +67,49 @@ impl DaemonConfig {
         Self::from_toml(&content)
     }
 }
+
+#[cfg(not(feature = "local"))]
+impl Default for DaemonConfig {
+    fn default() -> Self {
+        Self {
+            models: [(
+                "deepseek-chat".into(),
+                ProviderConfig {
+                    model: "deepseek-chat".into(),
+                    api_key: None,
+                    base_url: None,
+                    loader: None,
+                    quantization: None,
+                    chat_template: None,
+                },
+            )]
+            .into(),
+            channels: Default::default(),
+            mcp_servers: Default::default(),
+            agents: AgentConfig::default(),
+        }
+    }
+}
+
+#[cfg(feature = "local")]
+impl Default for DaemonConfig {
+    fn default() -> Self {
+        Self {
+            models: [(
+                "local".into(),
+                ProviderConfig {
+                    model: "Qwen/Qwen3-4B".into(),
+                    api_key: None,
+                    base_url: None,
+                    loader: Some(model::Loader::Text),
+                    quantization: None,
+                    chat_template: None,
+                },
+            )]
+            .into(),
+            channels: Default::default(),
+            mcp_servers: Default::default(),
+            agents: AgentConfig::default(),
+        }
+    }
+}

@@ -1,9 +1,19 @@
 //! Default configuration and first-run scaffolding.
 
-use crate::config::{AgentConfig, DaemonConfig};
+use crate::config::DaemonConfig;
 use anyhow::{Context, Result};
-use model::ProviderConfig;
 use std::path::{Path, PathBuf};
+
+/// Default agent markdown content for first-run scaffold.
+pub const DEFAULT_AGENT_MD: &str = r#"---
+name: assistant
+description: A helpful assistant
+tools:
+  - remember
+---
+
+You are a helpful assistant. Be concise.
+"#;
 
 /// Agents subdirectory (contains *.md files).
 pub const AGENTS_DIR: &str = "agents";
@@ -27,63 +37,6 @@ pub fn global_config_dir() -> PathBuf {
 pub fn socket_path() -> PathBuf {
     global_config_dir().join("walrus.sock")
 }
-
-#[cfg(not(feature = "local"))]
-impl Default for DaemonConfig {
-    fn default() -> Self {
-        Self {
-            models: [(
-                "deepseek-chat".into(),
-                ProviderConfig {
-                    model: "deepseek-chat".into(),
-                    api_key: None,
-                    base_url: None,
-                    loader: None,
-                    quantization: None,
-                    chat_template: None,
-                },
-            )]
-            .into(),
-            channels: Default::default(),
-            mcp_servers: Default::default(),
-            agents: AgentConfig::default(),
-        }
-    }
-}
-
-#[cfg(feature = "local")]
-impl Default for DaemonConfig {
-    fn default() -> Self {
-        Self {
-            models: [(
-                "local".into(),
-                ProviderConfig {
-                    model: "Qwen/Qwen3-4B".into(),
-                    api_key: None,
-                    base_url: None,
-                    loader: Some(model::Loader::Text),
-                    quantization: None,
-                    chat_template: None,
-                },
-            )]
-            .into(),
-            channels: Default::default(),
-            mcp_servers: Default::default(),
-            agents: AgentConfig::default(),
-        }
-    }
-}
-
-/// Default agent markdown content for first-run scaffold.
-pub const DEFAULT_AGENT_MD: &str = r#"---
-name: assistant
-description: A helpful assistant
-tools:
-  - remember
----
-
-You are a helpful assistant. Be concise.
-"#;
 
 /// Scaffold the full config directory structure on first run.
 ///
