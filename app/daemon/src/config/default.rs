@@ -1,44 +1,9 @@
-//! Daemon configuration loaded from TOML.
+//! Default configuration and first-run scaffolding.
 
+use crate::config::{AGENTS_DIR, CRON_DIR, DATA_DIR, DaemonConfig, SKILLS_DIR};
 use anyhow::{Context, Result};
-pub use channel_router::ChannelConfig;
-pub use model::{ProviderConfig, ProviderManager};
-use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
-
-/// Agents subdirectory (contains *.md files).
-pub const AGENTS_DIR: &str = "agents";
-/// Skills subdirectory.
-pub const SKILLS_DIR: &str = "skills";
-/// Cron subdirectory (contains *.md files).
-pub const CRON_DIR: &str = "cron";
-/// Data subdirectory.
-pub const DATA_DIR: &str = "data";
-/// SQLite memory database filename.
-pub const MEMORY_DB: &str = "memory.db";
-
-/// Resolve the global configuration directory (`~/.walrus/`).
-pub fn global_config_dir() -> PathBuf {
-    dirs::home_dir().expect("no home directory").join(".walrus")
-}
-
-/// Pinned socket path (`~/.walrus/walrus.sock`).
-pub fn socket_path() -> PathBuf {
-    global_config_dir().join("walrus.sock")
-}
-
-/// Top-level daemon configuration.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct DaemonConfig {
-    /// LLM provider configurations (`[[models]]` array).
-    pub models: Vec<ProviderConfig>,
-    /// Channel configurations.
-    #[serde(default)]
-    pub channels: Vec<ChannelConfig>,
-    /// MCP server configurations.
-    #[serde(default)]
-    pub mcp_servers: Vec<mcp::McpServerConfig>,
-}
+use model::ProviderConfig;
+use std::path::Path;
 
 impl Default for DaemonConfig {
     fn default() -> Self {
@@ -67,20 +32,6 @@ tools:
 
 You are a helpful assistant. Be concise.
 "#;
-
-impl DaemonConfig {
-    /// Parse a TOML string into a `DaemonConfig`.
-    pub fn from_toml(toml_str: &str) -> anyhow::Result<Self> {
-        let config: Self = toml::from_str(toml_str)?;
-        Ok(config)
-    }
-
-    /// Load configuration from a file path.
-    pub fn load(path: &std::path::Path) -> anyhow::Result<Self> {
-        let content = std::fs::read_to_string(path)?;
-        Self::from_toml(&content)
-    }
-}
 
 /// Scaffold the full config directory structure on first run.
 ///

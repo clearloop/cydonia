@@ -2,7 +2,8 @@
 //!
 //! [`Agent`] owns its configuration, model, and message history. It drives
 //! LLM execution through [`Agent::step`], [`Agent::run`], and
-//! [`Agent::run_stream`]. Event emission is the caller's responsibility.
+//! [`Agent::run_stream`]. `run_stream()` is the canonical step loop —
+//! `run()` collects its events and returns the final response.
 
 use crate::dispatch::Dispatcher;
 use crate::event::{AgentEvent, AgentResponse, AgentStep, AgentStopReason};
@@ -10,12 +11,15 @@ use crate::model::{Message, Model, Request};
 use anyhow::Result;
 use async_stream::stream;
 use futures_core::Stream;
+use tokio::sync::mpsc;
 
 pub use builder::AgentBuilder;
 pub use config::AgentConfig;
+pub use parser::parse_agent_md;
 
 mod builder;
 pub mod config;
+mod parser;
 
 /// A stateful agent execution unit.
 ///
@@ -120,58 +124,41 @@ impl<M: Model> Agent<M> {
         }
     }
 
-    /// Run the agent loop up to `max_iterations`, returning the final response.
+    /// Run the agent loop to completion, returning the final response.
     ///
-    /// Each iteration calls [`Agent::step`]. Stops when the model produces a
-    /// response with no tool calls, hits the iteration limit, or errors.
-    pub async fn run<D: Dispatcher>(&mut self, dispatcher: &D) -> AgentResponse {
-        let mut steps = Vec::new();
-        let max = self.config.max_iterations;
+    /// Wraps [`Agent::run_stream`] — collects all events, sends each through
+    /// `events`, and extracts the `Done` response. The event sender allows
+    /// callers (like Runtime) to observe execution without reimplementing
+    /// the step loop.
+    pub async fn run<D: Dispatcher>(
+        &mut self,
+        dispatcher: &D,
+        events: mpsc::UnboundedSender<AgentEvent>,
+    ) -> AgentResponse {
+        use futures_util::StreamExt;
 
-        for _ in 0..max {
-            match self.step(dispatcher).await {
-                Ok(step) => {
-                    let has_tool_calls = !step.tool_calls.is_empty();
-                    let text = step.response.content().cloned();
-
-                    if !has_tool_calls {
-                        let stop_reason = Self::stop_reason(&step);
-                        steps.push(step);
-                        return AgentResponse {
-                            final_response: text,
-                            iterations: steps.len(),
-                            stop_reason,
-                            steps,
-                        };
-                    }
-
-                    steps.push(step);
-                }
-                Err(e) => {
-                    return AgentResponse {
-                        final_response: None,
-                        iterations: steps.len(),
-                        stop_reason: AgentStopReason::Error(e.to_string()),
-                        steps,
-                    };
-                }
+        let mut stream = std::pin::pin!(self.run_stream(dispatcher));
+        let mut response = None;
+        while let Some(event) = stream.next().await {
+            if let AgentEvent::Done(ref resp) = event {
+                response = Some(resp.clone());
             }
+            let _ = events.send(event);
         }
 
-        let final_response = steps.last().and_then(|s| s.response.content().cloned());
-        AgentResponse {
-            final_response,
-            iterations: steps.len(),
-            stop_reason: AgentStopReason::MaxIterations,
-            steps,
-        }
+        response.unwrap_or_else(|| AgentResponse {
+            final_response: None,
+            iterations: 0,
+            stop_reason: AgentStopReason::Error("stream ended without Done".into()),
+            steps: vec![],
+        })
     }
 
     /// Run the agent loop as a stream of [`AgentEvent`]s.
     ///
-    /// Yields events as they are produced during execution. This is a
-    /// convenience wrapper that calls [`Agent::step`] in a loop and yields
-    /// events directly.
+    /// The canonical step loop. Calls [`Agent::step`] up to `max_iterations`
+    /// times, yielding events as they are produced. Always finishes with a
+    /// `Done` event containing the [`AgentResponse`].
     pub fn run_stream<'a, D: Dispatcher + 'a>(
         &'a mut self,
         dispatcher: &'a D,
@@ -204,39 +191,36 @@ impl<M: Model> Agent<M> {
                         if !has_tool_calls {
                             let stop_reason = Self::stop_reason(&step);
                             steps.push(step);
-                            let response = AgentResponse {
+                            yield AgentEvent::Done(AgentResponse {
                                 final_response: text,
                                 iterations: steps.len(),
                                 stop_reason,
                                 steps,
-                            };
-                            yield AgentEvent::Done(response);
+                            });
                             return;
                         }
 
                         steps.push(step);
                     }
                     Err(e) => {
-                        let response = AgentResponse {
+                        yield AgentEvent::Done(AgentResponse {
                             final_response: None,
                             iterations: steps.len(),
                             stop_reason: AgentStopReason::Error(e.to_string()),
                             steps,
-                        };
-                        yield AgentEvent::Done(response);
+                        });
                         return;
                     }
                 }
             }
 
             let final_response = steps.last().and_then(|s| s.response.content().cloned());
-            let response = AgentResponse {
+            yield AgentEvent::Done(AgentResponse {
                 final_response,
                 iterations: steps.len(),
                 stop_reason: AgentStopReason::MaxIterations,
                 steps,
-            };
-            yield AgentEvent::Done(response);
+            });
         }
     }
 }

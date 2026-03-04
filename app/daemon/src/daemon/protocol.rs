@@ -1,8 +1,8 @@
-//! Server trait implementation for the Gateway.
+//! Server trait implementation for the Daemon.
 
-use crate::gateway::Gateway;
+use crate::daemon::Daemon;
 use anyhow::{Result, bail};
-use futures_util::StreamExt;
+use futures_util::{StreamExt, pin_mut};
 use memory::Memory;
 use protocol::api::Server;
 use protocol::message::{
@@ -14,7 +14,7 @@ use protocol::message::{
 use tokio::sync::mpsc;
 use wcore::AgentEvent;
 
-impl Server for Gateway {
+impl Server for Daemon {
     async fn send(&self, req: SendRequest) -> Result<SendResponse> {
         let response = self.runtime.send_to(&req.agent, &req.content).await?;
         Ok(SendResponse {
@@ -34,7 +34,7 @@ impl Server for Gateway {
             yield StreamEvent::Start { agent: agent.clone() };
 
             let stream = runtime.stream_to(&agent, &content);
-            futures_util::pin_mut!(stream);
+            pin_mut!(stream);
             while let Some(event) = stream.next().await {
                 match event {
                     AgentEvent::TextDelta(text) => {
@@ -98,7 +98,7 @@ impl Server for Gateway {
         &self,
         req: DownloadRequest,
     ) -> impl futures_core::Stream<Item = Result<DownloadEvent>> + Send {
-        let hf_endpoint = self.hf_endpoint.clone();
+        let hf_endpoint = self.runtime.model().hf_endpoint();
         async_stream::try_stream! {
             yield DownloadEvent::Start { model: req.model.clone() };
 
@@ -153,6 +153,14 @@ impl Server for Gateway {
             auto_restart: true,
         };
         let tools = self.runtime.hook().mcp().add(config).await?;
+
+        // Register newly added MCP tools on Runtime's registry.
+        for (tool, handler) in self.runtime.hook().mcp().tool_handlers().await {
+            if tools.iter().any(|t| t == &*tool.name) {
+                self.runtime.register_tool(tool, handler).await;
+            }
+        }
+
         Ok(McpAdded {
             name: req.name,
             tools,
@@ -161,6 +169,12 @@ impl Server for Gateway {
 
     async fn mcp_remove(&self, req: McpRemoveRequest) -> Result<McpRemoved> {
         let tools = self.runtime.hook().mcp().remove(&req.name).await?;
+
+        // Unregister removed MCP tools from Runtime's registry.
+        for tool_name in &tools {
+            self.runtime.unregister_tool(tool_name).await;
+        }
+
         Ok(McpRemoved {
             name: req.name,
             tools,
@@ -168,6 +182,17 @@ impl Server for Gateway {
     }
 
     async fn mcp_reload(&self) -> Result<McpReloaded> {
+        // Collect old tool names before reload.
+        let old_tool_names: Vec<compact_str::CompactString> = self
+            .runtime
+            .hook()
+            .mcp()
+            .tool_handlers()
+            .await
+            .into_iter()
+            .map(|(t, _)| t.name)
+            .collect();
+
         let servers = self
             .runtime
             .hook()
@@ -177,6 +202,11 @@ impl Server for Gateway {
                 Ok(config.mcp_servers)
             })
             .await?;
+
+        // Atomically swap old MCP tools for new ones on Runtime.
+        let new_tools = self.runtime.hook().mcp().tool_handlers().await;
+        self.runtime.replace_tools(&old_tool_names, new_tools).await;
+
         let servers = servers
             .into_iter()
             .map(|(name, tools)| McpServerSummary { name, tools })

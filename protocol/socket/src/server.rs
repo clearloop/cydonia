@@ -1,8 +1,6 @@
 //! Unix domain socket server — accept loop and per-connection message handler.
 
 use crate::codec;
-use futures_util::StreamExt;
-use protocol::api::Server;
 use protocol::message::client::ClientMessage;
 use protocol::message::server::ServerMessage;
 use tokio::net::UnixListener;
@@ -11,21 +9,25 @@ use tokio::sync::{mpsc, oneshot};
 
 /// Accept connections on the given `UnixListener` until shutdown is signalled.
 ///
-/// Each connection is handled in a separate task. The `state` must implement
-/// [`Server`] and be cheaply cloneable (typically via `Arc` internals).
-pub async fn accept_loop<S: Server + Clone + Send + 'static>(
+/// Each connection is handled in a separate task. For each incoming
+/// `ClientMessage`, calls `on_message(msg, reply_tx)` where `reply_tx` is
+/// the per-connection sender for streaming `ServerMessage`s back. The caller
+/// controls dispatch routing (DD#11).
+pub async fn accept_loop<F>(
     listener: UnixListener,
-    state: S,
+    on_message: F,
     mut shutdown: oneshot::Receiver<()>,
-) {
+) where
+    F: Fn(ClientMessage, mpsc::UnboundedSender<ServerMessage>) + Clone + Send + 'static,
+{
     loop {
         tokio::select! {
             result = listener.accept() => {
                 match result {
                     Ok((stream, _addr)) => {
-                        let state = state.clone();
+                        let cb = on_message.clone();
                         tokio::spawn(async move {
-                            handle_connection(stream, state).await;
+                            handle_connection(stream, cb).await;
                         });
                     }
                     Err(e) => {
@@ -42,7 +44,10 @@ pub async fn accept_loop<S: Server + Clone + Send + 'static>(
 }
 
 /// Handle an established Unix domain socket connection.
-async fn handle_connection<S: Server>(stream: tokio::net::UnixStream, state: S) {
+async fn handle_connection<F>(stream: tokio::net::UnixStream, on_message: F)
+where
+    F: Fn(ClientMessage, mpsc::UnboundedSender<ServerMessage>),
+{
     let (reader, writer) = stream.into_split();
     let (tx, rx) = mpsc::unbounded_channel::<ServerMessage>();
 
@@ -50,7 +55,7 @@ async fn handle_connection<S: Server>(stream: tokio::net::UnixStream, state: S) 
     let send_task = tokio::spawn(sender_loop(writer, rx));
 
     // Receiver loop: process incoming ClientMessages.
-    receiver_loop(reader, tx, state).await;
+    receiver_loop(reader, tx, on_message).await;
 
     // Clean up — dropping tx already happened in receiver_loop on exit,
     // which causes sender_loop to end.
@@ -67,12 +72,14 @@ async fn sender_loop(mut writer: OwnedWriteHalf, mut rx: mpsc::UnboundedReceiver
     }
 }
 
-/// Reads client messages from the socket and dispatches them via Server trait.
-async fn receiver_loop<S: Server>(
+/// Reads client messages from the socket and dispatches via callback.
+async fn receiver_loop<F>(
     mut reader: OwnedReadHalf,
     tx: mpsc::UnboundedSender<ServerMessage>,
-    state: S,
-) {
+    on_message: F,
+) where
+    F: Fn(ClientMessage, mpsc::UnboundedSender<ServerMessage>),
+{
     loop {
         let client_msg: ClientMessage = match codec::read_message(&mut reader).await {
             Ok(msg) => msg,
@@ -83,10 +90,6 @@ async fn receiver_loop<S: Server>(
             }
         };
 
-        let stream = state.dispatch(client_msg);
-        tokio::pin!(stream);
-        while let Some(server_msg) = stream.next().await {
-            let _ = tx.send(server_msg);
-        }
+        on_message(client_msg, tx.clone());
     }
 }

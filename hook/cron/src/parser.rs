@@ -1,9 +1,10 @@
-//! Cron markdown loading.
+//! Cron markdown parsing.
+//!
+//! Parses YAML frontmatter + Markdown body into a [`CronEntry`].
 
-use crate::loader::split_yaml_frontmatter;
 use compact_str::CompactString;
 use serde::Deserialize;
-use std::path::Path;
+use wcore::utils::split_yaml_frontmatter;
 
 /// A cron job entry parsed from a markdown file.
 #[derive(Debug, Clone)]
@@ -40,30 +41,4 @@ pub fn parse_cron_md(content: &str) -> anyhow::Result<CronEntry> {
         agent: CompactString::from(fm.agent),
         message: body.trim().to_owned(),
     })
-}
-
-/// Load all cron markdown files from a directory.
-///
-/// Each `.md` file is parsed with [`parse_cron_md`]. Non-`.md` files are
-/// silently skipped. Entries are sorted by filename for deterministic ordering.
-/// Returns an empty vec if the directory does not exist.
-pub fn load_cron_dir(path: &Path) -> anyhow::Result<Vec<CronEntry>> {
-    if !path.exists() {
-        tracing::warn!("cron directory does not exist: {}", path.display());
-        return Ok(Vec::new());
-    }
-
-    let mut entries: Vec<_> = std::fs::read_dir(path)?
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().is_some_and(|ext| ext == "md"))
-        .collect();
-    entries.sort_by_key(|e| e.file_name());
-
-    let mut crons = Vec::with_capacity(entries.len());
-    for entry in entries {
-        let content = std::fs::read_to_string(entry.path())?;
-        crons.push(parse_cron_md(&content)?);
-    }
-
-    Ok(crons)
 }

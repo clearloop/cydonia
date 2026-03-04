@@ -1,12 +1,12 @@
 //! walrusd — the walrus daemon.
 //!
-//! Resolves the global config directory, scaffolds on first run, and serves
-//! the Unix domain socket.
+//! Resolves the global config directory, scaffolds on first run, and starts
+//! the daemon on a Unix domain socket.
 
 use anyhow::Result;
 use tokio::signal;
 use tracing_subscriber::EnvFilter;
-use walrus_daemon::config;
+use walrus_daemon::{Daemon, config};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -20,7 +20,7 @@ async fn main() -> Result<()> {
         tracing::info!("created config directory at {}", config_dir.display());
     }
 
-    let handle = walrus_daemon::serve(&config_dir).await?;
+    let handle = Daemon::start(&config_dir).await?;
     tracing::info!("walrusd listening on {}", handle.socket_path.display());
 
     signal::ctrl_c().await?;

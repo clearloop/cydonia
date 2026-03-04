@@ -14,13 +14,11 @@ use walrus_runtime::prelude::*;
 #[tokio::main]
 async fn main() {
     common::init_tracing();
-    let (runtime, _hook) = common::build_runtime();
+    let mut runtime = common::build_runtime();
 
-    runtime
-        .add_agent(
-            AgentConfig::new("assistant").system_prompt("You are a helpful assistant. Be concise."),
-        )
-        .await;
+    runtime.add_agent(
+        AgentConfig::new("assistant").system_prompt("You are a helpful assistant. Be concise."),
+    );
 
     println!("Agent REPL (type 'exit' to quit)");
     println!("---");

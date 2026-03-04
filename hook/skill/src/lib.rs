@@ -8,10 +8,8 @@ use anyhow::Result;
 use compact_str::CompactString;
 use runtime::Hook;
 use std::collections::BTreeMap;
-use std::future::Future;
 use std::path::PathBuf;
 use tokio::sync::RwLock;
-use wcore::model::Tool;
 
 pub mod loader;
 
@@ -261,18 +259,5 @@ impl Hook for SkillHandler {
             }
         }
         config
-    }
-
-    fn tools(&self, _agent: &str) -> Vec<Tool> {
-        vec![]
-    }
-
-    fn dispatch(
-        &self,
-        _agent: &str,
-        calls: &[(&str, &str)],
-    ) -> impl Future<Output = Vec<Result<String>>> + Send {
-        let len = calls.len();
-        async move { (0..len).map(|_| Ok(String::new())).collect() }
     }
 }

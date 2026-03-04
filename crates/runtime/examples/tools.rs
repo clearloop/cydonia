@@ -10,13 +10,14 @@
 
 mod common;
 
+use std::pin::Pin;
 use std::sync::Arc;
-use walrus_runtime::prelude::*;
+use walrus_runtime::{Handler, prelude::*};
 
 #[tokio::main]
 async fn main() {
     common::init_tracing();
-    let mut hook = common::build_hook();
+    let hook = common::build_hook();
 
     // current_time: LLMs don't know the current time.
     let time_tool = Tool {
@@ -29,24 +30,25 @@ async fn main() {
         .unwrap(),
         strict: false,
     };
-    hook.register(
-        time_tool,
-        |_| async move { chrono::Utc::now().to_rfc3339() },
-    );
 
     let provider = common::build_provider();
-    let runtime = Runtime::new(provider, Arc::new(hook));
+    let mut runtime = Runtime::new(provider, hook);
 
-    runtime
-        .add_agent(
-            AgentConfig::new("assistant")
-                .system_prompt(
-                    "You are a helpful assistant with access to tools. \
-                     Use current_time when the user asks about the current time or date.",
-                )
-                .tool("current_time"),
-        )
-        .await;
+    // Register tool on Runtime (not on hook).
+    let handler: Handler = Arc::new(|_| {
+        Box::pin(async move { chrono::Utc::now().to_rfc3339() })
+            as Pin<Box<dyn std::future::Future<Output = String> + Send>>
+    });
+    runtime.register_tool(time_tool, handler).await;
+
+    runtime.add_agent(
+        AgentConfig::new("assistant")
+            .system_prompt(
+                "You are a helpful assistant with access to tools. \
+                 Use current_time when the user asks about the current time or date.",
+            )
+            .tool("current_time"),
+    );
 
     println!("Tools REPL — try asking:");
     println!("  'What time is it?'");

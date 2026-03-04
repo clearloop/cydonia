@@ -1,9 +1,8 @@
-//! Walrus runtime: agent registry and hook orchestration.
+//! Walrus runtime: agent registry, tool registry, and hook orchestration.
 //!
-//! The [`Runtime`] holds agents behind a `RwLock` and drives execution
-//! through the [`Hook`] lifecycle. `send_to` and `stream_to` are the
-//! primary execution entry points — they take an agent out, run the step
-//! loop, emit events through the hook, and put the agent back.
+//! The [`Runtime`] holds agents in a plain `BTreeMap` with per-agent
+//! `Mutex` for concurrent execution. Tools are stored in a shared registry
+//! (`Arc<RwLock>`) supporting post-startup registration (e.g. MCP hot-reload).
 
 pub use hook::Hook;
 pub use memory::{InMemory, Memory, NoEmbedder};
@@ -14,9 +13,10 @@ use anyhow::Result;
 use async_stream::stream;
 use compact_str::CompactString;
 use futures_core::Stream;
-use std::{collections::BTreeMap, future::Future, sync::Arc};
-use tokio::sync::RwLock;
-use wcore::{AgentEvent, AgentResponse, AgentStopReason};
+use futures_util::StreamExt;
+use std::{collections::BTreeMap, future::Future, pin::Pin, sync::Arc};
+use tokio::sync::{Mutex, RwLock, mpsc};
+use wcore::{AgentEvent, ClosureDispatcher, DispatchFn};
 
 pub mod hook;
 
@@ -29,46 +29,34 @@ pub mod prelude {
 
 /// A type-erased async tool handler.
 pub type Handler =
-    Arc<dyn Fn(String) -> std::pin::Pin<Box<dyn Future<Output = String> + Send>> + Send + Sync>;
+    Arc<dyn Fn(String) -> Pin<Box<dyn Future<Output = String> + Send>> + Send + Sync>;
 
-/// Thin wrapper that implements wcore's `Dispatcher` by forwarding to Hook.
-pub struct AgentDispatcher<'a, H: Hook> {
-    /// The hook backend.
-    pub hook: &'a H,
-    /// The agent name for scoped dispatch.
-    pub agent: &'a str,
-}
-
-impl<H: Hook> wcore::Dispatcher for AgentDispatcher<'_, H> {
-    fn dispatch(&self, calls: &[(&str, &str)]) -> impl Future<Output = Vec<Result<String>>> + Send {
-        self.hook.dispatch(self.agent, calls)
-    }
-
-    fn tools(&self) -> Vec<Tool> {
-        self.hook.tools(self.agent)
-    }
-}
-
-/// The walrus runtime — agent registry and hook orchestration.
+/// The walrus runtime — agent registry, tool registry, and hook orchestration.
 ///
-/// Generic over `M: Model` (the LLM provider) and `H: Hook` (the lifecycle
-/// backend). The model is owned by Runtime and cloned into each agent.
-/// The hook provides tool schemas, tool dispatch, prompt enrichment, and
-/// event observation.
+/// Each agent is wrapped in a per-agent `Mutex` for concurrent execution.
+/// Tools are stored behind `Arc<RwLock>` — registered before or after
+/// wrapping in `Arc` (for MCP hot-reload).
 pub struct Runtime<M: wcore::model::Model, H: Hook> {
     model: M,
-    hook: Arc<H>,
-    agents: RwLock<BTreeMap<CompactString, wcore::Agent<M>>>,
+    hook: H,
+    agents: BTreeMap<CompactString, Arc<Mutex<wcore::Agent<M>>>>,
+    tools: Arc<RwLock<BTreeMap<CompactString, (Tool, Handler)>>>,
 }
 
 impl<M: wcore::model::Model + Send + Sync + Clone + 'static, H: Hook + 'static> Runtime<M, H> {
     /// Create a new runtime with the given model and hook backend.
-    pub fn new(model: M, hook: Arc<H>) -> Self {
+    pub fn new(model: M, hook: H) -> Self {
         Self {
             model,
             hook,
-            agents: RwLock::new(BTreeMap::new()),
+            agents: BTreeMap::new(),
+            tools: Arc::new(RwLock::new(BTreeMap::new())),
         }
+    }
+
+    /// Access the model backend.
+    pub fn model(&self) -> &M {
+        &self.model
     }
 
     /// Access the hook backend.
@@ -76,172 +64,173 @@ impl<M: wcore::model::Model + Send + Sync + Clone + 'static, H: Hook + 'static> 
         &self.hook
     }
 
+    // --- Tool registry ---
+
+    /// Register a tool with its handler.
+    ///
+    /// Works both before and after wrapping in `Arc` (the registry is
+    /// behind `RwLock`).
+    pub async fn register_tool(&self, tool: Tool, handler: Handler) {
+        let name = tool.name.clone();
+        self.tools.write().await.insert(name, (tool, handler));
+    }
+
+    /// Remove a tool by name. Returns `true` if it existed.
+    pub async fn unregister_tool(&self, name: &str) -> bool {
+        self.tools.write().await.remove(name).is_some()
+    }
+
+    /// Atomically replace a set of tools. Removes `old_names` and inserts
+    /// `new_tools` under a single write lock — no window where agents see
+    /// partial state.
+    pub async fn replace_tools(
+        &self,
+        old_names: &[CompactString],
+        new_tools: Vec<(Tool, Handler)>,
+    ) {
+        let mut registry = self.tools.write().await;
+        for name in old_names {
+            registry.remove(name);
+        }
+        for (tool, handler) in new_tools {
+            let name = tool.name.clone();
+            registry.insert(name, (tool, handler));
+        }
+    }
+
+    /// Build a [`ClosureDispatcher`] for the named agent.
+    ///
+    /// Reads the agent's `config.tools` list and filters the registry.
+    /// If the list is empty, all registered tools are included.
+    async fn dispatcher_for(&self, agent: &str) -> ClosureDispatcher {
+        let registry = self.tools.read().await;
+
+        // Get the agent's tool filter list.
+        let filter: Option<Vec<CompactString>> = self
+            .agents
+            .get(agent)
+            .and_then(|m| m.try_lock().ok())
+            .map(|g| g.config.tools.to_vec())
+            .filter(|t| !t.is_empty());
+
+        let tools: Vec<Tool> = match &filter {
+            Some(names) => registry
+                .values()
+                .filter(|(t, _)| names.iter().any(|n| n == &*t.name))
+                .map(|(t, _)| t.clone())
+                .collect(),
+            None => registry.values().map(|(t, _)| t.clone()).collect(),
+        };
+
+        let registry_arc = Arc::clone(&self.tools);
+        let dispatch_fn: DispatchFn = Arc::new(move |calls: Vec<(String, String)>| {
+            let registry = Arc::clone(&registry_arc);
+            Box::pin(async move {
+                let reg = registry.read().await;
+                let mut results = Vec::with_capacity(calls.len());
+                for (method, params) in &calls {
+                    let output = if let Some((_, handler)) = reg.get(method.as_str()) {
+                        Ok(handler(params.clone()).await)
+                    } else {
+                        Ok(format!("function {method} not available"))
+                    };
+                    results.push(output);
+                }
+                results
+            })
+        });
+
+        ClosureDispatcher::new(tools, dispatch_fn)
+    }
+
+    // --- Agent registry ---
+
     /// Register an agent from its configuration.
     ///
-    /// Calls `hook.on_build_agent(config)` to enrich the config before
-    /// building the agent. Clones the runtime's model into the agent.
-    pub async fn add_agent(&self, config: AgentConfig) {
+    /// Must be called before wrapping the runtime in `Arc`. Calls
+    /// `hook.on_build_agent(config)` to enrich the config before building.
+    pub fn add_agent(&mut self, config: AgentConfig) {
         let config = self.hook.on_build_agent(config);
         let name = config.name.clone();
         let agent = wcore::AgentBuilder::new(self.model.clone())
             .config(config)
             .build();
-        self.agents.write().await.insert(name, agent);
+        self.agents.insert(name, Arc::new(Mutex::new(agent)));
     }
 
     /// Get a registered agent's config by name (cloned).
     pub async fn agent(&self, name: &str) -> Option<AgentConfig> {
-        self.agents.read().await.get(name).map(|a| a.config.clone())
+        let mutex = self.agents.get(name)?;
+        Some(mutex.lock().await.config.clone())
     }
 
     /// Get all registered agent configs (cloned, alphabetical order).
     pub async fn agents(&self) -> Vec<AgentConfig> {
-        self.agents
-            .read()
-            .await
-            .values()
-            .map(|a| a.config.clone())
-            .collect()
+        let mut configs = Vec::with_capacity(self.agents.len());
+        for mutex in self.agents.values() {
+            configs.push(mutex.lock().await.config.clone());
+        }
+        configs
     }
 
-    /// Take an agent out of the registry for execution.
-    ///
-    /// The agent is removed from the map. Caller must call [`put_agent`]
-    /// to re-insert it after execution completes.
-    pub async fn take_agent(&self, name: &str) -> Option<wcore::Agent<M>> {
-        self.agents.write().await.remove(name)
-    }
-
-    /// Put an agent back into the registry after execution.
-    pub async fn put_agent(&self, agent: wcore::Agent<M>) {
-        let name = agent.config.name.clone();
-        self.agents.write().await.insert(name, agent);
+    /// Get the per-agent mutex by name.
+    pub fn agent_mutex(&self, name: &str) -> Option<Arc<Mutex<wcore::Agent<M>>>> {
+        self.agents.get(name).cloned()
     }
 
     /// Clear the conversation history for a named agent.
     pub async fn clear_session(&self, agent: &str) {
-        if let Some(a) = self.agents.write().await.get_mut(agent) {
-            a.clear_history();
+        if let Some(mutex) = self.agents.get(agent) {
+            mutex.lock().await.clear_history();
         }
     }
 
+    // --- Execution ---
+
     /// Send a message to an agent and run to completion.
     ///
-    /// Takes the agent from the registry, pushes the user message, runs
-    /// the step loop, emits events through `hook.on_event()`, and puts
-    /// the agent back. Returns the final response.
-    pub async fn send_to(&self, agent: &str, content: &str) -> Result<AgentResponse> {
-        let mut agent_instance = self
+    /// Builds a dispatcher from the tool registry, locks the per-agent mutex,
+    /// pushes the user message, delegates to `agent.run()`, and forwards all
+    /// events to `hook.on_event()`.
+    pub async fn send_to(&self, agent: &str, content: &str) -> Result<wcore::AgentResponse> {
+        let mutex = self
             .agents
-            .write()
-            .await
-            .remove(agent)
+            .get(agent)
             .ok_or_else(|| anyhow::anyhow!("agent '{agent}' not registered"))?;
 
-        agent_instance.push_message(Message::user(content));
-        let dispatcher = AgentDispatcher {
-            hook: &*self.hook,
-            agent,
-        };
+        let dispatcher = self.dispatcher_for(agent).await;
+        let mut guard = mutex.lock().await;
+        guard.push_message(Message::user(content));
 
-        let mut steps = Vec::new();
-        let max = agent_instance.config.max_iterations;
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let response = guard.run(&dispatcher, tx).await;
 
-        let response = 'outer: {
-            for _ in 0..max {
-                match agent_instance.step(&dispatcher).await {
-                    Ok(step) => {
-                        let has_tool_calls = !step.tool_calls.is_empty();
-                        let text = step.response.content().cloned();
+        // Drain buffered events and forward to hook.
+        while let Ok(event) = rx.try_recv() {
+            self.hook.on_event(agent, &event);
+        }
 
-                        if let Some(ref t) = text {
-                            self.hook.on_event(agent, &AgentEvent::TextDelta(t.clone()));
-                        }
-                        if has_tool_calls {
-                            self.hook.on_event(
-                                agent,
-                                &AgentEvent::ToolCallsStart(step.tool_calls.clone()),
-                            );
-                            for (tc, result) in step.tool_calls.iter().zip(&step.tool_results) {
-                                self.hook.on_event(
-                                    agent,
-                                    &AgentEvent::ToolResult {
-                                        call_id: tc.id.clone(),
-                                        output: result.content.clone(),
-                                    },
-                                );
-                            }
-                            self.hook.on_event(agent, &AgentEvent::ToolCallsComplete);
-                        }
-
-                        if !has_tool_calls {
-                            let stop_reason = if text.is_some() {
-                                AgentStopReason::TextResponse
-                            } else {
-                                AgentStopReason::NoAction
-                            };
-                            steps.push(step);
-                            let resp = AgentResponse {
-                                final_response: text,
-                                iterations: steps.len(),
-                                stop_reason,
-                                steps,
-                            };
-                            self.hook.on_event(agent, &AgentEvent::Done(resp.clone()));
-                            break 'outer resp;
-                        }
-
-                        steps.push(step);
-                    }
-                    Err(e) => {
-                        let resp = AgentResponse {
-                            final_response: None,
-                            iterations: steps.len(),
-                            stop_reason: AgentStopReason::Error(e.to_string()),
-                            steps,
-                        };
-                        self.hook.on_event(agent, &AgentEvent::Done(resp.clone()));
-                        break 'outer resp;
-                    }
-                }
-            }
-
-            let final_response = steps.last().and_then(|s| s.response.content().cloned());
-            let resp = AgentResponse {
-                final_response,
-                iterations: steps.len(),
-                stop_reason: AgentStopReason::MaxIterations,
-                steps,
-            };
-            self.hook.on_event(agent, &AgentEvent::Done(resp.clone()));
-            resp
-        };
-
-        self.agents
-            .write()
-            .await
-            .insert(CompactString::from(agent), agent_instance);
         Ok(response)
     }
 
     /// Send a message to an agent and stream response events.
     ///
-    /// Takes the agent, runs the step loop, yields `AgentEvent`s to the
-    /// caller AND emits them through `hook.on_event()`. Puts the agent
-    /// back when done.
+    /// Builds a dispatcher from the tool registry, locks the per-agent mutex,
+    /// delegates to `agent.run_stream()`, and forwards each event to
+    /// `hook.on_event()`.
     pub fn stream_to<'a>(
         &'a self,
         agent: &'a str,
         content: &'a str,
     ) -> impl Stream<Item = AgentEvent> + 'a {
         stream! {
-            let mut agent_instance = match self.agents.write().await.remove(agent) {
-                Some(a) => a,
+            let mutex = match self.agents.get(agent) {
+                Some(m) => m,
                 None => {
-                    let resp = AgentResponse {
+                    let resp = wcore::AgentResponse {
                         final_response: None,
                         iterations: 0,
-                        stop_reason: AgentStopReason::Error(
+                        stop_reason: wcore::AgentStopReason::Error(
                             format!("agent '{agent}' not registered"),
                         ),
                         steps: vec![],
@@ -251,101 +240,15 @@ impl<M: wcore::model::Model + Send + Sync + Clone + 'static, H: Hook + 'static> 
                 }
             };
 
-            agent_instance.push_message(Message::user(content));
-            let dispatcher = AgentDispatcher {
-                hook: &*self.hook,
-                agent,
-            };
+            let dispatcher = self.dispatcher_for(agent).await;
+            let mut guard = mutex.lock().await;
+            guard.push_message(Message::user(content));
 
-            let mut steps = Vec::new();
-            let max = agent_instance.config.max_iterations;
-
-            for _ in 0..max {
-                match agent_instance.step(&dispatcher).await {
-                    Ok(step) => {
-                        let has_tool_calls = !step.tool_calls.is_empty();
-                        let text = step.response.content().cloned();
-
-                        if let Some(ref t) = text {
-                            let event = AgentEvent::TextDelta(t.clone());
-                            self.hook.on_event(agent, &event);
-                            yield event;
-                        }
-
-                        if has_tool_calls {
-                            let event = AgentEvent::ToolCallsStart(step.tool_calls.clone());
-                            self.hook.on_event(agent, &event);
-                            yield event;
-
-                            for (tc, result) in step.tool_calls.iter().zip(&step.tool_results) {
-                                let event = AgentEvent::ToolResult {
-                                    call_id: tc.id.clone(),
-                                    output: result.content.clone(),
-                                };
-                                self.hook.on_event(agent, &event);
-                                yield event;
-                            }
-
-                            let event = AgentEvent::ToolCallsComplete;
-                            self.hook.on_event(agent, &event);
-                            yield event;
-                        }
-
-                        if !has_tool_calls {
-                            let stop_reason = if text.is_some() {
-                                AgentStopReason::TextResponse
-                            } else {
-                                AgentStopReason::NoAction
-                            };
-                            steps.push(step);
-                            let resp = AgentResponse {
-                                final_response: text,
-                                iterations: steps.len(),
-                                stop_reason,
-                                steps,
-                            };
-                            self.hook.on_event(agent, &AgentEvent::Done(resp.clone()));
-                            yield AgentEvent::Done(resp);
-                            self.agents.write().await.insert(
-                                CompactString::from(agent),
-                                agent_instance,
-                            );
-                            return;
-                        }
-
-                        steps.push(step);
-                    }
-                    Err(e) => {
-                        let resp = AgentResponse {
-                            final_response: None,
-                            iterations: steps.len(),
-                            stop_reason: AgentStopReason::Error(e.to_string()),
-                            steps,
-                        };
-                        self.hook.on_event(agent, &AgentEvent::Done(resp.clone()));
-                        yield AgentEvent::Done(resp);
-                        self.agents.write().await.insert(
-                            CompactString::from(agent),
-                            agent_instance,
-                        );
-                        return;
-                    }
-                }
+            let mut event_stream = std::pin::pin!(guard.run_stream(&dispatcher));
+            while let Some(event) = event_stream.next().await {
+                self.hook.on_event(agent, &event);
+                yield event;
             }
-
-            let final_response = steps.last().and_then(|s| s.response.content().cloned());
-            let resp = AgentResponse {
-                final_response,
-                iterations: steps.len(),
-                stop_reason: AgentStopReason::MaxIterations,
-                steps,
-            };
-            self.hook.on_event(agent, &AgentEvent::Done(resp.clone()));
-            yield AgentEvent::Done(resp);
-            self.agents.write().await.insert(
-                CompactString::from(agent),
-                agent_instance,
-            );
         }
     }
 }

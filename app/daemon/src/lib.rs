@@ -2,12 +2,9 @@
 //! scheduling. Personal agent, local-first.
 
 pub mod config;
-pub mod gateway;
-pub mod loader;
+pub mod daemon;
+pub(crate) mod hook;
 
 pub use config::DaemonConfig;
-pub use gateway::{
-    Gateway, GatewayHook,
-    builder::build_runtime,
-    serve::{ServeHandle, serve, serve_with_config},
-};
+pub use daemon::{Daemon, DaemonHandle};
+pub use hook::DaemonHook;

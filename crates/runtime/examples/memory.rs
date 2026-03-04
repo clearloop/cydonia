@@ -10,7 +10,6 @@
 
 mod common;
 
-use std::sync::Arc;
 use walrus_runtime::{Memory, prelude::*};
 
 #[tokio::main]
@@ -25,16 +24,13 @@ async fn main() {
     hook.memory()
         .set("learning", "Currently learning Rust, focus on async.");
 
-    let hook = Arc::new(hook);
     let provider = common::build_provider();
-    let runtime = Runtime::new(provider, Arc::clone(&hook));
+    let mut runtime = Runtime::new(provider, hook);
 
-    runtime
-        .add_agent(AgentConfig::new("assistant").system_prompt(
-            "You are a helpful assistant. Use any stored memory about the user \
-                     to personalize your responses.",
-        ))
-        .await;
+    runtime.add_agent(AgentConfig::new("assistant").system_prompt(
+        "You are a helpful assistant. Use any stored memory about the user \
+                 to personalize your responses.",
+    ));
 
     println!("Memory REPL — the assistant knows your stored context.");
     println!("Try: 'What do you know about me?' or tell it something new.");
@@ -42,12 +38,12 @@ async fn main() {
     println!("---");
 
     // Show initial memory state.
-    let entries = hook.memory().entries();
+    let entries = runtime.hook().memory().entries();
     println!("[Memory: {} entries]", entries.len());
     for (key, value) in &entries {
         println!("  {key} = {value}");
     }
     println!();
 
-    common::repl_with_memory(&runtime, &hook, "assistant").await;
+    common::repl_with_memory(&runtime, "assistant").await;
 }

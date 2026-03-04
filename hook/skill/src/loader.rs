@@ -8,6 +8,7 @@ use compact_str::CompactString;
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::path::Path;
+use wcore::utils::split_yaml_frontmatter;
 
 /// YAML frontmatter deserialization target for SKILL.md files.
 #[derive(Debug, Deserialize)]
@@ -85,27 +86,4 @@ pub fn load_skills_dir(path: impl AsRef<Path>, tier: SkillTier) -> anyhow::Resul
     }
 
     Ok(registry)
-}
-
-/// Split YAML frontmatter from the body. Frontmatter is delimited by `---`.
-fn split_yaml_frontmatter(content: &str) -> anyhow::Result<(&str, &str)> {
-    let content = content.trim_start();
-    if !content.starts_with("---") {
-        anyhow::bail!("missing YAML frontmatter delimiter (---)");
-    }
-
-    let after_first = content[3..].trim_start_matches(['\n', '\r']);
-
-    let mut pos = 0;
-    for line in after_first.lines() {
-        if line.trim() == "---" {
-            let frontmatter = &after_first[..pos].trim_end();
-            let body_start = pos + line.len();
-            let body = after_first[body_start..].trim_start_matches(['\n', '\r']);
-            return Ok((frontmatter, body));
-        }
-        pos += line.len() + 1;
-    }
-
-    anyhow::bail!("missing closing YAML frontmatter delimiter (---)")
 }

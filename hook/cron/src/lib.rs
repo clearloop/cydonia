@@ -1,8 +1,8 @@
-//! Cron scheduler — protocol client + hook for periodic agent tasks.
+//! Cron scheduler — periodic agent tasks with dynamic job addition.
 //!
-//! Implements [`Client`](protocol::api::Client) to fire scheduled jobs via
-//! `SendRequest`, and [`Hook`](runtime::Hook) to expose a `create_cron` tool
-//! that agents can use to schedule new jobs dynamically.
+//! Exposes a `create_cron` tool that agents can use to schedule new jobs
+//! dynamically. Jobs fire via a caller-provided callback, and the running
+//! scheduler picks up dynamically created jobs without daemon restart.
 
 use chrono::Utc;
 use compact_str::CompactString;
@@ -12,13 +12,14 @@ use protocol::message::SendRequest;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::{
-    sync::{RwLock, broadcast},
+    sync::{RwLock, broadcast, mpsc},
     task::JoinHandle,
     time,
 };
 
 mod client;
 pub mod hook;
+pub mod parser;
 
 /// A parsed cron job ready for scheduling.
 #[derive(Debug, Clone)]
@@ -89,23 +90,45 @@ impl CronScheduler {
 
     /// Start the scheduler. Calls `on_fire` for each job when it fires.
     ///
-    /// Before sleeping, the scheduler identifies which jobs are due at the
-    /// soonest upcoming time. After waking it fires exactly those jobs,
-    /// avoiding the ambiguity of re-querying `upcoming()` post-sleep.
-    fn start<F, Fut>(self, on_fire: F, mut shutdown: broadcast::Receiver<()>) -> JoinHandle<()>
+    /// Accepts an optional `mpsc::UnboundedReceiver<CronJob>` for dynamic
+    /// job addition. New jobs are merged into the live list between fire
+    /// cycles. Before sleeping, the scheduler identifies which jobs are due
+    /// at the soonest upcoming time. After waking it fires exactly those
+    /// jobs, avoiding the ambiguity of re-querying `upcoming()` post-sleep.
+    fn start<F, Fut>(
+        mut self,
+        on_fire: F,
+        mut add_rx: mpsc::UnboundedReceiver<CronJob>,
+        mut shutdown: broadcast::Receiver<()>,
+    ) -> JoinHandle<()>
     where
         F: Fn(CronJob) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = ()> + Send + 'static,
     {
         tokio::spawn(async move {
-            if self.jobs.is_empty() {
-                tracing::info!("cron scheduler started with no jobs");
-                let _ = shutdown.recv().await;
-                return;
-            }
-
             tracing::info!("cron scheduler started with {} job(s)", self.jobs.len());
             loop {
+                // Drain any dynamically added jobs before computing schedule.
+                while let Ok(job) = add_rx.try_recv() {
+                    tracing::info!("cron scheduler: added dynamic job '{}'", job.name);
+                    self.jobs.push(job);
+                }
+
+                if self.jobs.is_empty() {
+                    // No jobs yet — wait for a dynamic add or shutdown.
+                    tokio::select! {
+                        Some(job) = add_rx.recv() => {
+                            tracing::info!("cron scheduler: added dynamic job '{}'", job.name);
+                            self.jobs.push(job);
+                            continue;
+                        }
+                        _ = shutdown.recv() => {
+                            tracing::info!("cron scheduler shutting down");
+                            return;
+                        }
+                    }
+                }
+
                 let now = Utc::now();
                 let mut due_jobs: Vec<usize> = Vec::new();
                 let mut soonest = None::<chrono::DateTime<Utc>>;
@@ -144,6 +167,11 @@ impl CronScheduler {
                             on_fire(self.jobs[i].clone()).await;
                         }
                     }
+                    Some(job) = add_rx.recv() => {
+                        tracing::info!("cron scheduler: added dynamic job '{}'", job.name);
+                        self.jobs.push(job);
+                        // Re-loop to recalculate schedule with new job.
+                    }
                     _ = shutdown.recv() => {
                         tracing::info!("cron scheduler shutting down");
                         return;
@@ -157,15 +185,15 @@ impl CronScheduler {
 /// Start the cron scheduler with an in-process protocol client.
 ///
 /// Takes a snapshot of jobs and a `Server` impl (e.g. `Gateway`) to dispatch
-/// `SendRequest`s through the protocol layer. Jobs added dynamically via the
-/// `create_cron` tool are not picked up by a running scheduler — they take
-/// effect after the next daemon restart.
+/// `SendRequest`s through the protocol layer. Dynamic job addition is not
+/// supported through this function — use [`spawn_with_callback`] instead.
 pub fn spawn<S: Server + Clone + Send + 'static>(
     jobs: Vec<CronJob>,
     server: S,
     shutdown: broadcast::Receiver<()>,
 ) {
     let scheduler = CronScheduler::new(jobs);
+    let (_add_tx, add_rx) = mpsc::unbounded_channel();
 
     scheduler.start(
         move |job| {
@@ -190,6 +218,27 @@ pub fn spawn<S: Server + Clone + Send + 'static>(
                 }
             }
         },
+        add_rx,
         shutdown,
     );
+}
+
+/// Start the cron scheduler with a caller-provided fire callback.
+///
+/// Returns an `mpsc::UnboundedSender<CronJob>` for dynamically adding jobs
+/// to the running scheduler. The scheduler picks up new jobs between fire
+/// cycles without requiring a restart.
+pub fn spawn_with_callback<F, Fut>(
+    jobs: Vec<CronJob>,
+    on_fire: F,
+    shutdown: broadcast::Receiver<()>,
+) -> mpsc::UnboundedSender<CronJob>
+where
+    F: Fn(CronJob) -> Fut + Send + Sync + 'static,
+    Fut: std::future::Future<Output = ()> + Send + 'static,
+{
+    let scheduler = CronScheduler::new(jobs);
+    let (add_tx, add_rx) = mpsc::unbounded_channel();
+    scheduler.start(on_fire, add_rx, shutdown);
+    add_tx
 }

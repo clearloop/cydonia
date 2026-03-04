@@ -1,23 +1,17 @@
-//! Hook trait — lifecycle backend for agent building and execution.
+//! Hook trait — lifecycle backend for agent building and event observation.
 //!
-//! Hook abstracts the lifecycle of building and calling agents. Runtime
-//! delegates to Hook at specific points: `on_build_agent` before registering
-//! an agent, `tools`/`dispatch` during each step, and `on_event` after each
-//! step completes.
+//! Hook abstracts the lifecycle of building agents. Runtime delegates to Hook
+//! at specific points: `on_build_agent` before registering an agent and
+//! `on_event` after each step completes. Tool registration and dispatch are
+//! handled by Runtime's own tool registry.
 
-use crate::Handler;
-use anyhow::Result;
-use std::future::Future;
-use wcore::model::Tool;
 use wcore::{AgentConfig, AgentEvent};
 
-/// Lifecycle backend for agent building and execution.
+/// Lifecycle backend for agent building and event observation.
 ///
-/// Implementations provide tool schemas, tool dispatch, prompt enrichment
-/// (via `on_build_agent`), and event observation. Runtime holds `Arc<H>`
-/// and calls these methods at the appropriate lifecycle points.
-///
-/// Model ownership is separate — Runtime owns the model directly.
+/// Implementations provide prompt enrichment (via `on_build_agent`) and event
+/// observation. Runtime holds `H` directly and calls these methods at the
+/// appropriate lifecycle points.
 pub trait Hook: Send + Sync {
     /// Called by `Runtime::add_agent()` before building the `Agent`.
     ///
@@ -30,29 +24,6 @@ pub trait Hook: Send + Sync {
         config
     }
 
-    /// Return tool schemas available to the named agent.
-    ///
-    /// Called once per step to populate the LLM request.
-    fn tools(&self, agent: &str) -> Vec<Tool>;
-
-    /// Dispatch tool calls for the named agent.
-    ///
-    /// Each entry in `calls` is `(method_name, params_json)`. Returns one
-    /// result per call in the same order.
-    fn dispatch(
-        &self,
-        agent: &str,
-        calls: &[(&str, &str)],
-    ) -> impl Future<Output = Vec<Result<String>>> + Send;
-
-    /// Register a tool with its handler.
-    ///
-    /// Called during the builder phase (before the hook is wrapped in `Arc`).
-    /// Hooks that support dynamic tool registration override this method.
-    ///
-    /// Default: no-op — the tool is silently dropped.
-    fn register(&mut self, _tool: Tool, _handler: Handler) {}
-
     /// Called by Runtime after each agent step during execution.
     ///
     /// Receives every `AgentEvent` produced during `send_to` and
@@ -62,17 +33,4 @@ pub trait Hook: Send + Sync {
     fn on_event(&self, _agent: &str, _event: &AgentEvent) {}
 }
 
-impl Hook for () {
-    fn tools(&self, _agent: &str) -> Vec<Tool> {
-        vec![]
-    }
-
-    fn dispatch(
-        &self,
-        _agent: &str,
-        calls: &[(&str, &str)],
-    ) -> impl Future<Output = Vec<Result<String>>> + Send {
-        let len = calls.len();
-        async move { (0..len).map(|_| Ok(String::new())).collect() }
-    }
-}
+impl Hook for () {}
