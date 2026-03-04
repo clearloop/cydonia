@@ -31,7 +31,7 @@ mcp = { workspace = true }
 protocol = { workspace = true }
 socket = { workspace = true }
 channel = { workspace = true }
-channel_router = { workspace = true }
+router = { workspace = true }
 compact_str = { workspace = true }
 futures-core = { workspace = true }
 futures-util = { workspace = true }

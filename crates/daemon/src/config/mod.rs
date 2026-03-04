@@ -1,8 +1,8 @@
 //! Daemon configuration loaded from TOML.
 
 use anyhow::Result;
-pub use channel_router::ChannelConfig;
 pub use model::{ProviderConfig, ProviderManager};
+pub use router::ChannelConfig;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
