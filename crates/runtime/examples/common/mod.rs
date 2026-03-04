@@ -60,9 +60,9 @@ pub fn build_provider() -> ProviderManager {
         chat_template: None,
     };
     let provider =
-        model::deepseek::DeepSeek::new(model::Client::new(), config.api_key.as_ref().unwrap())
+        model::openai::OpenAI::deepseek(model::Client::new(), config.api_key.as_ref().unwrap())
             .expect("failed to create provider");
-    ProviderManager::single(config, model::Provider::DeepSeek(provider))
+    ProviderManager::single(config, model::Provider::OpenAI(provider))
 }
 
 /// Build a default ExampleHook (empty memory).

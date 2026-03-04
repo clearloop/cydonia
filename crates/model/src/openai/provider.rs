@@ -13,15 +13,19 @@ impl Model for OpenAI {
     async fn send(&self, request: &wcore::model::Request) -> Result<Response> {
         let body = crate::request::Request::from(request.clone());
         tracing::trace!("request: {}", serde_json::to_string(&body)?);
-        let text = self
+        let response = self
             .client
             .request(Method::POST, &self.endpoint)
             .headers(self.headers.clone())
             .json(&body)
             .send()
-            .await?
-            .text()
             .await?;
+
+        let status = response.status();
+        let text = response.text().await?;
+        if !status.is_success() {
+            anyhow::bail!("OpenAI API error ({status}): {text}");
+        }
 
         serde_json::from_str(&text).map_err(Into::into)
     }

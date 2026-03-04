@@ -5,7 +5,6 @@
 
 use crate::claude::Claude;
 use crate::config::{ProviderConfig, ProviderKind};
-use crate::deepseek::DeepSeek;
 use crate::openai::OpenAI;
 use anyhow::Result;
 use async_stream::try_stream;
@@ -20,9 +19,7 @@ use wcore::model::{Model, Response, StreamChunk};
 /// detected from the model name. The runtime is monomorphized on `Provider`.
 #[derive(Clone)]
 pub enum Provider {
-    /// DeepSeek API.
-    DeepSeek(DeepSeek),
-    /// OpenAI-compatible API (covers OpenAI, Grok, Qwen, Kimi, Ollama).
+    /// OpenAI-compatible API (covers OpenAI, DeepSeek, Grok, Qwen, Kimi, Ollama).
     OpenAI(OpenAI),
     /// Anthropic Messages API.
     Claude(Claude),
@@ -38,7 +35,7 @@ impl Provider {
     /// (callers fall back to the static map in `wcore::model::default_context_limit`).
     pub fn context_length(&self, _model: &str) -> Option<usize> {
         match self {
-            Self::DeepSeek(_) | Self::OpenAI(_) | Self::Claude(_) => None,
+            Self::OpenAI(_) | Self::Claude(_) => None,
             #[cfg(feature = "local")]
             Self::Local(p) => p.context_length(_model),
         }
@@ -57,7 +54,7 @@ pub async fn build_provider(config: &ProviderConfig, client: reqwest::Client) ->
     let provider = match kind {
         ProviderKind::DeepSeek => match base_url {
             Some(url) => Provider::OpenAI(OpenAI::custom(client, api_key, url)?),
-            None => Provider::DeepSeek(DeepSeek::new(client, api_key)?),
+            None => Provider::OpenAI(OpenAI::deepseek(client, api_key)?),
         },
         ProviderKind::OpenAI => match base_url {
             Some(url) => Provider::OpenAI(OpenAI::custom(client, api_key, url)?),
@@ -115,7 +112,6 @@ pub async fn build_provider(config: &ProviderConfig, client: reqwest::Client) ->
 impl Model for Provider {
     async fn send(&self, request: &wcore::model::Request) -> Result<Response> {
         match self {
-            Self::DeepSeek(p) => p.send(request).await,
             Self::OpenAI(p) => p.send(request).await,
             Self::Claude(p) => p.send(request).await,
             #[cfg(feature = "local")]
@@ -130,12 +126,6 @@ impl Model for Provider {
         let this = self.clone();
         try_stream! {
             match this {
-                Provider::DeepSeek(p) => {
-                    let mut stream = std::pin::pin!(p.stream(request));
-                    while let Some(chunk) = stream.next().await {
-                        yield chunk?;
-                    }
-                }
                 Provider::OpenAI(p) => {
                     let mut stream = std::pin::pin!(p.stream(request));
                     while let Some(chunk) = stream.next().await {
@@ -166,7 +156,6 @@ impl Model for Provider {
 
     fn active_model(&self) -> CompactString {
         match self {
-            Self::DeepSeek(p) => p.active_model(),
             Self::OpenAI(p) => p.active_model(),
             Self::Claude(p) => p.active_model(),
             #[cfg(feature = "local")]
