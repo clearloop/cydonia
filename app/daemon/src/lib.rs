@@ -3,10 +3,12 @@
 
 pub mod config;
 pub mod gateway;
+pub(crate) mod hook;
 
 pub use config::DaemonConfig;
 pub use gateway::{
-    Gateway, GatewayHook,
+    Gateway,
     builder::build_runtime,
-    serve::{ServeHandle, serve, serve_with_config},
+    handle::{ServeHandle, serve, serve_with_config},
 };
+pub use hook::GatewayHook;

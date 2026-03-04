@@ -1,17 +1,13 @@
-//! Gateway — daemon core composing runtime, MCP, skills, cron, and memory.
+//! Gateway — daemon core composing runtime and shared state.
 
-use mcp::McpHandler;
-use memory::InMemory;
+use crate::hook::GatewayHook;
 use model::ProviderManager;
-use runtime::{Hook, Runtime};
-use skill::SkillHandler;
+use runtime::Runtime;
 use std::sync::Arc;
-use wcore::{AgentConfig, AgentEvent};
-use wcron::CronHandler;
 
 pub mod builder;
-pub mod serve;
-pub mod server;
+pub mod handle;
+mod server;
 
 /// Shared state available to all request handlers.
 pub struct Gateway {
@@ -26,86 +22,6 @@ impl Clone for Gateway {
         Self {
             runtime: Arc::clone(&self.runtime),
             hf_endpoint: Arc::clone(&self.hf_endpoint),
-        }
-    }
-}
-
-/// Stateful Hook implementation for the daemon.
-///
-/// Handles prompt enrichment (via skills) and event observation (logging).
-/// Tool registration and dispatch are handled by Runtime's tool registry.
-pub struct GatewayHook {
-    memory: Arc<InMemory>,
-    skills: SkillHandler,
-    mcp: McpHandler,
-    cron: CronHandler,
-}
-
-impl GatewayHook {
-    /// Create a new GatewayHook with the given backends.
-    pub fn new(memory: InMemory, skills: SkillHandler, mcp: McpHandler, cron: CronHandler) -> Self {
-        Self {
-            memory: Arc::new(memory),
-            skills,
-            mcp,
-            cron,
-        }
-    }
-
-    /// Access the memory backend.
-    pub fn memory(&self) -> &InMemory {
-        &self.memory
-    }
-
-    /// Get a clone of the memory Arc.
-    pub fn memory_arc(&self) -> Arc<InMemory> {
-        Arc::clone(&self.memory)
-    }
-
-    /// Access the skill handler (for hot-reload operations).
-    pub fn skills(&self) -> &SkillHandler {
-        &self.skills
-    }
-
-    /// Access the MCP handler (for hot-reload operations).
-    pub fn mcp(&self) -> &McpHandler {
-        &self.mcp
-    }
-
-    /// Access the cron handler.
-    pub fn cron(&self) -> &CronHandler {
-        &self.cron
-    }
-}
-
-impl Hook for GatewayHook {
-    fn on_build_agent(&self, config: AgentConfig) -> AgentConfig {
-        // Skills enrich the system prompt based on agent tags.
-        self.skills.on_build_agent(config)
-    }
-
-    fn on_event(&self, agent: &str, event: &AgentEvent) {
-        match event {
-            AgentEvent::TextDelta(text) => {
-                tracing::trace!(%agent, text_len = text.len(), "agent text delta");
-            }
-            AgentEvent::ToolCallsStart(calls) => {
-                tracing::debug!(%agent, count = calls.len(), "agent tool calls started");
-            }
-            AgentEvent::ToolResult { call_id, .. } => {
-                tracing::debug!(%agent, %call_id, "agent tool result");
-            }
-            AgentEvent::ToolCallsComplete => {
-                tracing::debug!(%agent, "agent tool calls complete");
-            }
-            AgentEvent::Done(response) => {
-                tracing::info!(
-                    %agent,
-                    iterations = response.iterations,
-                    stop_reason = ?response.stop_reason,
-                    "agent run complete"
-                );
-            }
         }
     }
 }

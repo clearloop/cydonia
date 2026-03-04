@@ -1,7 +1,7 @@
 //! Hook builder — constructs a fully-configured GatewayHook from DaemonConfig.
 
 use crate::config;
-use crate::gateway::GatewayHook;
+use crate::hook::GatewayHook;
 use anyhow::Result;
 use model::ProviderManager;
 use runtime::Runtime;
