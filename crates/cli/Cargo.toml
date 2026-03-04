@@ -1,5 +1,5 @@
 [package]
-name = "walrus-cli"
+name = "openwalrus"
 description = "Command-line interface for Walrus"
 documentation = "https://docs.rs/walrus-cli"
 readme = "README.md"

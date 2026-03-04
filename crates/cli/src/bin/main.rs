@@ -2,8 +2,8 @@
 
 use anyhow::Result;
 use clap::Parser;
+use openwalrus::Cli;
 use tracing_subscriber::EnvFilter;
-use walrus_cli::Cli;
 
 #[tokio::main]
 async fn main() -> Result<()> {
