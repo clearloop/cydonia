@@ -32,7 +32,7 @@ async fn main() {
     };
 
     let provider = common::build_provider();
-    let mut runtime = Runtime::new(provider, hook);
+    let mut runtime = Runtime::new(provider, hook).await;
 
     // Register tool on Runtime (not on hook).
     let handler: Handler = Arc::new(|_| {

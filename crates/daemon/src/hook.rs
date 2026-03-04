@@ -1,69 +1,43 @@
 //! Stateful Hook implementation for the daemon.
 //!
-//! [`DaemonHook`] handles prompt enrichment (via skills) and event
-//! observation (logging). Tool registration and dispatch are handled
-//! by Runtime's tool registry.
+//! [`DaemonHook`] composes memory, skill, MCP, and cron sub-hooks.
+//! `on_build_agent` delegates to skills and memory; `on_register_tools`
+//! delegates to memory, cron, and MCP sub-hooks in sequence.
 
 use mcp::McpHandler;
 use memory::InMemory;
-use runtime::Hook;
 use skill::SkillHandler;
-use std::sync::Arc;
-use wcore::{AgentConfig, AgentEvent};
+use std::future::Future;
+use wcore::{AgentConfig, AgentEvent, Hook, ToolRegistry};
 use wcron::CronHandler;
 
 /// Stateful Hook implementation for the daemon.
 ///
-/// Handles prompt enrichment (via skills) and event observation (logging).
-/// Tool registration and dispatch are handled by Runtime's tool registry.
+/// Composes memory, skill, MCP, and cron sub-hooks. Each sub-hook
+/// self-registers its tools via `on_register_tools`.
 pub struct DaemonHook {
-    memory: Arc<InMemory>,
-    skills: SkillHandler,
-    mcp: McpHandler,
-    cron: CronHandler,
+    pub memory: InMemory,
+    pub skills: SkillHandler,
+    pub mcp: McpHandler,
+    pub cron: CronHandler,
 }
 
 impl DaemonHook {
     /// Create a new DaemonHook with the given backends.
     pub fn new(memory: InMemory, skills: SkillHandler, mcp: McpHandler, cron: CronHandler) -> Self {
         Self {
-            memory: Arc::new(memory),
+            memory,
             skills,
             mcp,
             cron,
         }
     }
-
-    /// Access the memory backend.
-    pub fn memory(&self) -> &InMemory {
-        &self.memory
-    }
-
-    /// Get a clone of the memory Arc.
-    pub fn memory_arc(&self) -> Arc<InMemory> {
-        Arc::clone(&self.memory)
-    }
-
-    /// Access the skill handler (for hot-reload operations).
-    pub fn skills(&self) -> &SkillHandler {
-        &self.skills
-    }
-
-    /// Access the MCP handler (for hot-reload operations).
-    pub fn mcp(&self) -> &McpHandler {
-        &self.mcp
-    }
-
-    /// Access the cron handler.
-    pub fn cron(&self) -> &CronHandler {
-        &self.cron
-    }
 }
 
 impl Hook for DaemonHook {
     fn on_build_agent(&self, config: AgentConfig) -> AgentConfig {
-        // Skills enrich the system prompt based on agent tags.
-        self.skills.on_build_agent(config)
+        let config = self.skills.on_build_agent(config);
+        self.memory.on_build_agent(config)
     }
 
     fn on_event(&self, agent: &str, event: &AgentEvent) {
@@ -89,5 +63,14 @@ impl Hook for DaemonHook {
                 );
             }
         }
+    }
+
+    fn on_register_tools(&self, tools: &mut ToolRegistry) -> impl Future<Output = ()> + Send {
+        // Memory and cron: inserts happen synchronously inside on_register_tools;
+        // the returned trivial async{} futures are intentionally dropped.
+        drop(self.memory.on_register_tools(tools));
+        drop(self.cron.on_register_tools(tools));
+        // MCP: captures bridge Arc synchronously, registers tools async.
+        self.mcp.on_register_tools(tools)
     }
 }

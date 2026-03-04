@@ -6,10 +6,10 @@
 
 use anyhow::Result;
 use compact_str::CompactString;
-use runtime::Hook;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use tokio::sync::RwLock;
+use wcore::Hook;
 
 pub mod loader;
 

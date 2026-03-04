@@ -14,7 +14,7 @@ use walrus_runtime::prelude::*;
 #[tokio::main]
 async fn main() {
     common::init_tracing();
-    let mut runtime = common::build_runtime();
+    let mut runtime = common::build_runtime().await;
 
     runtime.add_agent(
         AgentConfig::new("assistant").system_prompt("You are a helpful assistant. Be concise."),

@@ -3,6 +3,4 @@
 pub use cmd::{Cli, Command};
 
 pub mod cmd;
-pub mod config;
 pub mod repl;
-pub mod runner;

@@ -45,17 +45,21 @@ impl Model for Claude {
     async fn send(&self, request: &wcore::model::Request) -> Result<Response> {
         let body = Request::from(request.clone());
         tracing::trace!("request: {}", serde_json::to_string(&body)?);
-        let text = self
+        let response = self
             .client
             .request(Method::POST, &self.endpoint)
             .headers(self.headers.clone())
             .json(&body)
             .send()
-            .await?
-            .text()
             .await?;
 
+        let status = response.status();
+        let text = response.text().await?;
         tracing::trace!("response: {text}");
+        if !status.is_success() {
+            anyhow::bail!("Anthropic API error ({status}): {text}");
+        }
+
         let raw: AnthropicResponse = serde_json::from_str(&text)?;
         Ok(to_response(raw))
     }

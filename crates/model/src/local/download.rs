@@ -11,6 +11,10 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::time::Instant;
 
+const HF_OFFICIAL: &str = "https://huggingface.co";
+const HF_MIRROR: &str = "https://hf-mirror.com";
+const PROBE_TIMEOUT: Duration = Duration::from_secs(5);
+
 /// Events emitted during model download.
 #[derive(Debug, Clone)]
 pub enum DownloadEvent {
@@ -83,10 +87,6 @@ impl Progress for ChannelProgress {
     }
 }
 
-const HF_OFFICIAL: &str = "https://huggingface.co";
-const HF_MIRROR: &str = "https://hf-mirror.com";
-const PROBE_TIMEOUT: Duration = Duration::from_secs(5);
-
 /// Probe both HuggingFace endpoints and return the faster one.
 ///
 /// Sends a lightweight GET to each endpoint's API and returns whichever
@@ -121,11 +121,12 @@ pub async fn probe_endpoint() -> String {
 /// mistralrs reads from.
 pub async fn download_model(
     model_id: &str,
-    endpoint: &str,
     tx: mpsc::UnboundedSender<DownloadEvent>,
 ) -> anyhow::Result<()> {
+    let endpoint = probe_endpoint().await;
+    tracing::info!("using hf endpoint: {endpoint}");
     let api = ApiBuilder::new()
-        .with_endpoint(endpoint.to_owned())
+        .with_endpoint(endpoint)
         .with_progress(false)
         .with_cache_dir(cache_dir())
         .build()?;

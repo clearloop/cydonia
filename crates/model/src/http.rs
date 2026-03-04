@@ -89,15 +89,19 @@ impl HttpProvider {
     /// Send a non-streaming request and deserialize the response as JSON.
     pub async fn send(&self, body: &impl Serialize) -> Result<Response> {
         tracing::trace!("request: {}", serde_json::to_string(body)?);
-        let text = self
+        let response = self
             .client
             .request(Method::POST, &self.endpoint)
             .headers(self.headers.clone())
             .json(body)
             .send()
-            .await?
-            .text()
             .await?;
+
+        let status = response.status();
+        let text = response.text().await?;
+        if !status.is_success() {
+            anyhow::bail!("API error ({status}): {text}");
+        }
 
         serde_json::from_str(&text).map_err(Into::into)
     }

@@ -12,7 +12,6 @@ keywords.workspace = true
 
 [dependencies]
 protocol.workspace = true
-runtime.workspace = true
 wcore.workspace = true
 compact_str.workspace = true
 serde.workspace = true

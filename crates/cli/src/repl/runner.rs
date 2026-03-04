@@ -1,6 +1,5 @@
-//! Gateway mode — connect to walrusd via Unix domain socket.
+//! Gateway runner — connects to walrusd via Unix domain socket.
 
-use crate::runner::Runner;
 use anyhow::Result;
 use compact_str::CompactString;
 use futures_core::Stream;
@@ -14,11 +13,11 @@ use socket::{ClientConfig, Connection, WalrusClient};
 use std::path::Path;
 
 /// Runs agents via a walrusd Unix domain socket connection.
-pub struct GatewayRunner {
+pub struct Runner {
     connection: Connection,
 }
 
-impl GatewayRunner {
+impl Runner {
     /// Connect to walrusd.
     pub async fn connect(socket_path: &Path) -> Result<Self> {
         let config = ClientConfig {
@@ -27,6 +26,39 @@ impl GatewayRunner {
         let client = WalrusClient::new(config);
         let connection = client.connect().await?;
         Ok(Self { connection })
+    }
+
+    /// Send a one-shot message and return the response content.
+    pub async fn send(&mut self, agent: &str, content: &str) -> Result<String> {
+        let resp = self
+            .connection
+            .send(SendRequest {
+                agent: CompactString::from(agent),
+                content: content.to_string(),
+            })
+            .await?;
+        Ok(resp.content)
+    }
+
+    /// Stream a response, yielding content text chunks.
+    pub fn stream<'a>(
+        &'a mut self,
+        agent: &'a str,
+        content: &'a str,
+    ) -> impl Stream<Item = Result<String>> + Send + 'a {
+        self.connection
+            .stream(StreamRequest {
+                agent: CompactString::from(agent),
+                content: content.to_string(),
+            })
+            .filter_map(|result| async {
+                match result {
+                    Ok(StreamEvent::Chunk { content }) => Some(Ok(content)),
+                    Ok(StreamEvent::Start { .. }) => None,
+                    Ok(StreamEvent::End { .. }) => None,
+                    Err(e) => Some(Err(e)),
+                }
+            })
     }
 
     /// List all registered agents.
@@ -69,38 +101,5 @@ impl GatewayRunner {
             })
             .await?;
         Ok(resp.value)
-    }
-}
-
-impl Runner for GatewayRunner {
-    async fn send(&mut self, agent: &str, content: &str) -> Result<String> {
-        let resp = self
-            .connection
-            .send(SendRequest {
-                agent: CompactString::from(agent),
-                content: content.to_string(),
-            })
-            .await?;
-        Ok(resp.content)
-    }
-
-    fn stream<'a>(
-        &'a mut self,
-        agent: &'a str,
-        content: &'a str,
-    ) -> impl Stream<Item = Result<String>> + Send + 'a {
-        self.connection
-            .stream(StreamRequest {
-                agent: CompactString::from(agent),
-                content: content.to_string(),
-            })
-            .filter_map(|result| async {
-                match result {
-                    Ok(StreamEvent::Chunk { content }) => Some(Ok(content)),
-                    Ok(StreamEvent::Start { .. }) => None,
-                    Ok(StreamEvent::End { .. }) => None,
-                    Err(e) => Some(Err(e)),
-                }
-            })
     }
 }

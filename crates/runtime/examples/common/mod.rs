@@ -3,14 +3,12 @@
 #![allow(dead_code)]
 
 use model::ProviderManager;
-use walrus_runtime::{Hook, Memory, prelude::*};
+use walrus_runtime::{Hook, Memory, ToolRegistry, prelude::*};
 use wcore::AgentEvent;
 
-/// Example hook providing event observation only.
-///
-/// Tools are registered on Runtime's tool registry, not on the hook.
+/// Example hook providing event observation and memory.
 pub struct ExampleHook {
-    memory: InMemory,
+    pub memory: InMemory,
 }
 
 impl ExampleHook {
@@ -20,14 +18,20 @@ impl ExampleHook {
             memory: InMemory::new(),
         }
     }
-
-    /// Access the memory backend.
-    pub fn memory(&self) -> &InMemory {
-        &self.memory
-    }
 }
 
-impl Hook for ExampleHook {}
+impl Hook for ExampleHook {
+    fn on_build_agent(&self, config: AgentConfig) -> AgentConfig {
+        self.memory.on_build_agent(config)
+    }
+
+    fn on_register_tools(
+        &self,
+        tools: &mut ToolRegistry,
+    ) -> impl std::future::Future<Output = ()> + Send {
+        self.memory.on_register_tools(tools)
+    }
+}
 
 /// Initialize tracing with env-filter support.
 pub fn init_tracing() {
@@ -56,9 +60,9 @@ pub fn build_provider() -> ProviderManager {
         chat_template: None,
     };
     let provider =
-        model::deepseek::DeepSeek::new(model::Client::new(), config.api_key.as_ref().unwrap())
+        model::openai::OpenAI::deepseek(model::Client::new(), config.api_key.as_ref().unwrap())
             .expect("failed to create provider");
-    ProviderManager::single(config, model::Provider::DeepSeek(provider))
+    ProviderManager::single(config, model::Provider::OpenAI(provider))
 }
 
 /// Build a default ExampleHook (empty memory).
@@ -67,10 +71,10 @@ pub fn build_hook() -> ExampleHook {
 }
 
 /// Build a Runtime with the default provider and ExampleHook.
-pub fn build_runtime() -> Runtime<ProviderManager, ExampleHook> {
+pub async fn build_runtime() -> Runtime<ProviderManager, ExampleHook> {
     let hook = build_hook();
     let provider = build_provider();
-    Runtime::new(provider, hook)
+    Runtime::new(provider, hook).await
 }
 
 /// Simple REPL loop: read lines from stdin, stream to agent.
@@ -132,7 +136,7 @@ pub async fn repl_with_memory(runtime: &Runtime<ProviderManager, ExampleHook>, a
         }
 
         // Print current memory state.
-        let entries = runtime.hook().memory().entries();
+        let entries = runtime.hook.memory.entries();
         if entries.is_empty() {
             println!("[Memory: empty]");
         } else {

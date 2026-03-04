@@ -1,6 +1,6 @@
 //! One-shot message command.
 
-use crate::runner::Runner;
+use crate::repl::runner::Runner;
 use anyhow::Result;
 use clap::Args;
 
@@ -13,7 +13,7 @@ pub struct Send {
 
 impl Send {
     /// Send a message and print the response.
-    pub async fn run(self, runner: &mut impl Runner, agent: &str) -> Result<()> {
+    pub async fn run(self, runner: &mut Runner, agent: &str) -> Result<()> {
         let response = runner.send(agent, &self.content).await?;
         println!("{response}");
         Ok(())

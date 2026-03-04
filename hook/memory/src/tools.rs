@@ -1,18 +1,14 @@
 //! Memory tool schemas and handlers for agent tool registration.
 
 use crate::{Memory, RecallOptions};
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::Arc;
+use wcore::Handler;
 use wcore::model::Tool;
-
-/// Async handler function type — matches `runtime::Handler` inner signature.
-type HandlerFn = Arc<dyn Fn(String) -> Pin<Box<dyn Future<Output = String> + Send>> + Send + Sync>;
 
 /// Tool schema + handler pair, ready to register on a hook.
 pub struct MemoryTool {
     pub tool: Tool,
-    pub handler: HandlerFn,
+    pub handler: Handler,
 }
 
 /// Build the `remember` tool + handler for the given memory backend.
@@ -31,7 +27,7 @@ pub fn remember<M: Memory + 'static>(mem: Arc<M>) -> MemoryTool {
         parameters: serde_json::from_value(schema).unwrap(),
         strict: false,
     };
-    let handler: HandlerFn = Arc::new(move |args| {
+    let handler: Handler = Arc::new(move |args| {
         let mem = Arc::clone(&mem);
         Box::pin(async move {
             let parsed: serde_json::Value = match serde_json::from_str(&args) {
@@ -65,7 +61,7 @@ pub fn recall<M: Memory + 'static>(mem: Arc<M>) -> MemoryTool {
         parameters: serde_json::from_value(schema).unwrap(),
         strict: false,
     };
-    let handler: HandlerFn = Arc::new(move |args| {
+    let handler: Handler = Arc::new(move |args| {
         let mem = Arc::clone(&mem);
         Box::pin(async move {
             let parsed: serde_json::Value = match serde_json::from_str(&args) {

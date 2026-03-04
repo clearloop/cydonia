@@ -11,17 +11,21 @@ use wcore::model::{Model, Response, StreamChunk};
 
 impl Model for OpenAI {
     async fn send(&self, request: &wcore::model::Request) -> Result<Response> {
-        let body = crate::request::Request::from(request.clone());
+        let body = super::request::Request::from(request.clone());
         tracing::trace!("request: {}", serde_json::to_string(&body)?);
-        let text = self
+        let response = self
             .client
             .request(Method::POST, &self.endpoint)
             .headers(self.headers.clone())
             .json(&body)
             .send()
-            .await?
-            .text()
             .await?;
+
+        let status = response.status();
+        let text = response.text().await?;
+        if !status.is_success() {
+            anyhow::bail!("OpenAI API error ({status}): {text}");
+        }
 
         serde_json::from_str(&text).map_err(Into::into)
     }
@@ -31,7 +35,7 @@ impl Model for OpenAI {
         request: wcore::model::Request,
     ) -> impl Stream<Item = Result<StreamChunk>> + Send {
         let usage = request.usage;
-        let body = crate::request::Request::from(request).stream(usage);
+        let body = super::request::Request::from(request).stream(usage);
         if let Ok(body) = serde_json::to_string(&body) {
             tracing::trace!("request: {}", body);
         }

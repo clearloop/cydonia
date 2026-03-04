@@ -82,12 +82,12 @@ impl Server for Daemon {
     }
 
     async fn list_memory(&self) -> Result<MemoryList> {
-        let entries = self.runtime.hook().memory().entries();
+        let entries = self.runtime.hook.memory.entries();
         Ok(MemoryList { entries })
     }
 
     async fn get_memory(&self, req: GetMemoryRequest) -> Result<MemoryEntry> {
-        let value = self.runtime.hook().memory().get(&req.key);
+        let value = self.runtime.hook.memory.get(&req.key);
         Ok(MemoryEntry {
             key: req.key,
             value,
@@ -98,15 +98,13 @@ impl Server for Daemon {
         &self,
         req: DownloadRequest,
     ) -> impl futures_core::Stream<Item = Result<DownloadEvent>> + Send {
-        let hf_endpoint = self.runtime.model().hf_endpoint();
         async_stream::try_stream! {
             yield DownloadEvent::Start { model: req.model.clone() };
 
             let (dtx, mut drx) = mpsc::unbounded_channel();
             let model_str = req.model.to_string();
-            let endpoint = hf_endpoint;
             let download_handle = tokio::spawn(async move {
-                model::local::download::download_model(&model_str, &endpoint, dtx).await
+                model::local::download::download_model(&model_str, dtx).await
             });
 
             while let Some(event) = drx.recv().await {
@@ -139,7 +137,7 @@ impl Server for Daemon {
     }
 
     async fn reload_skills(&self) -> Result<SkillsReloaded> {
-        let count = self.runtime.hook().skills().reload().await?;
+        let count = self.runtime.hook.skills.reload().await?;
         tracing::info!("reloaded {count} skill(s)");
         Ok(SkillsReloaded { count })
     }
@@ -152,10 +150,10 @@ impl Server for Daemon {
             env: req.env,
             auto_restart: true,
         };
-        let tools = self.runtime.hook().mcp().add(config).await?;
+        let tools = self.runtime.hook.mcp.add(config).await?;
 
         // Register newly added MCP tools on Runtime's registry.
-        for (tool, handler) in self.runtime.hook().mcp().tool_handlers().await {
+        for (tool, handler) in self.runtime.hook.mcp.tool_handlers().await {
             if tools.iter().any(|t| t == &*tool.name) {
                 self.runtime.register_tool(tool, handler).await;
             }
@@ -168,7 +166,7 @@ impl Server for Daemon {
     }
 
     async fn mcp_remove(&self, req: McpRemoveRequest) -> Result<McpRemoved> {
-        let tools = self.runtime.hook().mcp().remove(&req.name).await?;
+        let tools = self.runtime.hook.mcp.remove(&req.name).await?;
 
         // Unregister removed MCP tools from Runtime's registry.
         for tool_name in &tools {
@@ -185,8 +183,8 @@ impl Server for Daemon {
         // Collect old tool names before reload.
         let old_tool_names: Vec<compact_str::CompactString> = self
             .runtime
-            .hook()
-            .mcp()
+            .hook
+            .mcp
             .tool_handlers()
             .await
             .into_iter()
@@ -195,8 +193,8 @@ impl Server for Daemon {
 
         let servers = self
             .runtime
-            .hook()
-            .mcp()
+            .hook
+            .mcp
             .reload(|path| {
                 let config = crate::DaemonConfig::load(path)?;
                 Ok(config.mcp_servers)
@@ -204,7 +202,7 @@ impl Server for Daemon {
             .await?;
 
         // Atomically swap old MCP tools for new ones on Runtime.
-        let new_tools = self.runtime.hook().mcp().tool_handlers().await;
+        let new_tools = self.runtime.hook.mcp.tool_handlers().await;
         self.runtime.replace_tools(&old_tool_names, new_tools).await;
 
         let servers = servers
@@ -217,8 +215,8 @@ impl Server for Daemon {
     async fn mcp_list(&self) -> Result<McpServerList> {
         let servers = self
             .runtime
-            .hook()
-            .mcp()
+            .hook
+            .mcp
             .list()
             .await
             .into_iter()

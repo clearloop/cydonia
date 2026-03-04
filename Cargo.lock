@@ -4849,10 +4849,22 @@ dependencies = [
  "memchr",
  "nix 0.29.0",
  "radix_trie 0.2.1",
+ "rustyline-derive",
  "unicode-segmentation",
  "unicode-width",
  "utf8parse",
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "rustyline-derive"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5d66de233f908aebf9cc30ac75ef9103185b4b715c6f2fb7a626aa5e5ede53ab"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.111",
 ]
 
 [[package]]
@@ -6657,7 +6669,6 @@ dependencies = [
  "tracing",
  "walrus-core",
  "walrus-protocol",
- "walrus-runtime",
 ]
 
 [[package]]
@@ -6702,7 +6713,6 @@ dependencies = [
  "tokio",
  "tracing",
  "walrus-core",
- "walrus-runtime",
 ]
 
 [[package]]
@@ -6793,7 +6803,6 @@ dependencies = [
  "tokio",
  "tracing",
  "walrus-core",
- "walrus-runtime",
 ]
 
 [[package]]

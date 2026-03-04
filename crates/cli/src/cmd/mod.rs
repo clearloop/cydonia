@@ -1,16 +1,12 @@
 //! CLI argument parsing and command dispatch.
 
-use crate::runner::gateway::GatewayRunner;
+use crate::repl::runner::Runner;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use compact_str::CompactString;
 use std::path::PathBuf;
 
-pub mod agent;
-pub mod chat;
-pub mod config;
-pub mod download;
-pub mod memory;
+pub mod attach;
 pub mod send;
 
 /// Walrus CLI client — connects to walrusd via Unix domain socket.
@@ -51,26 +47,13 @@ impl Cli {
         let agent = self.resolve_agent();
         let socket_path = self.resolve_socket();
         match self.command {
-            Command::Config(cmd) => cmd.run(),
-            Command::Chat(cmd) => {
+            Command::Attach(cmd) => {
                 let runner = connect(&socket_path).await?;
                 cmd.run(runner, agent).await
             }
             Command::Send(cmd) => {
                 let mut runner = connect(&socket_path).await?;
                 cmd.run(&mut runner, &agent).await
-            }
-            Command::Agent(cmd) => {
-                let mut runner = connect(&socket_path).await?;
-                cmd.run(&mut runner).await
-            }
-            Command::Memory(cmd) => {
-                let mut runner = connect(&socket_path).await?;
-                cmd.run(&mut runner).await
-            }
-            Command::Download(cmd) => {
-                let mut runner = connect(&socket_path).await?;
-                cmd.run(&mut runner).await
             }
         }
     }
@@ -79,26 +62,15 @@ impl Cli {
 /// Top-level subcommands.
 #[derive(Subcommand, Debug)]
 pub enum Command {
-    /// Start an interactive chat REPL.
-    Chat(chat::Chat),
+    /// Attach to an agent via the interactive chat REPL.
+    Attach(attach::Attach),
     /// Send a one-shot message to an agent.
     Send(send::Send),
-    /// Manage agents.
-    #[command(subcommand)]
-    Agent(agent::AgentCommand),
-    /// Manage memory entries.
-    #[command(subcommand)]
-    Memory(memory::MemoryCommand),
-    /// Download a model from HuggingFace.
-    Download(download::Download),
-    /// Manage configuration.
-    #[command(subcommand)]
-    Config(config::ConfigCommand),
 }
 
 /// Connect to walrusd, returning a helpful error if not running.
-async fn connect(socket_path: &std::path::Path) -> Result<GatewayRunner> {
-    GatewayRunner::connect(socket_path).await.with_context(|| {
+async fn connect(socket_path: &std::path::Path) -> Result<Runner> {
+    Runner::connect(socket_path).await.with_context(|| {
         format!(
             "failed to connect to walrusd at {}. Is walrusd running?",
             socket_path.display()

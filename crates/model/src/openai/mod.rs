@@ -6,11 +6,14 @@
 use reqwest::{Client, header::HeaderMap};
 
 mod provider;
+mod request;
 
 /// OpenAI-compatible endpoint URLs.
 pub mod endpoint {
     /// OpenAI chat completions.
     pub const OPENAI: &str = "https://api.openai.com/v1/chat/completions";
+    /// DeepSeek chat completions.
+    pub const DEEPSEEK: &str = "https://api.deepseek.com/chat/completions";
     /// Grok (xAI) chat completions.
     pub const GROK: &str = "https://api.x.ai/v1/chat/completions";
     /// Qwen (Alibaba DashScope) chat completions.
@@ -36,6 +39,11 @@ impl OpenAI {
     /// Create a provider targeting the OpenAI API.
     pub fn api(client: Client, key: &str) -> anyhow::Result<Self> {
         Self::custom(client, key, endpoint::OPENAI)
+    }
+
+    /// Create a provider targeting the DeepSeek API.
+    pub fn deepseek(client: Client, key: &str) -> anyhow::Result<Self> {
+        Self::custom(client, key, endpoint::DEEPSEEK)
     }
 
     /// Create a provider targeting the Grok (xAI) API.
