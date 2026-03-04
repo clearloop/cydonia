@@ -1386,12 +1386,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dotenvy"
-version = "0.15.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1aaf95b3e5c8f23aa320147307562d361db0ae0d51242340f558153b4eb2439b"
-
-[[package]]
 name = "dtoa"
 version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3817,6 +3811,26 @@ dependencies = [
  "libc",
  "pkg-config",
  "vcpkg",
+]
+
+[[package]]
+name = "openwalrus"
+version = "0.0.2"
+dependencies = [
+ "anyhow",
+ "clap",
+ "compact_str 0.8.1",
+ "dirs",
+ "futures-core",
+ "futures-util",
+ "rustyline",
+ "tokio",
+ "toml 0.8.23",
+ "tracing",
+ "tracing-subscriber",
+ "walrus-daemon",
+ "walrus-protocol",
+ "walrus-socket",
 ]
 
 [[package]]
@@ -6604,7 +6618,7 @@ dependencies = [
 
 [[package]]
 name = "walrus-channel-router"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "anyhow",
  "compact_str 0.8.1",
@@ -6616,27 +6630,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "walrus-cli"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "clap",
- "compact_str 0.8.1",
- "dirs",
- "futures-core",
- "futures-util",
- "rustyline",
- "tokio",
- "toml 0.8.23",
- "tracing",
- "tracing-subscriber",
- "walrus-protocol",
- "walrus-socket",
-]
-
-[[package]]
 name = "walrus-core"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -6654,7 +6649,7 @@ dependencies = [
 
 [[package]]
 name = "walrus-cron"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "anyhow",
  "chrono",
@@ -6673,7 +6668,7 @@ dependencies = [
 
 [[package]]
 name = "walrus-daemon"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -6702,7 +6697,7 @@ dependencies = [
 
 [[package]]
 name = "walrus-mcp"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "anyhow",
  "compact_str 0.8.1",
@@ -6717,7 +6712,7 @@ dependencies = [
 
 [[package]]
 name = "walrus-memory"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "anyhow",
  "compact_str 0.8.1",
@@ -6728,7 +6723,7 @@ dependencies = [
 
 [[package]]
 name = "walrus-model"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -6748,7 +6743,7 @@ dependencies = [
 
 [[package]]
 name = "walrus-pchannel"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "anyhow",
  "compact_str 0.8.1",
@@ -6760,7 +6755,7 @@ dependencies = [
 
 [[package]]
 name = "walrus-protocol"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -6774,27 +6769,22 @@ dependencies = [
 
 [[package]]
 name = "walrus-runtime"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "anyhow",
  "async-stream",
- "chrono",
  "compact_str 0.8.1",
- "dotenvy",
  "futures-core",
  "futures-util",
- "serde_json",
  "tokio",
  "tracing",
- "tracing-subscriber",
  "walrus-core",
  "walrus-memory",
- "walrus-model",
 ]
 
 [[package]]
 name = "walrus-skill"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "anyhow",
  "compact_str 0.8.1",
@@ -6807,7 +6797,7 @@ dependencies = [
 
 [[package]]
 name = "walrus-socket"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -6824,7 +6814,7 @@ dependencies = [
 
 [[package]]
 name = "walrus-telegram"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "anyhow",
  "compact_str 0.8.1",

@@ -2,9 +2,10 @@
 
 use anyhow::Result;
 use futures_util::StreamExt;
-use protocol::api::{Client, Server};
-use protocol::message::client::ClientMessage;
-use protocol::message::server::ServerMessage;
+use protocol::{
+    api::{Client, Server},
+    message::{client::ClientMessage, server::ServerMessage},
+};
 
 /// In-process protocol client that delegates to a `Server` impl.
 ///

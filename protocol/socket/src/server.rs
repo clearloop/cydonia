@@ -1,11 +1,14 @@
 //! Unix domain socket server — accept loop and per-connection message handler.
 
 use crate::codec;
-use protocol::message::client::ClientMessage;
-use protocol::message::server::ServerMessage;
-use tokio::net::UnixListener;
-use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
-use tokio::sync::{mpsc, oneshot};
+use protocol::message::{client::ClientMessage, server::ServerMessage};
+use tokio::{
+    net::{
+        UnixListener,
+        unix::{OwnedReadHalf, OwnedWriteHalf},
+    },
+    sync::{mpsc, oneshot},
+};
 
 /// Accept connections on the given `UnixListener` until shutdown is signalled.
 ///

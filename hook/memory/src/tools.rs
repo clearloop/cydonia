@@ -2,8 +2,7 @@
 
 use crate::{Memory, RecallOptions};
 use std::sync::Arc;
-use wcore::Handler;
-use wcore::model::Tool;
+use wcore::{Handler, model::Tool};
 
 /// Tool schema + handler pair, ready to register on a hook.
 pub struct MemoryTool {

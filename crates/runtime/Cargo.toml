@@ -11,10 +11,10 @@ repository.workspace = true
 keywords.workspace = true
 
 [dependencies]
-wcore.workspace = true
 memory.workspace = true
+wcore.workspace = true
 
-# crates-io dependencies
+# crates.io
 anyhow.workspace = true
 async-stream.workspace = true
 compact_str.workspace = true
@@ -22,10 +22,3 @@ futures-core.workspace = true
 futures-util.workspace = true
 tokio.workspace = true
 tracing.workspace = true
-
-[dev-dependencies]
-model.workspace = true
-tracing-subscriber.workspace = true
-dotenvy.workspace = true
-chrono.workspace = true
-serde_json.workspace = true

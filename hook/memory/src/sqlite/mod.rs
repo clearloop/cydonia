@@ -3,8 +3,10 @@
 //! Wraps a `rusqlite::Connection` in a `Mutex` for thread safety.
 //! Generic over `E: Embedder` for optional vector search.
 
-use crate::utils::{cosine_similarity, decode_embedding, mmr_rerank, now_unix};
-use crate::{Embedder, MemoryEntry, RecallOptions};
+use crate::{
+    Embedder, MemoryEntry, RecallOptions,
+    utils::{cosine_similarity, decode_embedding, mmr_rerank, now_unix},
+};
 use anyhow::Result;
 use compact_str::CompactString;
 use rusqlite::Connection;

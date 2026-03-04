@@ -2,8 +2,7 @@
 //!
 //! Parses YAML frontmatter + Markdown body into an [`AgentConfig`].
 
-use crate::agent::config::AgentConfig;
-use crate::utils::split_yaml_frontmatter;
+use crate::{agent::config::AgentConfig, utils::split_yaml_frontmatter};
 use serde::Deserialize;
 
 /// YAML frontmatter for agent markdown files.

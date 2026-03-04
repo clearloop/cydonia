@@ -6,9 +6,10 @@
 //! registration (e.g. MCP hot-reload).
 
 pub use memory::{InMemory, Memory, NoEmbedder};
-pub use wcore::AgentConfig;
-pub use wcore::model::{Message, Request, Response, Role, StreamChunk, Tool};
-pub use wcore::{Handler, Hook, ToolRegistry};
+pub use wcore::{
+    AgentConfig, Handler, Hook, ToolRegistry,
+    model::{Message, Request, Response, Role, StreamChunk, Tool},
+};
 
 use anyhow::Result;
 use async_stream::stream;

@@ -13,8 +13,10 @@ use anyhow::Result;
 use compact_str::CompactString;
 use model::ProviderManager;
 use runtime::Runtime;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 use tokio::sync::{broadcast, mpsc, oneshot};
 
 pub(crate) mod builder;
@@ -143,7 +145,7 @@ fn setup_socket(
 
 /// Build the channel router and spawn channel transports.
 async fn setup_channels(config: &DaemonConfig, event_tx: &DaemonEventSender) {
-    let router = channel_router::build_router(&config.channels);
+    let router = router::build_router(&config.channels);
     let router = Arc::new(router);
     let channel_tx = event_tx.clone();
     let on_message = Arc::new(move |agent: CompactString, content: String| {
@@ -163,7 +165,7 @@ async fn setup_channels(config: &DaemonConfig, event_tx: &DaemonEventSender) {
                 .unwrap_or(Err("event loop dropped".to_owned()))
         }
     });
-    channel_router::spawn_channels(&config.channels, router, on_message).await;
+    router::spawn_channels(&config.channels, router, on_message).await;
 }
 
 /// Spawn the cron scheduler wired into the event loop.

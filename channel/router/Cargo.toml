@@ -13,6 +13,8 @@ keywords.workspace = true
 [dependencies]
 channel.workspace = true
 telegram.workspace = true
+
+# crates.io
 anyhow.workspace = true
 compact_str.workspace = true
 serde.workspace = true

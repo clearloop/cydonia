@@ -6,8 +6,7 @@
 use crate::{Skill, SkillRegistry, SkillTier};
 use compact_str::CompactString;
 use serde::Deserialize;
-use std::collections::BTreeMap;
-use std::path::Path;
+use std::{collections::BTreeMap, path::Path};
 use wcore::utils::split_yaml_frontmatter;
 
 /// YAML frontmatter deserialization target for SKILL.md files.

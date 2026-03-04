@@ -14,13 +14,9 @@ use rmcp::{
     transport::TokioChildProcess,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
-use std::path::PathBuf;
-use std::pin::Pin;
-use std::sync::Arc;
+use std::{collections::BTreeMap, path::PathBuf, pin::Pin, sync::Arc};
 use tokio::sync::{Mutex, RwLock};
-use wcore::Handler;
-use wcore::model::Tool;
+use wcore::{Handler, model::Tool};
 
 // ── Config ─────────────────────────────────────────────────────────────
 

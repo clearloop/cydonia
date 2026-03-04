@@ -3,9 +3,11 @@
 //! Unified `Provider` enum with enum dispatch over concrete backends.
 //! `build_provider()` matches on `ProviderKind` detected from the model name.
 
-use crate::claude::Claude;
-use crate::config::{ProviderConfig, ProviderKind};
-use crate::openai::OpenAI;
+use crate::{
+    claude::Claude,
+    config::{ProviderConfig, ProviderKind},
+    openai::OpenAI,
+};
 use anyhow::Result;
 use async_stream::try_stream;
 use compact_str::CompactString;

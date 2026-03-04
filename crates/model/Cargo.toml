@@ -11,13 +11,15 @@ repository.workspace = true
 keywords.workspace = true
 
 [features]
-default = ["local"]
+default = []
 local = ["dep:mistralrs", "dep:dirs", "dep:hf-hub"]
 metal = ["local", "mistralrs/metal"]
 cuda = ["local", "mistralrs/cuda"]
 
 [dependencies]
 wcore.workspace = true
+
+# crates.io
 anyhow.workspace = true
 async-stream.workspace = true
 compact_str.workspace = true
@@ -28,6 +30,8 @@ serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+
+# optional dependencies
 dirs = { workspace = true, optional = true }
 hf-hub = { workspace = true, optional = true }
 mistralrs = { workspace = true, optional = true }

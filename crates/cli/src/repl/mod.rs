@@ -1,14 +1,14 @@
 //! Interactive chat REPL with streaming output and persistent history.
 
-use crate::repl::command::{ReplHelper, handle_slash};
-use crate::repl::runner::Runner;
+use crate::repl::{
+    command::{ReplHelper, handle_slash},
+    runner::Runner,
+};
 use anyhow::Result;
 use compact_str::CompactString;
 use futures_core::Stream;
 use futures_util::StreamExt;
-use rustyline::Editor;
-use rustyline::error::ReadlineError;
-use rustyline::history::DefaultHistory;
+use rustyline::{Editor, error::ReadlineError, history::DefaultHistory};
 use std::{io::Write, path::PathBuf, pin::pin};
 
 pub mod command;

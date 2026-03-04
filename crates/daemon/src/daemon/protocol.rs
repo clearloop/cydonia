@@ -4,14 +4,15 @@ use crate::daemon::Daemon;
 use anyhow::{Result, bail};
 use futures_util::{StreamExt, pin_mut};
 use memory::Memory;
-use protocol::api::Server;
-use protocol::message::{
-    AgentDetail, AgentInfoRequest, AgentList, AgentSummary, ClearSessionRequest, DownloadEvent,
-    DownloadRequest, GetMemoryRequest, McpAddRequest, McpAdded, McpReloaded, McpRemoveRequest,
-    McpRemoved, McpServerList, McpServerSummary, MemoryEntry, MemoryList, SendRequest,
-    SendResponse, SessionCleared, SkillsReloaded, StreamEvent, StreamRequest,
+use protocol::{
+    api::Server,
+    message::{
+        AgentDetail, AgentInfoRequest, AgentList, AgentSummary, ClearSessionRequest, DownloadEvent,
+        DownloadRequest, GetMemoryRequest, McpAddRequest, McpAdded, McpReloaded, McpRemoveRequest,
+        McpRemoved, McpServerList, McpServerSummary, MemoryEntry, MemoryList, SendRequest,
+        SendResponse, SessionCleared, SkillsReloaded, StreamEvent, StreamRequest,
+    },
 };
-use tokio::sync::mpsc;
 use wcore::AgentEvent;
 
 impl Server for Daemon {
@@ -98,40 +99,51 @@ impl Server for Daemon {
         &self,
         req: DownloadRequest,
     ) -> impl futures_core::Stream<Item = Result<DownloadEvent>> + Send {
-        async_stream::try_stream! {
-            yield DownloadEvent::Start { model: req.model.clone() };
+        #[cfg(feature = "local")]
+        {
+            use tokio::sync::mpsc;
+            async_stream::try_stream! {
+                yield DownloadEvent::Start { model: req.model.clone() };
 
-            let (dtx, mut drx) = mpsc::unbounded_channel();
-            let model_str = req.model.to_string();
-            let download_handle = tokio::spawn(async move {
-                model::local::download::download_model(&model_str, dtx).await
-            });
+                let (dtx, mut drx) = mpsc::unbounded_channel();
+                let model_str = req.model.to_string();
+                let download_handle = tokio::spawn(async move {
+                    model::local::download::download_model(&model_str, dtx).await
+                });
 
-            while let Some(event) = drx.recv().await {
-                let dl_event = match event {
-                    model::local::download::DownloadEvent::FileStart { filename, size } => {
-                        DownloadEvent::FileStart { filename, size }
+                while let Some(event) = drx.recv().await {
+                    let dl_event = match event {
+                        model::local::download::DownloadEvent::FileStart { filename, size } => {
+                            DownloadEvent::FileStart { filename, size }
+                        }
+                        model::local::download::DownloadEvent::Progress { bytes } => {
+                            DownloadEvent::Progress { bytes }
+                        }
+                        model::local::download::DownloadEvent::FileEnd { filename } => {
+                            DownloadEvent::FileEnd { filename }
+                        }
+                    };
+                    yield dl_event;
+                }
+
+                match download_handle.await {
+                    Ok(Ok(())) => {
+                        yield DownloadEvent::End { model: req.model };
                     }
-                    model::local::download::DownloadEvent::Progress { bytes } => {
-                        DownloadEvent::Progress { bytes }
+                    Ok(Err(e)) => {
+                        Err(anyhow::anyhow!("download failed: {e}"))?;
                     }
-                    model::local::download::DownloadEvent::FileEnd { filename } => {
-                        DownloadEvent::FileEnd { filename }
+                    Err(e) => {
+                        Err(anyhow::anyhow!("download task panicked: {e}"))?;
                     }
-                };
-                yield dl_event;
+                }
             }
-
-            match download_handle.await {
-                Ok(Ok(())) => {
-                    yield DownloadEvent::End { model: req.model };
-                }
-                Ok(Err(e)) => {
-                    Err(anyhow::anyhow!("download failed: {e}"))?;
-                }
-                Err(e) => {
-                    Err(anyhow::anyhow!("download task panicked: {e}"))?;
-                }
+        }
+        #[cfg(not(feature = "local"))]
+        {
+            let _ = req;
+            async_stream::stream! {
+                yield Err(anyhow::anyhow!("this daemon was built without local model support"));
             }
         }
     }

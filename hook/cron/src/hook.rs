@@ -2,11 +2,9 @@
 
 use crate::CronJob;
 use anyhow::Result;
-use std::pin::Pin;
-use std::sync::Arc;
+use std::{pin::Pin, sync::Arc};
 use tokio::sync::RwLock;
-use wcore::Handler;
-use wcore::model::Tool;
+use wcore::{Handler, model::Tool};
 
 /// Tool name for creating cron jobs.
 const CREATE_CRON: &str = "create_cron";

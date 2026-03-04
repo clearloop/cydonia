@@ -11,36 +11,34 @@ repository.workspace = true
 keywords.workspace = true
 
 [features]
-default = ["local"]
+default = []
 local = ["model/local"]
 metal = ["model/metal"]
 cuda = ["model/cuda"]
 
-[[bin]]
-name = "walrusd"
-path = "src/bin/main.rs"
-
 [dependencies]
-async-stream = { workspace = true }
-runtime = { workspace = true }
-wcore = { workspace = true }
-model = { workspace = true }
-memory = { workspace = true }
-skill = { workspace = true }
-mcp = { workspace = true }
-protocol = { workspace = true }
-socket = { workspace = true }
-channel = { workspace = true }
-channel_router = { workspace = true }
-compact_str = { workspace = true }
-futures-core = { workspace = true }
-futures-util = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-toml = { workspace = true }
-tokio = { workspace = true }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
-anyhow = { workspace = true }
-wcron = { workspace = true }
-dirs = { workspace = true }
+channel.workspace = true
+mcp.workspace = true
+memory.workspace = true
+model.workspace = true
+protocol.workspace = true
+router.workspace = true
+runtime.workspace = true
+skill.workspace = true
+socket.workspace = true
+wcore.workspace = true
+wcron.workspace = true
+
+# crates.io
+anyhow.workspace = true
+async-stream.workspace = true
+compact_str.workspace = true
+dirs.workspace = true
+futures-core.workspace = true
+futures-util.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+toml.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

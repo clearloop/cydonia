@@ -1,6 +1,6 @@
 [package]
-name = "walrus-cli"
-description = "Command-line interface for Walrus"
+name = "openwalrus"
+description = "Command-line interface for OpenWalrus"
 documentation = "https://docs.rs/walrus-cli"
 readme = "README.md"
 version.workspace = true
@@ -11,20 +11,30 @@ repository.workspace = true
 keywords.workspace = true
 
 [[bin]]
-name = "walrus"
+name = "openwalrus"
 path = "src/bin/main.rs"
 
+[features]
+default = ["daemon"]
+daemon = ["dep:daemon"]
+local = ["daemon/local"]
+metal = ["daemon/metal"]
+cuda = ["daemon/cuda"]
+
 [dependencies]
-protocol = { workspace = true }
-socket = { workspace = true }
-clap = { workspace = true }
-compact_str = { workspace = true }
-tokio = { workspace = true }
-anyhow = { workspace = true }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
-dirs = { workspace = true }
-toml = { workspace = true }
-rustyline = { workspace = true }
-futures-core = { workspace = true }
-futures-util = { workspace = true }
+daemon = { workspace = true, optional = true }
+protocol.workspace = true
+socket.workspace = true
+
+# crates.io
+anyhow.workspace = true
+clap.workspace = true
+compact_str.workspace = true
+dirs.workspace = true
+futures-core.workspace = true
+futures-util.workspace = true
+rustyline.workspace = true
+tokio.workspace = true
+toml.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
