@@ -39,7 +39,11 @@ futures-core = "0.3"
 futures-util = "0.3"
 hf-hub = { version = "0.5.0", features = ["tokio"] }
 mistralrs = { version = "0.7", default-features = false }
-reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = [
+    "json",
+    "stream",
+    "rustls-tls",
+] }
 rmcp = { version = "0.16", features = ["client", "transport-child-process"] }
 rusqlite = { version = "0.34", features = ["bundled"] }
 rustyline = { version = "15", features = ["derive"] }
@@ -76,11 +80,11 @@ strip = true
 packages = [
     "protocol",
     "socket",
-    "core",
+    "wcore",
     "channel",
     "telegram",
     "router",
-    "cron",
+    "wcron",
     "mcp",
     "memory",
     "model",
