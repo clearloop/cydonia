@@ -11,7 +11,7 @@ repository.workspace = true
 keywords.workspace = true
 
 [features]
-default = ["local"]
+default = []
 local = ["model/local"]
 metal = ["model/metal"]
 cuda = ["model/cuda"]
