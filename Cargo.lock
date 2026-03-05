@@ -3828,8 +3828,9 @@ dependencies = [
  "toml 0.8.23",
  "tracing",
  "tracing-subscriber",
+ "walrus-core",
  "walrus-daemon",
- "walrus-protocol",
+ "walrus-socket",
 ]
 
 [[package]]
@@ -6664,7 +6665,6 @@ dependencies = [
  "tokio",
  "tracing",
  "walrus-core",
- "walrus-protocol",
 ]
 
 [[package]]
@@ -6689,8 +6689,8 @@ dependencies = [
  "walrus-mcp",
  "walrus-memory",
  "walrus-model",
- "walrus-protocol",
  "walrus-skill",
+ "walrus-socket",
 ]
 
 [[package]]
@@ -6740,21 +6740,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "walrus-protocol"
-version = "0.0.2"
-dependencies = [
- "anyhow",
- "async-stream",
- "compact_str 0.8.1",
- "futures-core",
- "futures-util",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "walrus-skill"
 version = "0.0.2"
 dependencies = [
@@ -6762,6 +6747,20 @@ dependencies = [
  "compact_str 0.8.1",
  "serde",
  "serde_yaml",
+ "tokio",
+ "tracing",
+ "walrus-core",
+]
+
+[[package]]
+name = "walrus-socket"
+version = "0.0.2"
+dependencies = [
+ "anyhow",
+ "async-stream",
+ "futures-core",
+ "serde",
+ "serde_json",
  "tokio",
  "tracing",
  "walrus-core",

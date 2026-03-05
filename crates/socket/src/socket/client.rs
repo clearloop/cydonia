@@ -1,14 +1,14 @@
 //! Unix domain socket client for connecting to a walrus daemon.
 
-use crate::{
-    api::Client,
-    message::{client::ClientMessage, server::ServerMessage},
-    socket::codec,
-};
+use crate::socket::codec;
 use anyhow::Result;
 use futures_core::Stream;
 use std::path::{Path, PathBuf};
 use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
+use wcore::protocol::{
+    api::Client,
+    message::{client::ClientMessage, server::ServerMessage},
+};
 
 /// Client configuration for connecting to a walrus daemon.
 #[derive(Debug, Clone)]

@@ -1,6 +1,6 @@
 //! Messages sent by the gateway to the client.
 
-use crate::message::{AgentSummary, McpServerSummary};
+use crate::protocol::message::{AgentSummary, McpServerSummary};
 use compact_str::CompactString;
 use serde::{Deserialize, Serialize};
 

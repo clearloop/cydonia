@@ -4,7 +4,8 @@ use crate::daemon::Daemon;
 use anyhow::{Result, bail};
 use futures_util::{StreamExt, pin_mut};
 use memory::Memory;
-use protocol::{
+use wcore::AgentEvent;
+use wcore::protocol::{
     api::Server,
     message::{
         AgentDetail, AgentInfoRequest, AgentList, AgentSummary, ClearSessionRequest, DownloadEvent,
@@ -13,7 +14,6 @@ use protocol::{
         SendResponse, SessionCleared, SkillsReloaded, StreamEvent, StreamRequest,
     },
 };
-use wcore::AgentEvent;
 
 impl Server for Daemon {
     async fn send(&self, req: SendRequest) -> Result<SendResponse> {

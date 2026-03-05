@@ -1,12 +1,12 @@
 //! Memory trait implementation for SqliteMemory.
 
 use crate::{
-    Embedder, Memory, MemoryEntry, RecallOptions,
     sqlite::{SqliteMemory, sql},
     utils::now_unix,
 };
 use anyhow::Result;
 use std::future::Future;
+use wcore::{Embedder, Memory, MemoryEntry, RecallOptions};
 
 impl<E: Embedder> Memory for SqliteMemory<E> {
     fn get(&self, key: &str) -> Option<String> {

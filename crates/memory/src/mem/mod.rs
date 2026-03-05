@@ -1,7 +1,7 @@
 //! In-memory implementation of the Memory trait.
 
-use crate::Memory;
 use std::sync::{Arc, Mutex};
+use wcore::Memory;
 
 /// In-memory store backed by `Arc<Mutex<Vec<(String, String)>>>`.
 ///

@@ -9,7 +9,7 @@ use crate::{
     daemon::event::{DaemonEvent, DaemonEventSender},
     hook::DaemonHook,
 };
-use ::protocol::socket::server::accept_loop;
+use ::socket::socket::server::accept_loop;
 use anyhow::Result;
 use compact_str::CompactString;
 use model::ProviderManager;

@@ -2,8 +2,6 @@
 
 pub mod api;
 pub mod message;
-#[cfg(feature = "socket")]
-pub mod socket;
 
 /// Current protocol version.
 pub const PROTOCOL_VERSION: &str = "0.1";

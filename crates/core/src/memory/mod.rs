@@ -1,28 +1,19 @@
-//! Memory backends for Walrus agents.
+//! Memory abstractions for Walrus agents.
 //!
-//! Defines the [`Memory`] trait, [`Embedder`] trait, and concrete implementations:
-//! [`InMemory`] (volatile) and [`SqliteMemory`] (persistent with FTS5 + vector recall).
+//! Defines the [`Memory`] trait, [`Embedder`] trait, and associated types.
+//! Concrete implementations (`InMemory`, `SqliteMemory`) live in `walrus-memory`.
 //!
 //! Memory is **not chat history**. It is structured knowledge — extracted facts,
 //! user preferences, agent persona — that gets compiled into the system prompt.
-//!
-//! All SQL lives in `sql/*.sql` files, loaded via `include_str!`.
 
-pub use crate::utils::cosine_similarity;
 use anyhow::Result;
 use compact_str::CompactString;
 use serde_json::Value;
-use std::{future::Future, sync::Arc};
+use std::future::Future;
 
-mod embedder;
-mod mem;
-mod sqlite;
-pub mod tools;
-mod utils;
+pub mod embedder;
 
 pub use embedder::{Embedder, NoEmbedder};
-pub use mem::InMemory;
-pub use sqlite::SqliteMemory;
 
 /// A structured memory entry with metadata and optional embedding.
 #[derive(Debug, Clone, Default)]
@@ -117,32 +108,5 @@ pub trait Memory: Send + Sync {
     fn compile_relevant(&self, _query: &str) -> impl Future<Output = String> + Send {
         let compiled = self.compile();
         async move { compiled }
-    }
-}
-
-/// Apply memory to an agent config — appends compiled memory to the system prompt.
-pub fn with_memory(mut config: wcore::AgentConfig, memory: &impl Memory) -> wcore::AgentConfig {
-    let compiled = memory.compile();
-    if !compiled.is_empty() {
-        config.system_prompt = format!("{}\n\n{compiled}", config.system_prompt);
-    }
-    config
-}
-
-impl wcore::Hook for InMemory {
-    fn on_build_agent(&self, config: wcore::AgentConfig) -> wcore::AgentConfig {
-        with_memory(config, self)
-    }
-
-    fn on_register_tools(
-        &self,
-        registry: &mut wcore::ToolRegistry,
-    ) -> impl std::future::Future<Output = ()> + Send {
-        let mem = Arc::new(self.clone());
-        let remember = tools::remember(Arc::clone(&mem));
-        let recall = tools::recall(mem);
-        registry.insert(remember.tool, remember.handler);
-        registry.insert(recall.tool, recall.handler);
-        async {}
     }
 }

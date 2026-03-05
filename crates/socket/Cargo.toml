@@ -1,8 +1,6 @@
 [package]
-name = "walrus-protocol"
-description = "Wire protocol for Walrus daemon communication"
-documentation = "https://docs.rs/walrus-protocol"
-readme = "README.md"
+name = "walrus-socket"
+description = "Unix domain socket transport for Walrus daemon communication"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -15,12 +13,11 @@ default = ["socket"]
 socket = ["dep:tracing"]
 
 [dependencies]
+wcore.workspace = true
 # crates.io
 anyhow.workspace = true
 async-stream.workspace = true
-compact_str.workspace = true
 futures-core.workspace = true
-futures-util.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

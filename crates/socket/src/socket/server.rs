@@ -1,9 +1,6 @@
 //! Unix domain socket server — accept loop and per-connection message handler.
 
-use crate::{
-    message::{client::ClientMessage, server::ServerMessage},
-    socket::codec,
-};
+use crate::socket::codec;
 use tokio::{
     net::{
         UnixListener,
@@ -11,6 +8,7 @@ use tokio::{
     },
     sync::{mpsc, oneshot},
 };
+use wcore::protocol::message::{client::ClientMessage, server::ServerMessage};
 
 /// Accept connections on the given `UnixListener` until shutdown is signalled.
 ///

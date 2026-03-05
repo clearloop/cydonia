@@ -1,9 +1,8 @@
 //! Wire protocol message types — enums, payload structs, and conversions.
 
-use client::ClientMessage;
+use crate::protocol::message::{client::ClientMessage, server::ServerMessage};
 use compact_str::CompactString;
 use serde::{Deserialize, Serialize};
-use server::ServerMessage;
 use std::collections::BTreeMap;
 
 pub mod client;

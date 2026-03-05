@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 use futures_util::StreamExt;
-use protocol::{
+use wcore::protocol::{
     api::{Client, Server},
     message::{client::ClientMessage, server::ServerMessage},
 };

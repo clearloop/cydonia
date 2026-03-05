@@ -1,6 +1,6 @@
 //! Server trait — one async method per protocol operation.
 
-use crate::message::{
+use crate::protocol::message::{
     AgentDetail, AgentInfoRequest, AgentList, ClearSessionRequest, DownloadEvent, DownloadRequest,
     GetMemoryRequest, McpAddRequest, McpAdded, McpReloaded, McpRemoveRequest, McpRemoved,
     McpServerList, MemoryEntry, MemoryList, SendRequest, SendResponse, SessionCleared,

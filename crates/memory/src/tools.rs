@@ -1,8 +1,8 @@
 //! Memory tool schemas and handlers for agent tool registration.
 
-use crate::{Memory, RecallOptions};
 use std::sync::Arc;
 use wcore::{Handler, model::Tool};
+use wcore::{Memory, RecallOptions};
 
 /// Tool schema + handler pair, ready to register on a hook.
 pub struct MemoryTool {

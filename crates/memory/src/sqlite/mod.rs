@@ -3,15 +3,13 @@
 //! Wraps a `rusqlite::Connection` in a `Mutex` for thread safety.
 //! Generic over `E: Embedder` for optional vector search.
 
-use crate::{
-    Embedder, MemoryEntry, RecallOptions,
-    utils::{cosine_similarity, decode_embedding, mmr_rerank, now_unix},
-};
+use crate::utils::{cosine_similarity, decode_embedding, mmr_rerank, now_unix};
 use anyhow::Result;
 use compact_str::CompactString;
 use rusqlite::Connection;
 use serde_json::Value;
 use std::{collections::HashMap, path::Path, sync::Mutex};
+use wcore::{Embedder, MemoryEntry, RecallOptions};
 
 mod memory;
 mod sql;
