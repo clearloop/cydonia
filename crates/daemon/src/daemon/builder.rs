@@ -1,6 +1,6 @@
 //! Runtime builder — constructs a fully-configured Runtime from DaemonConfig.
 
-use crate::{DaemonConfig, config, hook::DaemonHook};
+use crate::{DaemonConfig, config, hook, hook::DaemonHook};
 use anyhow::Result;
 use model::ProviderManager;
 use std::path::{Path, PathBuf};
@@ -49,9 +49,9 @@ impl<'a> Builder<'a> {
         tracing::info!("using in-memory backend");
 
         let skills_dir = self.config_dir.join(config::SKILLS_DIR);
-        let skills = system::skill::SkillHandler::load(skills_dir).unwrap_or_else(|e| {
+        let skills = hook::skill::SkillHandler::load(skills_dir).unwrap_or_else(|e| {
             tracing::warn!("failed to load skills: {e}");
-            system::skill::SkillHandler::load(PathBuf::new()).expect("empty skill handler")
+            hook::skill::SkillHandler::load(PathBuf::new()).expect("empty skill handler")
         });
 
         let mcp_servers = self
@@ -61,7 +61,7 @@ impl<'a> Builder<'a> {
             .cloned()
             .collect::<Vec<_>>();
         let mcp_handler =
-            system::mcp::McpHandler::load(self.config_dir.to_path_buf(), &mcp_servers).await;
+            hook::mcp::McpHandler::load(self.config_dir.to_path_buf(), &mcp_servers).await;
 
         DaemonHook::new(memory, skills, mcp_handler)
     }

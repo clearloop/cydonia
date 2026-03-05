@@ -75,7 +75,6 @@ impl Daemon {
         config_dir: &Path,
     ) -> Result<DaemonHandle> {
         let (event_tx, event_rx) = mpsc::unbounded_channel::<DaemonEvent>();
-
         let runtime = builder::Builder::new(config, config_dir).build().await?;
         let runtime = Arc::new(runtime);
         let daemon = Daemon {

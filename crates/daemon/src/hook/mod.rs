@@ -4,11 +4,13 @@
 //! `on_build_agent` delegates to skills and memory; `on_register_tools`
 //! delegates to memory and MCP sub-hooks in sequence.
 
+use crate::hook::skill::SkillHandler;
+use mcp::McpHandler;
 use memory::InMemory;
-use std::future::Future;
-use system::mcp::McpHandler;
-use system::skill::SkillHandler;
 use wcore::{AgentConfig, AgentEvent, Hook, ToolRegistry};
+
+pub mod mcp;
+pub mod skill;
 
 /// Stateful Hook implementation for the daemon.
 ///
@@ -37,6 +39,11 @@ impl Hook for DaemonHook {
         self.memory.on_build_agent(config)
     }
 
+    async fn on_register_tools(&self, tools: &mut ToolRegistry) {
+        self.memory.on_register_tools(tools).await;
+        self.mcp.on_register_tools(tools).await
+    }
+
     fn on_event(&self, agent: &str, event: &AgentEvent) {
         match event {
             AgentEvent::TextDelta(text) => {
@@ -60,12 +67,5 @@ impl Hook for DaemonHook {
                 );
             }
         }
-    }
-
-    fn on_register_tools(&self, tools: &mut ToolRegistry) -> impl Future<Output = ()> + Send {
-        // Memory: inserts happen synchronously; trivial async{} future is dropped.
-        drop(self.memory.on_register_tools(tools));
-        // MCP: captures bridge Arc synchronously, registers tools async.
-        self.mcp.on_register_tools(tools)
     }
 }

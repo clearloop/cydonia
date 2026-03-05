@@ -6648,8 +6648,11 @@ dependencies = [
  "dirs",
  "futures-core",
  "futures-util",
+ "rmcp",
+ "schemars 1.2.1",
  "serde",
  "serde_json",
+ "serde_yaml",
  "tokio",
  "toml 0.8.23",
  "tracing",
@@ -6659,7 +6662,6 @@ dependencies = [
  "walrus-memory",
  "walrus-model",
  "walrus-socket",
- "walrus-system",
 ]
 
 [[package]]
@@ -6702,24 +6704,6 @@ dependencies = [
  "futures-core",
  "serde",
  "serde_json",
- "tokio",
- "tracing",
- "walrus-core",
-]
-
-[[package]]
-name = "walrus-system"
-version = "0.0.3"
-dependencies = [
- "anyhow",
- "compact_str 0.8.1",
- "futures-core",
- "futures-util",
- "rmcp",
- "schemars 1.2.1",
- "serde",
- "serde_json",
- "serde_yaml",
  "tokio",
  "tracing",
  "walrus-core",

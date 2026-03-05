@@ -18,7 +18,6 @@ memory = { path = "crates/memory", package = "walrus-memory", version = "0.0.3" 
 model = { path = "crates/model", package = "walrus-model", version = "0.0.3" }
 socket = { path = "crates/socket", package = "walrus-socket", version = "0.0.3" }
 wcore = { path = "crates/core", package = "walrus-core", version = "0.0.3" }
-system = { path = "crates/system", package = "walrus-system", version = "0.0.3" }
 
 # crates.io
 anyhow = "1"
@@ -70,13 +69,4 @@ overflow-checks = false
 strip = true
 
 [workspace.metadata.conta]
-packages = [
-    "socket",
-    "wcore",
-    "system",
-    "channel",
-    "memory",
-    "model",
-    "daemon",
-    "cli",
-]
+packages = ["socket", "wcore", "channel", "memory", "model", "daemon", "cli"]
