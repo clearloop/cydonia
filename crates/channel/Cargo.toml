@@ -1,5 +1,8 @@
 [package]
 name = "walrus-channel"
+description = "Platform-agnostic messaging channel abstraction for OpenWalrus agents"
+documentation = "https://docs.rs/walrus-channel"
+readme = "README.md"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -11,7 +14,6 @@ keywords.workspace = true
 wcore.workspace = true
 anyhow.workspace = true
 compact_str.workspace = true
-futures-core.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true

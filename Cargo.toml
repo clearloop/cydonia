@@ -69,4 +69,4 @@ overflow-checks = false
 strip = true
 
 [workspace.metadata.conta]
-packages = ["socket", "wcore", "channel", "memory", "model", "daemon", "cli"]
+packages = ["wcore", "socket", "channel", "memory", "model", "daemon", "cli"]
