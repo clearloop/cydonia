@@ -1,12 +1,9 @@
 //! Model trait implementation for the Claude (Anthropic) provider.
 
-use super::{Claude, Request, stream::Event};
+use super::{Claude, Request};
 use anyhow::Result;
-use async_stream::try_stream;
 use compact_str::CompactString;
 use futures_core::Stream;
-use futures_util::StreamExt;
-use reqwest::Method;
 use wcore::model::{
     Choice, CompletionMeta, CompletionTokensDetails, Delta, FinishReason, Model, Response,
     StreamChunk, Usage,
@@ -44,22 +41,8 @@ struct AnthropicUsage {
 impl Model for Claude {
     async fn send(&self, request: &wcore::model::Request) -> Result<Response> {
         let body = Request::from(request.clone());
-        tracing::trace!("request: {}", serde_json::to_string(&body)?);
-        let response = self
-            .client
-            .request(Method::POST, &self.endpoint)
-            .headers(self.headers.clone())
-            .json(&body)
-            .send()
-            .await?;
-
-        let status = response.status();
-        let text = response.text().await?;
+        let text = self.http.send_raw(&body).await?;
         tracing::trace!("response: {text}");
-        if !status.is_success() {
-            anyhow::bail!("Anthropic API error ({status}): {text}");
-        }
-
         let raw: AnthropicResponse = serde_json::from_str(&text)?;
         Ok(to_response(raw))
     }
@@ -68,61 +51,13 @@ impl Model for Claude {
         &self,
         request: wcore::model::Request,
     ) -> impl Stream<Item = Result<StreamChunk>> + Send {
-        let body = Request::from(request).stream();
-        if let Ok(body) = serde_json::to_string(&body) {
-            tracing::trace!("request: {}", body);
-        }
-        let request = self
-            .client
-            .request(Method::POST, &self.endpoint)
-            .headers(self.headers.clone())
-            .json(&body);
-
-        try_stream! {
-            let response = request.send().await?;
-            let mut stream = response.bytes_stream();
-            let mut buf = String::new();
-            while let Some(Ok(bytes)) = stream.next().await {
-                buf.push_str(&String::from_utf8_lossy(&bytes));
-                while let Some(pos) = buf.find("\n\n") {
-                    let block = buf[..pos].to_owned();
-                    buf = buf[pos + 2..].to_owned();
-                    if let Some(chunk) = parse_sse_block(&block) {
-                        yield chunk;
-                    }
-                }
-            }
-            // Handle any remaining data in buffer.
-            if !buf.trim().is_empty()
-                && let Some(chunk) = parse_sse_block(&buf) {
-                yield chunk;
-            }
-        }
+        let body = serde_json::to_value(Request::from(request).stream())
+            .expect("claude request serialization failed");
+        self.http.stream_anthropic(body)
     }
 
     fn active_model(&self) -> CompactString {
-        CompactString::from("claude-sonnet-4-20250514")
-    }
-}
-
-/// Parse a single SSE block (may contain `event:` and `data:` lines).
-fn parse_sse_block(block: &str) -> Option<StreamChunk> {
-    let mut data_str = None;
-    for line in block.lines() {
-        if let Some(d) = line.strip_prefix("data: ") {
-            data_str = Some(d.trim());
-        }
-    }
-    let data = data_str?;
-    if data == "[DONE]" {
-        return None;
-    }
-    match serde_json::from_str::<Event>(data) {
-        Ok(event) => event.into_chunk(),
-        Err(e) => {
-            tracing::warn!("failed to parse anthropic event: {e}, data: {data}");
-            None
-        }
+        self.model.clone()
     }
 }
 

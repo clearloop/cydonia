@@ -5,8 +5,8 @@
 //! methods at the appropriate lifecycle points. `DaemonHook` composes
 //! multiple Hook implementations by delegating to each.
 
-use crate::{AgentConfig, AgentEvent, agent::tool::ToolRegistry};
-use std::future::Future;
+use crate::{AgentConfig, AgentEvent, Memory, agent::tool::ToolRegistry, memory::tools};
+use std::{future::Future, sync::Arc};
 
 /// Lifecycle backend for agent building, event observation, and tool registration.
 ///
@@ -42,3 +42,26 @@ pub trait Hook: Send + Sync {
 }
 
 impl Hook for () {}
+
+/// Blanket Hook impl for all Memory types that are Clone + 'static.
+///
+/// Injects compiled memory into the system prompt via `on_build_agent`
+/// and registers `remember`/`recall` tools via `on_register_tools`.
+impl<M: Memory + Clone + 'static> Hook for M {
+    fn on_build_agent(&self, mut config: AgentConfig) -> AgentConfig {
+        let compiled = self.compile();
+        if !compiled.is_empty() {
+            config.system_prompt = format!("{}\n\n{compiled}", config.system_prompt);
+        }
+        config
+    }
+
+    fn on_register_tools(&self, registry: &mut ToolRegistry) -> impl Future<Output = ()> + Send {
+        let mem = Arc::new(self.clone());
+        let (tool, handler) = tools::remember(Arc::clone(&mem));
+        registry.insert(tool, handler);
+        let (tool, handler) = tools::recall(mem);
+        registry.insert(tool, handler);
+        async {}
+    }
+}

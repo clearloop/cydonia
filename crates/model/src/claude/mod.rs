@@ -2,48 +2,43 @@
 //!
 //! Implements the Anthropic Messages API, which differs from the OpenAI
 //! chat completions format in message structure and streaming events.
+//! Uses `HttpProvider` for transport, with Anthropic-specific headers and
+//! block-buffer SSE parsing.
+
+use crate::http::HttpProvider;
+use compact_str::CompactString;
+use reqwest::Client;
 
 pub use request::Request;
-use reqwest::{Client, header::HeaderMap};
 
 mod provider;
 mod request;
-mod stream;
+pub(crate) mod stream;
 
 /// The Anthropic Messages API endpoint.
 pub const ENDPOINT: &str = "https://api.anthropic.com/v1/messages";
 
-/// The Anthropic API version header value.
-const API_VERSION: &str = "2023-06-01";
-
 /// The Claude LLM provider.
 #[derive(Clone)]
 pub struct Claude {
-    /// The HTTP client.
-    pub client: Client,
-    /// Request headers (x-api-key, anthropic-version, content-type).
-    headers: HeaderMap,
-    /// Messages API endpoint URL.
-    endpoint: String,
+    /// Shared HTTP transport with Anthropic authentication headers.
+    pub(crate) http: HttpProvider,
+    /// The configured model name (used by `active_model()`).
+    model: CompactString,
 }
 
 impl Claude {
     /// Create a provider targeting the Anthropic API.
-    pub fn anthropic(client: Client, key: &str) -> anyhow::Result<Self> {
-        Self::custom(client, key, ENDPOINT)
+    pub fn anthropic(client: Client, key: &str, model: &str) -> anyhow::Result<Self> {
+        Self::custom(client, key, ENDPOINT, model)
     }
 
     /// Create a provider targeting a custom Anthropic-compatible endpoint.
-    pub fn custom(client: Client, key: &str, endpoint: &str) -> anyhow::Result<Self> {
-        use reqwest::header;
-        let mut headers = HeaderMap::new();
-        headers.insert(header::CONTENT_TYPE, "application/json".parse()?);
-        headers.insert("x-api-key", key.parse()?);
-        headers.insert("anthropic-version", API_VERSION.parse()?);
+    pub fn custom(client: Client, key: &str, endpoint: &str, model: &str) -> anyhow::Result<Self> {
+        let http = HttpProvider::anthropic(client, key, endpoint)?;
         Ok(Self {
-            client,
-            headers,
-            endpoint: endpoint.to_owned(),
+            http,
+            model: CompactString::from(model),
         })
     }
 }

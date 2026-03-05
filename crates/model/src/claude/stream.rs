@@ -7,6 +7,8 @@
 //! - `content_block_stop` — end of a content block
 //! - `message_delta` — final stop_reason and usage
 //! - `message_stop` — end of message
+//!
+//! `parse_sse_block` is `pub(crate)` so `HttpProvider::stream_anthropic` can call it.
 
 use compact_str::CompactString;
 use serde::Deserialize;
@@ -201,6 +203,29 @@ impl Event {
                 })
             }
             Self::ContentBlockStop {} | Self::MessageStop | Self::Ping | Self::Unknown => None,
+        }
+    }
+}
+
+/// Parse a single Anthropic SSE block (may contain `event:` and `data:` lines).
+///
+/// Returns the corresponding `StreamChunk` or `None` for terminal/no-op events.
+pub(crate) fn parse_sse_block(block: &str) -> Option<StreamChunk> {
+    let mut data_str = None;
+    for line in block.lines() {
+        if let Some(d) = line.strip_prefix("data: ") {
+            data_str = Some(d.trim());
+        }
+    }
+    let data = data_str?;
+    if data == "[DONE]" {
+        return None;
+    }
+    match serde_json::from_str::<Event>(data) {
+        Ok(event) => event.into_chunk(),
+        Err(e) => {
+            tracing::warn!("failed to parse anthropic event: {e}, data: {data}");
+            None
         }
     }
 }
