@@ -1,10 +1,11 @@
 //! Telegram Bot API channel adapter.
 //!
 //! Uses long-polling `getUpdates` for receiving messages and
-//! `sendMessage` for sending. Implements [`Channel`] from walrus-pchannel.
+//! `sendMessage` for sending. Implements [`Channel`] from this crate.
 
+use crate::channel::{Channel, ChannelHandle};
+use crate::message::{Attachment, AttachmentKind, ChannelMessage, Platform};
 use anyhow::Result;
-use channel::{Attachment, AttachmentKind, Channel, ChannelHandle, ChannelMessage, Platform};
 use compact_str::CompactString;
 use reqwest::Client;
 use serde::Deserialize;

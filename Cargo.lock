@@ -6622,22 +6622,12 @@ dependencies = [
  "anyhow",
  "compact_str 0.8.1",
  "futures-core",
+ "reqwest 0.12.26",
  "serde",
- "tokio",
- "walrus-core",
-]
-
-[[package]]
-name = "walrus-channel-router"
-version = "0.0.2"
-dependencies = [
- "anyhow",
- "compact_str 0.8.1",
- "serde",
+ "serde_json",
  "tokio",
  "tracing",
- "walrus-channel",
- "walrus-telegram",
+ "walrus-core",
 ]
 
 [[package]]
@@ -6694,7 +6684,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "walrus-channel",
- "walrus-channel-router",
  "walrus-core",
  "walrus-cron",
  "walrus-mcp",
@@ -6776,20 +6765,6 @@ dependencies = [
  "tokio",
  "tracing",
  "walrus-core",
-]
-
-[[package]]
-name = "walrus-telegram"
-version = "0.0.2"
-dependencies = [
- "anyhow",
- "compact_str 0.8.1",
- "reqwest 0.12.26",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
- "walrus-channel",
 ]
 
 [[package]]

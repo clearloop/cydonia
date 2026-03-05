@@ -22,7 +22,6 @@ mcp.workspace = true
 memory.workspace = true
 model.workspace = true
 protocol = { workspace = true, features = ["socket"] }
-router.workspace = true
 skill.workspace = true
 wcore.workspace = true
 wcron.workspace = true

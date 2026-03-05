@@ -1,8 +1,5 @@
 [package]
-name = "walrus-telegram"
-description = "Telegram channel adapter for Walrus"
-documentation = "https://docs.rs/walrus-telegram"
-readme = "README.md"
+name = "walrus-channel"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -11,11 +8,10 @@ repository.workspace = true
 keywords.workspace = true
 
 [dependencies]
-channel.workspace = true
-
-# crates.io
+wcore.workspace = true
 anyhow.workspace = true
 compact_str.workspace = true
+futures-core.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true

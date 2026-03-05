@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "protocol/*", "channel/*"]
+members = ["crates/*"]
 
 [workspace.package]
 version = "0.0.2"
@@ -11,16 +11,14 @@ repository = "https://github.com/openwalrus/walrus"
 keywords = ["llm", "agent", "ai"]
 
 [workspace.dependencies]
-channel = { path = "protocol/channel", package = "walrus-channel", version = "0.0.2" }
+channel = { path = "crates/channel", package = "walrus-channel", version = "0.0.2" }
 cli = { path = "crates/cli", package = "openwalrus", version = "0.0.2" }
 daemon = { path = "crates/daemon", package = "walrus-daemon", version = "0.0.2" }
 mcp = { path = "hook/mcp", package = "walrus-mcp", version = "0.0.2" }
 memory = { path = "hook/memory", package = "walrus-memory", version = "0.0.2" }
 model = { path = "crates/model", package = "walrus-model", version = "0.0.2" }
 protocol = { path = "crates/protocol", package = "walrus-protocol", version = "0.0.2" }
-router = { path = "channel/router", package = "walrus-channel-router", version = "0.0.2" }
 skill = { path = "hook/skill", package = "walrus-skill", version = "0.0.2" }
-telegram = { path = "channel/telegram", package = "walrus-telegram", version = "0.0.2" }
 wcore = { path = "crates/core", package = "walrus-core", version = "0.0.2" }
 wcron = { path = "hook/cron", package = "walrus-cron", version = "0.0.2" }
 
@@ -79,8 +77,6 @@ packages = [
     "protocol",
     "wcore",
     "channel",
-    "telegram",
-    "router",
     "wcron",
     "mcp",
     "memory",

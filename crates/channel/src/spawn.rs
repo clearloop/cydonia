@@ -1,13 +1,14 @@
-//! Channel router — connects platform channels and routes messages to agents.
+//! Channel runner — connects platform channels and routes messages to agents.
 //!
 //! Owns the lifecycle of all channel connections: building the routing table,
 //! connecting to platforms (Telegram, etc.), and running message loops. The
 //! daemon passes a callback for agent dispatch, keeping this crate decoupled
 //! from the runtime.
 
-pub use channel::{
-    ChannelMessage, ChannelRouter, ChannelSender, Platform, RoutingRule, parse_platform,
-};
+use crate::channel::Channel;
+use crate::message::{ChannelMessage, Platform};
+use crate::router::{ChannelRouter, RoutingRule, parse_platform};
+use crate::telegram::TelegramChannel;
 use compact_str::CompactString;
 use serde::{Deserialize, Serialize};
 use std::{future::Future, sync::Arc};
@@ -73,8 +74,8 @@ pub async fn spawn_channels<F, Fut>(
 
         match platform {
             Platform::Telegram => {
-                let tg = telegram::TelegramChannel::new(ch.bot_token.clone());
-                match channel::Channel::connect(tg).await {
+                let tg = TelegramChannel::new(ch.bot_token.clone());
+                match Channel::connect(tg).await {
                     Ok(mut handle) => {
                         let (tx, rx) = mpsc::unbounded_channel();
                         let sender = handle.sender();
@@ -98,9 +99,6 @@ pub async fn spawn_channels<F, Fut>(
                     }
                 }
             }
-            _ => {
-                tracing::warn!(platform = %ch.platform, "unsupported channel platform");
-            }
         }
     }
 }
@@ -110,7 +108,7 @@ pub async fn spawn_channels<F, Fut>(
 /// Receives messages, routes to agents, dispatches via callback, sends replies.
 async fn channel_loop<F, Fut>(
     mut rx: mpsc::UnboundedReceiver<ChannelMessage>,
-    sender: ChannelSender,
+    sender: crate::channel::ChannelSender,
     router: Arc<ChannelRouter>,
     on_message: Arc<F>,
 ) where
