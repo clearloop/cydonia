@@ -10,6 +10,10 @@ license.workspace = true
 repository.workspace = true
 keywords.workspace = true
 
+[features]
+default = ["socket"]
+socket = ["dep:tracing"]
+
 [dependencies]
 # crates.io
 anyhow.workspace = true
@@ -20,3 +24,4 @@ futures-util.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
+tracing = { workspace = true, optional = true }

@@ -1,7 +1,9 @@
 //! Unix domain socket server — accept loop and per-connection message handler.
 
-use crate::codec;
-use protocol::message::{client::ClientMessage, server::ServerMessage};
+use crate::{
+    message::{client::ClientMessage, server::ServerMessage},
+    socket::codec,
+};
 use tokio::{
     net::{
         UnixListener,

@@ -1,12 +1,12 @@
 //! Unix domain socket client for connecting to a walrus daemon.
 
-use crate::codec;
-use anyhow::Result;
-use futures_core::Stream;
-use protocol::{
+use crate::{
     api::Client,
     message::{client::ClientMessage, server::ServerMessage},
+    socket::codec,
 };
+use anyhow::Result;
+use futures_core::Stream;
 use std::path::{Path, PathBuf};
 use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
 
@@ -15,22 +15,6 @@ use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
 pub struct ClientConfig {
     /// Daemon Unix domain socket path.
     pub socket_path: PathBuf,
-}
-
-impl Default for ClientConfig {
-    fn default() -> Self {
-        Self {
-            socket_path: default_socket_path(),
-        }
-    }
-}
-
-/// Default socket path: `~/.walrus/walrus.sock`.
-fn default_socket_path() -> PathBuf {
-    dirs::home_dir()
-        .expect("no home directory")
-        .join(".walrus")
-        .join("walrus.sock")
 }
 
 /// Unix domain socket client for the walrus daemon.

@@ -3830,7 +3830,6 @@ dependencies = [
  "tracing-subscriber",
  "walrus-daemon",
  "walrus-protocol",
- "walrus-socket",
 ]
 
 [[package]]
@@ -6703,7 +6702,6 @@ dependencies = [
  "walrus-model",
  "walrus-protocol",
  "walrus-skill",
- "walrus-socket",
 ]
 
 [[package]]
@@ -6764,6 +6762,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -6777,23 +6776,6 @@ dependencies = [
  "tokio",
  "tracing",
  "walrus-core",
-]
-
-[[package]]
-name = "walrus-socket"
-version = "0.0.2"
-dependencies = [
- "anyhow",
- "async-stream",
- "compact_str 0.8.1",
- "dirs",
- "futures-core",
- "futures-util",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
- "walrus-protocol",
 ]
 
 [[package]]

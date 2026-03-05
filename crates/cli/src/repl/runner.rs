@@ -4,6 +4,7 @@ use anyhow::Result;
 use compact_str::CompactString;
 use futures_core::Stream;
 use futures_util::StreamExt;
+use protocol::socket::{ClientConfig, Connection, WalrusClient};
 use protocol::{
     api::Client,
     message::{
@@ -11,7 +12,6 @@ use protocol::{
         GetMemoryRequest, SendRequest, StreamEvent, StreamRequest,
     },
 };
-use socket::{ClientConfig, Connection, WalrusClient};
 use std::path::Path;
 
 /// Runs agents via a walrusd Unix domain socket connection.

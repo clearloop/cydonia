@@ -9,6 +9,7 @@ use crate::{
     daemon::event::{DaemonEvent, DaemonEventSender},
     hook::DaemonHook,
 };
+use ::protocol::socket::server::accept_loop;
 use anyhow::Result;
 use compact_str::CompactString;
 use model::ProviderManager;
@@ -132,7 +133,7 @@ fn setup_socket(
 
     let socket_shutdown = bridge_shutdown(shutdown_tx.subscribe());
     let socket_tx = event_tx.clone();
-    let join = tokio::spawn(socket::server::accept_loop(
+    let join = tokio::spawn(accept_loop(
         listener,
         move |msg, reply| {
             let _ = socket_tx.send(DaemonEvent::Socket { msg, reply });
