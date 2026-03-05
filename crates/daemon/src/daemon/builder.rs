@@ -85,6 +85,7 @@ impl<'a> Builder<'a> {
     /// Load agents from markdown files and add them to the runtime.
     fn load_agents(&self, runtime: &mut Runtime<ProviderManager, DaemonHook>) -> Result<()> {
         let agents = crate::config::load_agents_dir(&self.config_dir.join(config::AGENTS_DIR))?;
+        runtime.add_agent(system::agent::system_agent()?);
         for agent in agents {
             tracing::info!("registered agent '{}'", agent.name);
             runtime.add_agent(agent);
