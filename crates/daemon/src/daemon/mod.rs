@@ -9,7 +9,7 @@ use crate::{
     daemon::event::{DaemonEvent, DaemonEventSender},
     hook::DaemonHook,
 };
-use ::socket::socket::server::accept_loop;
+use ::socket::server::accept_loop;
 use anyhow::Result;
 use compact_str::CompactString;
 use model::ProviderManager;
@@ -175,10 +175,10 @@ async fn setup_cron(
     runtime: &Arc<Runtime<ProviderManager, DaemonHook>>,
     shutdown_tx: &broadcast::Sender<()>,
     event_tx: &DaemonEventSender,
-) -> mpsc::UnboundedSender<wcron::CronJob> {
+) -> mpsc::UnboundedSender<system::cron::CronJob> {
     let cron_jobs = runtime.hook.cron.jobs().await;
     let cron_tx = event_tx.clone();
-    wcron::spawn_with_callback(
+    system::cron::spawn_with_callback(
         cron_jobs,
         move |job| {
             let tx = cron_tx.clone();

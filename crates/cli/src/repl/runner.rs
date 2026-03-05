@@ -4,7 +4,7 @@ use anyhow::Result;
 use compact_str::CompactString;
 use futures_core::Stream;
 use futures_util::StreamExt;
-use socket::socket::{ClientConfig, Connection, WalrusClient};
+use socket::{ClientConfig, Connection, WalrusClient};
 use std::path::Path;
 use wcore::protocol::{
     api::Client,

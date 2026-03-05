@@ -3,8 +3,8 @@
 //! Wire message types and API traits live in `walrus-core::protocol`.
 //! This crate provides only the UDS transport layer.
 
-pub use wcore::protocol::api;
-pub use wcore::protocol::message;
+pub mod client;
+pub mod codec;
+pub mod server;
 
-#[cfg(feature = "socket")]
-pub mod socket;
+pub use client::{ClientConfig, Connection, WalrusClient};

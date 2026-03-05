@@ -60,9 +60,9 @@ impl<'a> Builder<'a> {
         tracing::info!("using in-memory backend");
 
         let skills_dir = self.config_dir.join(config::SKILLS_DIR);
-        let skills = skill::SkillHandler::load(skills_dir).unwrap_or_else(|e| {
+        let skills = system::skill::SkillHandler::load(skills_dir).unwrap_or_else(|e| {
             tracing::warn!("failed to load skills: {e}");
-            skill::SkillHandler::load(PathBuf::new()).expect("empty skill handler")
+            system::skill::SkillHandler::load(PathBuf::new()).expect("empty skill handler")
         });
 
         let mcp_servers = self
@@ -71,7 +71,8 @@ impl<'a> Builder<'a> {
             .values()
             .cloned()
             .collect::<Vec<_>>();
-        let mcp_handler = mcp::McpHandler::load(self.config_dir.to_path_buf(), &mcp_servers).await;
+        let mcp_handler =
+            system::mcp::McpHandler::load(self.config_dir.to_path_buf(), &mcp_servers).await;
         let cron_dir = self.config_dir.join(config::CRON_DIR);
         let event_tx = self.event_tx.clone();
         let cron_handler = build_cron_handler(&cron_dir, move |job| {
@@ -93,21 +94,21 @@ impl<'a> Builder<'a> {
 }
 
 /// Load cron entries from disk and build a CronHandler with the given creation callback.
-fn build_cron_handler<F: Fn(wcron::CronJob) + Send + Sync + 'static>(
+fn build_cron_handler<F: Fn(system::cron::CronJob) + Send + Sync + 'static>(
     cron_dir: &Path,
     on_create: F,
-) -> wcron::CronHandler {
+) -> system::cron::CronHandler {
     let entries = match crate::config::load_cron_dir(cron_dir) {
         Ok(e) => e,
         Err(e) => {
             tracing::warn!("failed to load cron entries: {e}");
-            return wcron::CronHandler::new(Vec::new(), on_create);
+            return system::cron::CronHandler::new(Vec::new(), on_create);
         }
     };
 
     let mut jobs = Vec::new();
     for entry in entries {
-        match wcron::CronJob::new(entry.name, &entry.schedule, entry.agent, entry.message) {
+        match system::cron::CronJob::new(entry.name, &entry.schedule, entry.agent, entry.message) {
             Ok(job) => {
                 tracing::info!("registered cron job '{}' → agent '{}'", job.name, job.agent);
                 jobs.push(job);
@@ -118,5 +119,5 @@ fn build_cron_handler<F: Fn(wcron::CronJob) + Send + Sync + 'static>(
         }
     }
 
-    wcron::CronHandler::new(jobs, on_create)
+    system::cron::CronHandler::new(jobs, on_create)
 }

@@ -6650,24 +6650,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "walrus-cron"
-version = "0.0.2"
-dependencies = [
- "anyhow",
- "chrono",
- "compact_str 0.8.1",
- "cron",
- "futures-core",
- "futures-util",
- "serde",
- "serde_json",
- "serde_yaml",
- "tokio",
- "tracing",
- "walrus-core",
-]
-
-[[package]]
 name = "walrus-daemon"
 version = "0.0.2"
 dependencies = [
@@ -6685,27 +6667,10 @@ dependencies = [
  "tracing-subscriber",
  "walrus-channel",
  "walrus-core",
- "walrus-cron",
- "walrus-mcp",
  "walrus-memory",
  "walrus-model",
- "walrus-skill",
  "walrus-socket",
-]
-
-[[package]]
-name = "walrus-mcp"
-version = "0.0.2"
-dependencies = [
- "anyhow",
- "compact_str 0.8.1",
- "rmcp",
- "schemars 1.2.1",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
- "walrus-core",
+ "walrus-system",
 ]
 
 [[package]]
@@ -6740,19 +6705,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "walrus-skill"
-version = "0.0.2"
-dependencies = [
- "anyhow",
- "compact_str 0.8.1",
- "serde",
- "serde_yaml",
- "tokio",
- "tracing",
- "walrus-core",
-]
-
-[[package]]
 name = "walrus-socket"
 version = "0.0.2"
 dependencies = [
@@ -6761,6 +6713,26 @@ dependencies = [
  "futures-core",
  "serde",
  "serde_json",
+ "tokio",
+ "tracing",
+ "walrus-core",
+]
+
+[[package]]
+name = "walrus-system"
+version = "0.0.2"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "compact_str 0.8.1",
+ "cron",
+ "futures-core",
+ "futures-util",
+ "rmcp",
+ "schemars 1.2.1",
+ "serde",
+ "serde_json",
+ "serde_yaml",
  "tokio",
  "tracing",
  "walrus-core",

@@ -1,7 +1,7 @@
 [package]
-name = "walrus-mcp"
-description = "Walrus MCP bridge"
-documentation = "https://docs.rs/walrus-mcp"
+name = "walrus-system"
+description = "Walrus system hooks — skill, MCP, and cron subsystems"
+documentation = "https://docs.rs/walrus-system"
 readme = "README.md"
 version.workspace = true
 edition.workspace = true
@@ -15,10 +15,15 @@ wcore.workspace = true
 
 # crates.io
 anyhow.workspace = true
+chrono.workspace = true
 compact_str.workspace = true
+cron.workspace = true
+futures-core.workspace = true
+futures-util.workspace = true
 rmcp.workspace = true
 schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+serde_yaml.workspace = true
 tokio.workspace = true
 tracing.workspace = true

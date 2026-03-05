@@ -18,13 +18,11 @@ cuda = ["model/cuda"]
 
 [dependencies]
 channel.workspace = true
-mcp.workspace = true
 memory.workspace = true
 model.workspace = true
-socket = { workspace = true, features = ["socket"] }
-skill.workspace = true
+socket.workspace = true
+system.workspace = true
 wcore.workspace = true
-wcron.workspace = true
 
 # crates.io
 anyhow.workspace = true

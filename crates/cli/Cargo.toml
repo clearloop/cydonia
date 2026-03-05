@@ -23,7 +23,7 @@ cuda = ["daemon/cuda"]
 
 [dependencies]
 daemon = { workspace = true, optional = true }
-socket = { workspace = true, features = ["socket"] }
+socket.workspace = true
 wcore.workspace = true
 
 # crates.io

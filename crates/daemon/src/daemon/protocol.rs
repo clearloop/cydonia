@@ -155,7 +155,7 @@ impl Server for Daemon {
     }
 
     async fn mcp_add(&self, req: McpAddRequest) -> Result<McpAdded> {
-        let config = mcp::McpServerConfig {
+        let config = system::mcp::McpServerConfig {
             name: req.name.clone(),
             command: req.command,
             args: req.args,

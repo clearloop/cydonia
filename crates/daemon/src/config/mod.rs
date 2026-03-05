@@ -32,7 +32,7 @@ pub struct DaemonConfig {
     pub channels: BTreeMap<CompactString, ChannelConfig>,
     /// MCP server configurations.
     #[serde(default)]
-    pub mcp_servers: BTreeMap<CompactString, mcp::McpServerConfig>,
+    pub mcp_servers: BTreeMap<CompactString, system::mcp::McpServerConfig>,
     /// Agent configurations.
     #[serde(default)]
     pub agents: AgentConfig,
