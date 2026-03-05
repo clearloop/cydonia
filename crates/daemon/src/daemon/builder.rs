@@ -1,10 +1,6 @@
 //! Runtime builder — constructs a fully-configured Runtime from DaemonConfig.
 
-use crate::{
-    DaemonConfig, config,
-    daemon::event::{DaemonEvent, DaemonEventSender},
-    hook::DaemonHook,
-};
+use crate::{DaemonConfig, config, hook::DaemonHook};
 use anyhow::Result;
 use model::ProviderManager;
 use std::path::{Path, PathBuf};
@@ -12,26 +8,17 @@ use wcore::Runtime;
 
 /// Step-by-step builder for the daemon's [`Runtime`].
 ///
-/// Each logical phase (providers, hook, tools, agents) is a separate method.
+/// Each logical phase (providers, hook, agents) is a separate method.
 /// Call [`Builder::build`] to execute them all in order.
 pub(crate) struct Builder<'a> {
     config: &'a DaemonConfig,
     config_dir: &'a Path,
-    event_tx: DaemonEventSender,
 }
 
 impl<'a> Builder<'a> {
     /// Create a new builder.
-    pub fn new(
-        config: &'a DaemonConfig,
-        config_dir: &'a Path,
-        event_tx: DaemonEventSender,
-    ) -> Self {
-        Self {
-            config,
-            config_dir,
-            event_tx,
-        }
+    pub fn new(config: &'a DaemonConfig, config_dir: &'a Path) -> Self {
+        Self { config, config_dir }
     }
 
     /// Build the fully-configured runtime.
@@ -54,7 +41,7 @@ impl<'a> Builder<'a> {
         Ok(manager)
     }
 
-    /// Build the daemon hook with all backends (memory, skills, MCP, cron).
+    /// Build the daemon hook with all backends (memory, skills, MCP).
     async fn build_hook(&self) -> DaemonHook {
         let memory = memory::InMemory::new();
         tracing::info!("using in-memory backend");
@@ -73,13 +60,8 @@ impl<'a> Builder<'a> {
             .collect::<Vec<_>>();
         let mcp_handler =
             system::mcp::McpHandler::load(self.config_dir.to_path_buf(), &mcp_servers).await;
-        let cron_dir = self.config_dir.join(config::CRON_DIR);
-        let event_tx = self.event_tx.clone();
-        let cron_handler = build_cron_handler(&cron_dir, move |job| {
-            let _ = event_tx.send(DaemonEvent::CronJobCreated(Box::new(job)));
-        });
 
-        DaemonHook::new(memory, skills, mcp_handler, cron_handler)
+        DaemonHook::new(memory, skills, mcp_handler)
     }
 
     /// Load agents from markdown files and add them to the runtime.
@@ -92,33 +74,4 @@ impl<'a> Builder<'a> {
         }
         Ok(())
     }
-}
-
-/// Load cron entries from disk and build a CronHandler with the given creation callback.
-fn build_cron_handler<F: Fn(system::cron::CronJob) + Send + Sync + 'static>(
-    cron_dir: &Path,
-    on_create: F,
-) -> system::cron::CronHandler {
-    let entries = match crate::config::load_cron_dir(cron_dir) {
-        Ok(e) => e,
-        Err(e) => {
-            tracing::warn!("failed to load cron entries: {e}");
-            return system::cron::CronHandler::new(Vec::new(), on_create);
-        }
-    };
-
-    let mut jobs = Vec::new();
-    for entry in entries {
-        match system::cron::CronJob::new(entry.name, &entry.schedule, entry.agent, entry.message) {
-            Ok(job) => {
-                tracing::info!("registered cron job '{}' → agent '{}'", job.name, job.agent);
-                jobs.push(job);
-            }
-            Err(e) => {
-                tracing::warn!("skipping cron entry: {e}");
-            }
-        }
-    }
-
-    system::cron::CronHandler::new(jobs, on_create)
 }

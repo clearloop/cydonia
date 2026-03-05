@@ -1,14 +1,13 @@
 //! Daemon event types and dispatch.
 //!
-//! All inbound stimuli (socket messages, channel messages, cron fires,
-//! tool side-effects) are represented as [`DaemonEvent`] variants sent
-//! through a single `mpsc::unbounded_channel`. The [`Daemon`] processes
-//! them via [`handle_events`](Daemon::handle_events).
+//! All inbound stimuli (socket messages, channel messages, tool side-effects)
+//! are represented as [`DaemonEvent`] variants sent through a single
+//! `mpsc::unbounded_channel`. The [`Daemon`] processes them via
+//! [`handle_events`](Daemon::handle_events).
 
 use crate::daemon::Daemon;
 use compact_str::CompactString;
 use futures_util::{StreamExt, pin_mut};
-use system::cron::CronJob;
 use tokio::sync::{mpsc, oneshot};
 use wcore::protocol::{
     api::Server,
@@ -34,18 +33,6 @@ pub(crate) enum DaemonEvent {
         /// Oneshot channel to send the response back to the channel loop.
         reply: oneshot::Sender<Result<String, String>>,
     },
-    /// A cron job fired. Fire-and-forget: no reply channel. Cron jobs
-    /// log their outcome but do not return a value to the scheduler.
-    Cron {
-        /// Target agent name.
-        agent: CompactString,
-        /// Message to send.
-        content: String,
-        /// Job name (for logging).
-        job_name: CompactString,
-    },
-    /// A tool dynamically created a cron job.
-    CronJobCreated(Box<CronJob>),
     /// Graceful shutdown request.
     Shutdown,
 }
@@ -59,11 +46,7 @@ impl Daemon {
     /// Process events until [`DaemonEvent::Shutdown`] is received.
     ///
     /// Spawns a task for each event to avoid blocking on LLM calls.
-    pub(crate) async fn handle_events(
-        &self,
-        mut rx: mpsc::UnboundedReceiver<DaemonEvent>,
-        cron_add_tx: mpsc::UnboundedSender<CronJob>,
-    ) {
+    pub(crate) async fn handle_events(&self, mut rx: mpsc::UnboundedReceiver<DaemonEvent>) {
         tracing::info!("event loop started");
         while let Some(event) = rx.recv().await {
             match event {
@@ -72,15 +55,6 @@ impl Daemon {
                     content,
                     reply,
                 } => self.handle_channel(agent, content, reply),
-                DaemonEvent::Cron {
-                    agent,
-                    content,
-                    job_name,
-                } => self.handle_cron(agent, content, job_name),
-                DaemonEvent::CronJobCreated(job) => {
-                    tracing::info!("routing dynamic cron job '{}' to scheduler", job.name);
-                    let _ = cron_add_tx.send(*job);
-                }
                 DaemonEvent::Socket { msg, reply } => self.handle_socket(msg, reply),
                 DaemonEvent::Shutdown => {
                     tracing::info!("event loop shutting down");
@@ -106,26 +80,6 @@ impl Daemon {
                 Err(e) => Err(e.to_string()),
             };
             let _ = reply.send(result);
-        });
-    }
-
-    /// Dispatch a cron job message to the target agent (fire-and-forget).
-    fn handle_cron(&self, agent: CompactString, content: String, job_name: CompactString) {
-        let runtime = self.runtime.clone();
-        tokio::spawn(async move {
-            match runtime.send_to(&agent, &content).await {
-                Ok(resp) => {
-                    tracing::info!(
-                        job = %job_name,
-                        agent = %agent,
-                        response_len = resp.final_response.as_ref().map_or(0, |s| s.len()),
-                        "cron job completed"
-                    );
-                }
-                Err(e) => {
-                    tracing::error!(job = %job_name, "cron dispatch failed: {e}");
-                }
-            }
         });
     }
 

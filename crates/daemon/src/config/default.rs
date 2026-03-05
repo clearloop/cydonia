@@ -8,8 +8,6 @@ use std::path::{Path, PathBuf};
 pub const AGENTS_DIR: &str = "agents";
 /// Skills subdirectory.
 pub const SKILLS_DIR: &str = "skills";
-/// Cron subdirectory (contains *.md files).
-pub const CRON_DIR: &str = "cron";
 /// Data subdirectory.
 pub const DATA_DIR: &str = "data";
 
@@ -29,14 +27,12 @@ pub fn socket_path() -> PathBuf {
 
 /// Scaffold the full config directory structure on first run.
 ///
-/// Creates subdirectories (agents, skills, cron, data) and writes a default walrus.toml.
+/// Creates subdirectories (agents, skills, data) and writes a default walrus.toml.
 pub fn scaffold_config_dir(config_dir: &Path) -> Result<()> {
     std::fs::create_dir_all(config_dir.join(AGENTS_DIR))
         .context("failed to create agents directory")?;
     std::fs::create_dir_all(config_dir.join(SKILLS_DIR))
         .context("failed to create skills directory")?;
-    std::fs::create_dir_all(config_dir.join(CRON_DIR))
-        .context("failed to create cron directory")?;
     std::fs::create_dir_all(config_dir.join(DATA_DIR))
         .context("failed to create data directory")?;
 

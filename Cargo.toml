@@ -26,7 +26,6 @@ async-stream = "0.3"
 chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
 compact_str = { version = "0.8", features = ["serde"] }
-cron = "0.15"
 dirs = "6"
 dotenvy = "0.15"
 futures-core = "0.3"

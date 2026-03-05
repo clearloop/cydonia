@@ -7,13 +7,10 @@ use anyhow::Result;
 pub use channel::ChannelConfig;
 use compact_str::CompactString;
 pub use default::{
-    AGENTS_DIR, CRON_DIR, DATA_DIR, SKILLS_DIR, global_config_dir, scaffold_config_dir, socket_path,
+    AGENTS_DIR, DATA_DIR, SKILLS_DIR, global_config_dir, scaffold_config_dir, socket_path,
 };
 use serde::{Deserialize, Serialize};
-pub use {
-    agent::AgentConfig,
-    loader::{load_agents_dir, load_cron_dir},
-};
+pub use {agent::AgentConfig, loader::load_agents_dir};
 
 mod agent;
 mod default;
