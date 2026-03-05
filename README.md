@@ -1,9 +1,15 @@
 # Walrus
 
+[![Crates.io](https://img.shields.io/crates/v/openwalrus.svg)](https://crates.io/crates/openwalrus)
+
 **Composable primitives for agentic workflows in Rust.**
 
 Build agents that remember, use tools, schedule tasks, and talk to users —
 without a framework telling you how.
+
+```bash
+cargo install openwalrus
+```
 
 ## Why Walrus
 
@@ -29,20 +35,6 @@ of named agents with per-agent locking and a shared tool registry.
 
 Everything is generic and statically dispatched. No `Box<dyn Agent>` on the
 hot path. RPITIT for async traits throughout.
-
-## The `walrus` CLI
-
-`openwalrus` ships the `walrus` binary — a streaming chat client that
-connects to a running agent over a Unix socket.
-
-```
-walrus                        # interactive REPL with the default agent
-walrus --agent coder          # attach to a named agent
-walrus send "summarize this"  # one-shot, prints and exits
-walrus --socket /tmp/a.sock   # custom socket path
-```
-
-Slash commands, persistent history, and streaming output included.
 
 ## License
 
