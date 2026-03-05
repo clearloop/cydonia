@@ -3,7 +3,7 @@
 //! Parses `SKILL.md` files (YAML frontmatter + Markdown body) from skill
 //! directories and builds a [`SkillRegistry`].
 
-use crate::skill::{Skill, SkillRegistry, SkillTier};
+use crate::hook::skill::{Skill, SkillRegistry, SkillTier};
 use compact_str::CompactString;
 use serde::Deserialize;
 use std::{collections::BTreeMap, path::Path};

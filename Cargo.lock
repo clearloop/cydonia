@@ -914,17 +914,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cron"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5877d3fbf742507b66bc2a1945106bd30dd8504019d596901ddd012a4dd01740"
-dependencies = [
- "chrono",
- "once_cell",
- "winnow 0.6.26",
-]
-
-[[package]]
 name = "crossbeam-deque"
 version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3815,7 +3804,7 @@ dependencies = [
 
 [[package]]
 name = "openwalrus"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "anyhow",
  "clap",
@@ -6084,7 +6073,7 @@ dependencies = [
  "toml_datetime 0.7.5+spec-1.1.0",
  "toml_parser",
  "toml_writer",
- "winnow 0.7.14",
+ "winnow",
 ]
 
 [[package]]
@@ -6116,7 +6105,7 @@ dependencies = [
  "serde_spanned 0.6.9",
  "toml_datetime 0.6.11",
  "toml_write",
- "winnow 0.7.14",
+ "winnow",
 ]
 
 [[package]]
@@ -6125,7 +6114,7 @@ version = "1.0.9+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "702d4415e08923e7e1ef96cd5727c0dfed80b4d2fa25db9647fe5eb6f7c5a4c4"
 dependencies = [
- "winnow 0.7.14",
+ "winnow",
 ]
 
 [[package]]
@@ -6618,7 +6607,7 @@ dependencies = [
 
 [[package]]
 name = "walrus-channel"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "anyhow",
  "compact_str 0.8.1",
@@ -6633,7 +6622,7 @@ dependencies = [
 
 [[package]]
 name = "walrus-core"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -6651,7 +6640,7 @@ dependencies = [
 
 [[package]]
 name = "walrus-daemon"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -6659,8 +6648,11 @@ dependencies = [
  "dirs",
  "futures-core",
  "futures-util",
+ "rmcp",
+ "schemars 1.2.1",
  "serde",
  "serde_json",
+ "serde_yaml",
  "tokio",
  "toml 0.8.23",
  "tracing",
@@ -6670,12 +6662,11 @@ dependencies = [
  "walrus-memory",
  "walrus-model",
  "walrus-socket",
- "walrus-system",
 ]
 
 [[package]]
 name = "walrus-memory"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "anyhow",
  "compact_str 0.8.1",
@@ -6686,7 +6677,7 @@ dependencies = [
 
 [[package]]
 name = "walrus-model"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -6706,33 +6697,13 @@ dependencies = [
 
 [[package]]
 name = "walrus-socket"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "anyhow",
  "async-stream",
  "futures-core",
  "serde",
  "serde_json",
- "tokio",
- "tracing",
- "walrus-core",
-]
-
-[[package]]
-name = "walrus-system"
-version = "0.0.2"
-dependencies = [
- "anyhow",
- "chrono",
- "compact_str 0.8.1",
- "cron",
- "futures-core",
- "futures-util",
- "rmcp",
- "schemars 1.2.1",
- "serde",
- "serde_json",
- "serde_yaml",
  "tokio",
  "tracing",
  "walrus-core",
@@ -7508,15 +7479,6 @@ name = "windows_x86_64_msvc"
 version = "0.53.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6bbff5f0aada427a1e5a6da5f1f98158182f26556f345ac9e04d36d0ebed650"
-
-[[package]]
-name = "winnow"
-version = "0.6.26"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e90edd2ac1aa278a5c4599b1d89cf03074b610800f866d4026dc199d7929a28"
-dependencies = [
- "memchr",
-]
 
 [[package]]
 name = "winnow"

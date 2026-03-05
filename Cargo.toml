@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.0.2"
+version = "0.0.3"
 edition = "2024"
 authors = ["clearloop <tianyi.gc@gmail.com>"]
 license = "GPL-3.0"
@@ -11,14 +11,13 @@ repository = "https://github.com/openwalrus/walrus"
 keywords = ["llm", "agent", "ai"]
 
 [workspace.dependencies]
-channel = { path = "crates/channel", package = "walrus-channel", version = "0.0.2" }
-cli = { path = "crates/cli", package = "openwalrus", version = "0.0.2" }
-daemon = { path = "crates/daemon", package = "walrus-daemon", version = "0.0.2" }
-memory = { path = "crates/memory", package = "walrus-memory", version = "0.0.2" }
-model = { path = "crates/model", package = "walrus-model", version = "0.0.2" }
-socket = { path = "crates/socket", package = "walrus-socket", version = "0.0.2" }
-wcore = { path = "crates/core", package = "walrus-core", version = "0.0.2" }
-system = { path = "crates/system", package = "walrus-system", version = "0.0.2" }
+channel = { path = "crates/channel", package = "walrus-channel", version = "0.0.3" }
+cli = { path = "crates/cli", package = "openwalrus", version = "0.0.3" }
+daemon = { path = "crates/daemon", package = "walrus-daemon", version = "0.0.3" }
+memory = { path = "crates/memory", package = "walrus-memory", version = "0.0.3" }
+model = { path = "crates/model", package = "walrus-model", version = "0.0.3" }
+socket = { path = "crates/socket", package = "walrus-socket", version = "0.0.3" }
+wcore = { path = "crates/core", package = "walrus-core", version = "0.0.3" }
 
 # crates.io
 anyhow = "1"
@@ -26,7 +25,6 @@ async-stream = "0.3"
 chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
 compact_str = { version = "0.8", features = ["serde"] }
-cron = "0.15"
 dirs = "6"
 dotenvy = "0.15"
 futures-core = "0.3"
@@ -71,13 +69,4 @@ overflow-checks = false
 strip = true
 
 [workspace.metadata.conta]
-packages = [
-    "socket",
-    "wcore",
-    "system",
-    "channel",
-    "memory",
-    "model",
-    "daemon",
-    "cli",
-]
+packages = ["socket", "wcore", "channel", "memory", "model", "daemon", "cli"]

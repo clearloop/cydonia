@@ -66,6 +66,6 @@ impl Model for OpenAI {
     }
 
     fn active_model(&self) -> CompactString {
-        CompactString::from("gpt-4o")
+        self.model.clone()
     }
 }

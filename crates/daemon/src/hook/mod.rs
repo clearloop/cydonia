@@ -1,35 +1,34 @@
 //! Stateful Hook implementation for the daemon.
 //!
-//! [`DaemonHook`] composes memory, skill, MCP, and cron sub-hooks.
+//! [`DaemonHook`] composes memory, skill, and MCP sub-hooks.
 //! `on_build_agent` delegates to skills and memory; `on_register_tools`
-//! delegates to memory, cron, and MCP sub-hooks in sequence.
+//! delegates to memory and MCP sub-hooks in sequence.
 
+use crate::hook::skill::SkillHandler;
+use mcp::McpHandler;
 use memory::InMemory;
-use std::future::Future;
-use system::cron::CronHandler;
-use system::mcp::McpHandler;
-use system::skill::SkillHandler;
 use wcore::{AgentConfig, AgentEvent, Hook, ToolRegistry};
+
+pub mod mcp;
+pub mod skill;
 
 /// Stateful Hook implementation for the daemon.
 ///
-/// Composes memory, skill, MCP, and cron sub-hooks. Each sub-hook
+/// Composes memory, skill, and MCP sub-hooks. Each sub-hook
 /// self-registers its tools via `on_register_tools`.
 pub struct DaemonHook {
     pub memory: InMemory,
     pub skills: SkillHandler,
     pub mcp: McpHandler,
-    pub cron: CronHandler,
 }
 
 impl DaemonHook {
     /// Create a new DaemonHook with the given backends.
-    pub fn new(memory: InMemory, skills: SkillHandler, mcp: McpHandler, cron: CronHandler) -> Self {
+    pub fn new(memory: InMemory, skills: SkillHandler, mcp: McpHandler) -> Self {
         Self {
             memory,
             skills,
             mcp,
-            cron,
         }
     }
 }
@@ -38,6 +37,11 @@ impl Hook for DaemonHook {
     fn on_build_agent(&self, config: AgentConfig) -> AgentConfig {
         let config = self.skills.on_build_agent(config);
         self.memory.on_build_agent(config)
+    }
+
+    async fn on_register_tools(&self, tools: &mut ToolRegistry) {
+        self.memory.on_register_tools(tools).await;
+        self.mcp.on_register_tools(tools).await
     }
 
     fn on_event(&self, agent: &str, event: &AgentEvent) {
@@ -63,14 +67,5 @@ impl Hook for DaemonHook {
                 );
             }
         }
-    }
-
-    fn on_register_tools(&self, tools: &mut ToolRegistry) -> impl Future<Output = ()> + Send {
-        // Memory and cron: inserts happen synchronously inside on_register_tools;
-        // the returned trivial async{} futures are intentionally dropped.
-        drop(self.memory.on_register_tools(tools));
-        drop(self.cron.on_register_tools(tools));
-        // MCP: captures bridge Arc synchronously, registers tools async.
-        self.mcp.on_register_tools(tools)
     }
 }

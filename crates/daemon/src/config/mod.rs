@@ -1,23 +1,20 @@
 //! Daemon configuration loaded from TOML.
 
-use std::collections::BTreeMap;
-
 pub use ::model::{ProviderConfig, ProviderManager};
 use anyhow::Result;
-pub use channel::ChannelConfig;
 use compact_str::CompactString;
 pub use default::{
-    AGENTS_DIR, CRON_DIR, DATA_DIR, SKILLS_DIR, global_config_dir, scaffold_config_dir, socket_path,
+    AGENTS_DIR, DATA_DIR, SKILLS_DIR, global_config_dir, scaffold_config_dir, socket_path,
 };
 use serde::{Deserialize, Serialize};
-pub use {
-    agent::AgentConfig,
-    loader::{load_agents_dir, load_cron_dir},
-};
+use std::collections::BTreeMap;
+pub use {agent::AgentConfig, loader::load_agents_dir};
+pub use {channel::ChannelConfig, mcp::McpServerConfig};
 
 mod agent;
 mod default;
 mod loader;
+mod mcp;
 
 /// Top-level daemon configuration.
 #[derive(Debug, Serialize, Deserialize)]
@@ -32,7 +29,7 @@ pub struct DaemonConfig {
     pub channels: BTreeMap<CompactString, ChannelConfig>,
     /// MCP server configurations.
     #[serde(default)]
-    pub mcp_servers: BTreeMap<CompactString, system::mcp::McpServerConfig>,
+    pub mcp_servers: BTreeMap<CompactString, mcp::McpServerConfig>,
     /// Agent configurations.
     #[serde(default)]
     pub agents: AgentConfig,

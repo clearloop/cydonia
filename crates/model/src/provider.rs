@@ -1,12 +1,15 @@
 //! Provider implementation.
 //!
 //! Unified `Provider` enum with enum dispatch over concrete backends.
-//! `build_provider()` matches on `ProviderKind` detected from the model name.
+//! `build_provider()` uses a URL lookup table for OpenAI-compatible kinds,
+//! eliminating repeated match arms for each variant.
 
 use crate::{
-    claude::Claude,
     config::{ProviderConfig, ProviderKind},
-    openai::OpenAI,
+    remote::{
+        claude::{self, Claude},
+        openai::{self, OpenAI},
+    },
 };
 use anyhow::Result;
 use async_stream::try_stream;
@@ -46,38 +49,21 @@ impl Provider {
 
 /// Construct a `Provider` from config and a shared HTTP client.
 ///
-/// This function is async because local providers need to load model weights
-/// asynchronously.
+/// OpenAI-compatible kinds use a URL lookup table — no repeated arms.
+/// The `model` string from config is stored in the provider for accurate
+/// `active_model()` reporting.
 pub async fn build_provider(config: &ProviderConfig, client: reqwest::Client) -> Result<Provider> {
     let kind = config.kind()?;
     let api_key = config.api_key.as_deref().unwrap_or("");
-    let base_url = config.base_url.as_deref();
+    let model = config.model.as_str();
 
-    let provider = match kind {
-        ProviderKind::DeepSeek => match base_url {
-            Some(url) => Provider::OpenAI(OpenAI::custom(client, api_key, url)?),
-            None => Provider::OpenAI(OpenAI::deepseek(client, api_key)?),
-        },
-        ProviderKind::OpenAI => match base_url {
-            Some(url) => Provider::OpenAI(OpenAI::custom(client, api_key, url)?),
-            None => Provider::OpenAI(OpenAI::api(client, api_key)?),
-        },
-        ProviderKind::Claude => match base_url {
-            Some(url) => Provider::Claude(Claude::custom(client, api_key, url)?),
-            None => Provider::Claude(Claude::anthropic(client, api_key)?),
-        },
-        ProviderKind::Grok => match base_url {
-            Some(url) => Provider::OpenAI(OpenAI::custom(client, api_key, url)?),
-            None => Provider::OpenAI(OpenAI::grok(client, api_key)?),
-        },
-        ProviderKind::Qwen => match base_url {
-            Some(url) => Provider::OpenAI(OpenAI::custom(client, api_key, url)?),
-            None => Provider::OpenAI(OpenAI::qwen(client, api_key)?),
-        },
-        ProviderKind::Kimi => match base_url {
-            Some(url) => Provider::OpenAI(OpenAI::custom(client, api_key, url)?),
-            None => Provider::OpenAI(OpenAI::kimi(client, api_key)?),
-        },
+    match kind {
+        ProviderKind::Claude => {
+            let url = config.base_url.as_deref().unwrap_or(claude::ENDPOINT);
+            return Ok(Provider::Claude(Claude::custom(
+                client, api_key, url, model,
+            )?));
+        }
         #[cfg(feature = "local")]
         ProviderKind::Local => {
             use crate::config::Loader;
@@ -101,14 +87,32 @@ pub async fn build_provider(config: &ProviderConfig, client: reqwest::Client) ->
                     );
                 }
             };
-            Provider::Local(local)
+            return Ok(Provider::Local(local));
         }
         #[cfg(not(feature = "local"))]
         ProviderKind::Local => {
             anyhow::bail!("local provider requires the 'local' feature");
         }
+        _ => {}
+    }
+
+    // All remaining kinds are OpenAI-compatible. Look up the default endpoint URL.
+    let default_url: &str = match kind {
+        ProviderKind::OpenAI => openai::endpoint::OPENAI,
+        ProviderKind::DeepSeek => openai::endpoint::DEEPSEEK,
+        ProviderKind::Grok => openai::endpoint::GROK,
+        ProviderKind::Qwen => openai::endpoint::QWEN,
+        ProviderKind::Kimi => openai::endpoint::KIMI,
+        // Claude and Local are handled above; this arm is unreachable.
+        _ => unreachable!(),
     };
-    Ok(provider)
+    let url = config.base_url.as_deref().unwrap_or(default_url);
+    let provider = if api_key.is_empty() {
+        OpenAI::no_auth(client, url, model)
+    } else {
+        OpenAI::custom(client, api_key, url, model)?
+    };
+    Ok(Provider::OpenAI(provider))
 }
 
 impl Model for Provider {

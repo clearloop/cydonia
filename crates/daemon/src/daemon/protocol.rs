@@ -1,6 +1,6 @@
 //! Server trait implementation for the Daemon.
 
-use crate::daemon::Daemon;
+use crate::{config, daemon::Daemon};
 use anyhow::{Result, bail};
 use futures_util::{StreamExt, pin_mut};
 use memory::Memory;
@@ -155,7 +155,7 @@ impl Server for Daemon {
     }
 
     async fn mcp_add(&self, req: McpAddRequest) -> Result<McpAdded> {
-        let config = system::mcp::McpServerConfig {
+        let config = config::McpServerConfig {
             name: req.name.clone(),
             command: req.command,
             args: req.args,

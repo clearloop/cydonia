@@ -75,10 +75,7 @@ impl Daemon {
         config_dir: &Path,
     ) -> Result<DaemonHandle> {
         let (event_tx, event_rx) = mpsc::unbounded_channel::<DaemonEvent>();
-
-        let runtime = builder::Builder::new(config, config_dir, event_tx.clone())
-            .build()
-            .await?;
+        let runtime = builder::Builder::new(config, config_dir).build().await?;
         let runtime = Arc::new(runtime);
         let daemon = Daemon {
             runtime: Arc::clone(&runtime),
@@ -97,11 +94,10 @@ impl Daemon {
 
         let (socket_path, socket_join) = setup_socket(&shutdown_tx, &event_tx)?;
         setup_channels(config, &event_tx).await;
-        let cron_add_tx = setup_cron(&runtime, &shutdown_tx, &event_tx).await;
 
         let d = daemon.clone();
         let event_loop_join = tokio::spawn(async move {
-            d.handle_events(event_rx, cron_add_tx).await;
+            d.handle_events(event_rx).await;
         });
 
         Ok(DaemonHandle {
@@ -168,30 +164,6 @@ async fn setup_channels(config: &DaemonConfig, event_tx: &DaemonEventSender) {
         }
     });
     channel::spawn_channels(&channels, router, on_message).await;
-}
-
-/// Spawn the cron scheduler wired into the event loop.
-async fn setup_cron(
-    runtime: &Arc<Runtime<ProviderManager, DaemonHook>>,
-    shutdown_tx: &broadcast::Sender<()>,
-    event_tx: &DaemonEventSender,
-) -> mpsc::UnboundedSender<system::cron::CronJob> {
-    let cron_jobs = runtime.hook.cron.jobs().await;
-    let cron_tx = event_tx.clone();
-    system::cron::spawn_with_callback(
-        cron_jobs,
-        move |job| {
-            let tx = cron_tx.clone();
-            async move {
-                let _ = tx.send(DaemonEvent::Cron {
-                    agent: job.agent.clone(),
-                    content: job.message.clone(),
-                    job_name: job.name.clone(),
-                });
-            }
-        },
-        shutdown_tx.subscribe(),
-    )
 }
 
 /// Bridge a broadcast receiver into a oneshot receiver.

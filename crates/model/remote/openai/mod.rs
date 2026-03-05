@@ -3,6 +3,7 @@
 //! Covers OpenAI, Grok (xAI), Qwen (Alibaba), Kimi (Moonshot), Ollama,
 //! and any other service exposing the OpenAI chat completions API.
 
+use compact_str::CompactString;
 use reqwest::{Client, header::HeaderMap};
 
 mod provider;
@@ -33,49 +34,13 @@ pub struct OpenAI {
     headers: HeaderMap,
     /// Chat completions endpoint URL.
     endpoint: String,
+    /// The configured model name (used by `active_model()`).
+    model: CompactString,
 }
 
 impl OpenAI {
-    /// Create a provider targeting the OpenAI API.
-    pub fn api(client: Client, key: &str) -> anyhow::Result<Self> {
-        Self::custom(client, key, endpoint::OPENAI)
-    }
-
-    /// Create a provider targeting the DeepSeek API.
-    pub fn deepseek(client: Client, key: &str) -> anyhow::Result<Self> {
-        Self::custom(client, key, endpoint::DEEPSEEK)
-    }
-
-    /// Create a provider targeting the Grok (xAI) API.
-    pub fn grok(client: Client, key: &str) -> anyhow::Result<Self> {
-        Self::custom(client, key, endpoint::GROK)
-    }
-
-    /// Create a provider targeting the Qwen (DashScope) API.
-    pub fn qwen(client: Client, key: &str) -> anyhow::Result<Self> {
-        Self::custom(client, key, endpoint::QWEN)
-    }
-
-    /// Create a provider targeting the Kimi (Moonshot) API.
-    pub fn kimi(client: Client, key: &str) -> anyhow::Result<Self> {
-        Self::custom(client, key, endpoint::KIMI)
-    }
-
-    /// Create a provider targeting a local Ollama instance (no API key).
-    pub fn ollama(client: Client) -> anyhow::Result<Self> {
-        use reqwest::header;
-        let mut headers = HeaderMap::new();
-        headers.insert(header::CONTENT_TYPE, "application/json".parse()?);
-        headers.insert(header::ACCEPT, "application/json".parse()?);
-        Ok(Self {
-            client,
-            headers,
-            endpoint: endpoint::OLLAMA.to_owned(),
-        })
-    }
-
-    /// Create a provider targeting a custom OpenAI-compatible endpoint.
-    pub fn custom(client: Client, key: &str, endpoint: &str) -> anyhow::Result<Self> {
+    /// Create a provider targeting a custom OpenAI-compatible endpoint with Bearer auth.
+    pub fn custom(client: Client, key: &str, endpoint: &str, model: &str) -> anyhow::Result<Self> {
         use reqwest::header;
         let mut headers = HeaderMap::new();
         headers.insert(header::CONTENT_TYPE, "application/json".parse()?);
@@ -85,6 +50,21 @@ impl OpenAI {
             client,
             headers,
             endpoint: endpoint.to_owned(),
+            model: CompactString::from(model),
         })
+    }
+
+    /// Create a provider targeting a custom endpoint without authentication (e.g. Ollama).
+    pub fn no_auth(client: Client, endpoint: &str, model: &str) -> Self {
+        use reqwest::header;
+        let mut headers = HeaderMap::new();
+        headers.insert(header::CONTENT_TYPE, "application/json".parse().unwrap());
+        headers.insert(header::ACCEPT, "application/json".parse().unwrap());
+        Self {
+            client,
+            headers,
+            endpoint: endpoint.to_owned(),
+            model: CompactString::from(model),
+        }
     }
 }

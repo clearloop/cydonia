@@ -1,17 +1,10 @@
 //! Memory tool schemas and handlers for agent tool registration.
 
+use crate::{Handler, Memory, RecallOptions, model::Tool};
 use std::sync::Arc;
-use wcore::{Handler, model::Tool};
-use wcore::{Memory, RecallOptions};
-
-/// Tool schema + handler pair, ready to register on a hook.
-pub struct MemoryTool {
-    pub tool: Tool,
-    pub handler: Handler,
-}
 
 /// Build the `remember` tool + handler for the given memory backend.
-pub fn remember<M: Memory + 'static>(mem: Arc<M>) -> MemoryTool {
+pub fn remember<M: Memory + 'static>(mem: Arc<M>) -> (Tool, Handler) {
     let schema = serde_json::json!({
         "type": "object",
         "properties": {
@@ -41,11 +34,11 @@ pub fn remember<M: Memory + 'static>(mem: Arc<M>) -> MemoryTool {
             }
         })
     });
-    MemoryTool { tool, handler }
+    (tool, handler)
 }
 
 /// Build the `recall` tool + handler for the given memory backend.
-pub fn recall<M: Memory + 'static>(mem: Arc<M>) -> MemoryTool {
+pub fn recall<M: Memory + 'static>(mem: Arc<M>) -> (Tool, Handler) {
     let schema = serde_json::json!({
         "type": "object",
         "properties": {
@@ -86,5 +79,5 @@ pub fn recall<M: Memory + 'static>(mem: Arc<M>) -> MemoryTool {
             }
         })
     });
-    MemoryTool { tool, handler }
+    (tool, handler)
 }

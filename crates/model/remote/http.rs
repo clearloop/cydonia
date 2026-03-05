@@ -1,10 +1,10 @@
-//! Shared HTTP transport for OpenAI-compatible LLM providers.
+//! Shared HTTP transport for OpenAI-compatible and Anthropic LLM providers.
 //!
 //! `HttpProvider` wraps a `reqwest::Client` with pre-configured headers and
-//! endpoint URL. Provides `send()` for non-streaming and `stream_sse()` for
-//! Server-Sent Events streaming. Used by DeepSeek, OpenAI, and Mistral —
-//! Claude uses its own transport (different SSE format).
+//! endpoint URL. Provides `send()` / `send_raw()` for non-streaming, `stream_sse()`
+//! for OpenAI-format SSE, and `stream_anthropic()` for Anthropic block-buffer SSE.
 
+use crate::remote::claude::stream::parse_sse_block;
 use anyhow::Result;
 use async_stream::try_stream;
 use futures_core::Stream;
@@ -15,6 +15,9 @@ use reqwest::{
 };
 use serde::Serialize;
 use wcore::model::{Response, StreamChunk};
+
+/// Anthropic API version header value.
+const API_VERSION: &str = "2023-06-01";
 
 /// Shared HTTP transport for OpenAI-compatible providers.
 ///
@@ -86,6 +89,32 @@ impl HttpProvider {
         })
     }
 
+    /// Create a provider with Anthropic authentication headers.
+    ///
+    /// Inserts `x-api-key` and `anthropic-version` in addition to the
+    /// standard content-type and accept headers.
+    pub fn anthropic(client: Client, key: &str, endpoint: &str) -> Result<Self> {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/json"),
+        );
+        headers.insert(header::ACCEPT, HeaderValue::from_static("application/json"));
+        headers.insert(
+            "x-api-key".parse::<HeaderName>()?,
+            key.parse::<HeaderValue>()?,
+        );
+        headers.insert(
+            "anthropic-version".parse::<HeaderName>()?,
+            API_VERSION.parse::<HeaderValue>()?,
+        );
+        Ok(Self {
+            client,
+            headers,
+            endpoint: endpoint.to_owned(),
+        })
+    }
+
     /// Send a non-streaming request and deserialize the response as JSON.
     pub async fn send(&self, body: &impl Serialize) -> Result<Response> {
         tracing::trace!("request: {}", serde_json::to_string(body)?);
@@ -140,6 +169,66 @@ impl HttpProvider {
                         Err(e) => tracing::warn!("failed to parse chunk: {e}, data: {trimmed}"),
                     }
                 }
+            }
+        }
+    }
+
+    /// Send a non-streaming request and return the raw response body text.
+    ///
+    /// Unlike `send()`, the caller is responsible for deserialization.
+    /// Used by providers whose response schema differs from the OpenAI format (e.g. Anthropic).
+    pub async fn send_raw(&self, body: &impl Serialize) -> Result<String> {
+        tracing::trace!("request: {}", serde_json::to_string(body)?);
+        let response = self
+            .client
+            .request(Method::POST, &self.endpoint)
+            .headers(self.headers.clone())
+            .json(body)
+            .send()
+            .await?;
+        let status = response.status();
+        let text = response.text().await?;
+        if !status.is_success() {
+            anyhow::bail!("API error ({status}): {text}");
+        }
+        Ok(text)
+    }
+
+    /// Stream an SSE response in Anthropic block-buffer format.
+    ///
+    /// Anthropic uses `\n\n`-delimited blocks each containing `event:` and
+    /// `data:` lines, unlike OpenAI's line-by-line `data: ` prefix format.
+    /// Takes the body as an owned `serde_json::Value` so the stream can be
+    /// `'static` without capturing a borrow.
+    pub fn stream_anthropic(
+        &self,
+        body: serde_json::Value,
+    ) -> impl Stream<Item = Result<StreamChunk>> + Send {
+        tracing::trace!("request: {}", body);
+        let request = self
+            .client
+            .request(Method::POST, &self.endpoint)
+            .headers(self.headers.clone())
+            .json(&body);
+
+        try_stream! {
+            let response = request.send().await?;
+            let mut stream = response.bytes_stream();
+            let mut buf = String::new();
+            while let Some(Ok(bytes)) = stream.next().await {
+                buf.push_str(&String::from_utf8_lossy(&bytes));
+                while let Some(pos) = buf.find("\n\n") {
+                    let block = buf[..pos].to_owned();
+                    buf = buf[pos + 2..].to_owned();
+                    if let Some(chunk) = parse_sse_block(&block) {
+                        yield chunk;
+                    }
+                }
+            }
+            if !buf.trim().is_empty()
+                && let Some(chunk) = parse_sse_block(&buf)
+            {
+                yield chunk;
             }
         }
     }
