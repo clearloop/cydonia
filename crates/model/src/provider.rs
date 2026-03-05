@@ -5,9 +5,11 @@
 //! eliminating repeated match arms for each variant.
 
 use crate::{
-    claude::{self, Claude},
     config::{ProviderConfig, ProviderKind},
-    openai::{self, OpenAI},
+    remote::{
+        claude::{self, Claude},
+        openai::{self, OpenAI},
+    },
 };
 use anyhow::Result;
 use async_stream::try_stream;

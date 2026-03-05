@@ -5,11 +5,10 @@
 //! Uses `HttpProvider` for transport, with Anthropic-specific headers and
 //! block-buffer SSE parsing.
 
-use crate::http::HttpProvider;
+use crate::remote::HttpProvider;
 use compact_str::CompactString;
-use reqwest::Client;
-
 pub use request::Request;
+use reqwest::Client;
 
 mod provider;
 mod request;

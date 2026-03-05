@@ -4,7 +4,7 @@
 //! endpoint URL. Provides `send()` / `send_raw()` for non-streaming, `stream_sse()`
 //! for OpenAI-format SSE, and `stream_anthropic()` for Anthropic block-buffer SSE.
 
-use crate::claude::stream::parse_sse_block;
+use crate::remote::claude::stream::parse_sse_block;
 use anyhow::Result;
 use async_stream::try_stream;
 use futures_core::Stream;

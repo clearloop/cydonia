@@ -7,17 +7,17 @@
 //! other OpenAI-compatible providers route through the OpenAI backend.
 
 pub mod config;
-pub mod http;
 pub mod manager;
 mod provider;
 
-pub mod claude;
+#[path = "../remote/mod.rs"]
+pub mod remote;
+
 #[cfg(feature = "local")]
+#[path = "../local/mod.rs"]
 pub mod local;
-pub mod openai;
 
 pub use config::{ProviderConfig, ProviderKind};
-pub use http::HttpProvider;
 pub use manager::ProviderManager;
 pub use provider::{Provider, build_provider};
 pub use reqwest::Client;
