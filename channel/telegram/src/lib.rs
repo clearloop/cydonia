@@ -231,13 +231,6 @@ struct Document {
     file_name: Option<String>,
 }
 
-/// Convert a Telegram Update JSON value to a ChannelMessage.
-pub fn channel_message_from_update(update: &serde_json::Value) -> Option<ChannelMessage> {
-    let update: Update = serde_json::from_value(update.clone()).ok()?;
-    let msg = update.message?;
-    convert_message(&msg)
-}
-
 /// Convert internal TelegramMessage to ChannelMessage.
 fn convert_message(msg: &TelegramMessage) -> Option<ChannelMessage> {
     let content = msg.text.clone().unwrap_or_default();

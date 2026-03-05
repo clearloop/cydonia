@@ -61,11 +61,6 @@ impl ChannelRouter {
         // 3. Default
         self.default_agent.as_ref()
     }
-
-    /// Get the default agent.
-    pub fn default_agent(&self) -> Option<&CompactString> {
-        self.default_agent.as_ref()
-    }
 }
 
 /// Parse a platform name string into a `Platform` enum.

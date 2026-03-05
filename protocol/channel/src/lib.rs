@@ -13,7 +13,6 @@ use tokio::sync::mpsc;
 type SenderFn =
     Arc<dyn Fn(ChannelMessage) -> Pin<Box<dyn Future<Output = Result<()>> + Send>> + Send + Sync>;
 
-pub mod menu;
 pub mod router;
 
 pub use router::{ChannelRouter, RoutingRule, parse_platform};
@@ -104,11 +103,6 @@ impl ChannelHandle {
             rx,
             sender: Arc::new(move |msg| Box::pin(sender(msg))),
         }
-    }
-
-    /// The platform this handle connects to.
-    pub fn platform(&self) -> Platform {
-        self.platform
     }
 
     /// Receive the next incoming message.
