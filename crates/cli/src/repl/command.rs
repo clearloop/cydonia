@@ -80,12 +80,17 @@ pub async fn handle_slash(
                 while let Some(result) = stream.next().await {
                     match result? {
                         DownloadEvent::Start { model } => println!("Downloading {model}..."),
-                        DownloadEvent::FileStart { filename, size } => {
+                        DownloadEvent::FileStart {
+                            model,
+                            filename,
+                            size,
+                        } => {
                             current_file = filename;
                             current_size = size;
                             downloaded = 0;
+                            let _ = model;
                         }
-                        DownloadEvent::Progress { bytes } => {
+                        DownloadEvent::Progress { model, bytes } => {
                             downloaded += bytes;
                             let pct = if current_size > 0 {
                                 downloaded * 100 / current_size
@@ -93,7 +98,7 @@ pub async fn handle_slash(
                                 0
                             };
                             eprint!(
-                                "\r  {} {}% ({} / {})",
+                                "\r  [{model}] {} {}% ({} / {})",
                                 current_file,
                                 pct,
                                 format_bytes(downloaded),
@@ -101,7 +106,8 @@ pub async fn handle_slash(
                             );
                             std::io::stderr().flush().ok();
                         }
-                        DownloadEvent::FileEnd { filename } => {
+                        DownloadEvent::FileEnd { model, filename } => {
+                            let _ = model;
                             eprintln!("\r  {filename} done{:30}", "");
                         }
                         DownloadEvent::End { model } => println!("Download complete: {model}"),

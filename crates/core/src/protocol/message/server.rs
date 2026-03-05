@@ -42,6 +42,8 @@ pub enum DownloadEvent {
     },
     /// A file download has started.
     FileStart {
+        /// Model being downloaded.
+        model: CompactString,
         /// Filename within the repo.
         filename: String,
         /// Total size in bytes.
@@ -49,11 +51,15 @@ pub enum DownloadEvent {
     },
     /// Download progress for current file (delta, not cumulative).
     Progress {
+        /// Model being downloaded.
+        model: CompactString,
         /// Bytes downloaded in this chunk.
         bytes: u64,
     },
     /// A file download has completed.
     FileEnd {
+        /// Model being downloaded.
+        model: CompactString,
         /// Filename within the repo.
         filename: String,
     },

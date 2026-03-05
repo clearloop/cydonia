@@ -65,13 +65,13 @@ impl Server for Daemon {
                 while let Some(event) = drx.recv().await {
                     let dl_event = match event {
                         model::local::download::DownloadEvent::FileStart { filename, size } => {
-                            DownloadEvent::FileStart { filename, size }
+                            DownloadEvent::FileStart { model: req.model.clone(), filename, size }
                         }
                         model::local::download::DownloadEvent::Progress { bytes } => {
-                            DownloadEvent::Progress { bytes }
+                            DownloadEvent::Progress { model: req.model.clone(), bytes }
                         }
                         model::local::download::DownloadEvent::FileEnd { filename } => {
-                            DownloadEvent::FileEnd { filename }
+                            DownloadEvent::FileEnd { model: req.model.clone(), filename }
                         }
                     };
                     yield dl_event;
