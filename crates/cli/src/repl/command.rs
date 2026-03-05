@@ -11,7 +11,7 @@ use rustyline::{
 use std::io::Write;
 use wcore::protocol::message::DownloadEvent;
 
-pub const SLASH_COMMANDS: &[&str] = &["/help", "/agent", "/memory", "/switch", "/download"];
+pub const SLASH_COMMANDS: &[&str] = &["/help", "/switch", "/download"];
 
 /// Rustyline helper providing tab-completion for slash commands.
 #[derive(rustyline::Helper, rustyline::Hinter, rustyline::Highlighter, rustyline::Validator)]
@@ -60,84 +60,9 @@ pub async fn handle_slash(
         "help" => {
             println!("Available commands:");
             println!("  /help              — show this help");
-            println!("  /agent             — list registered agents");
-            println!("  /agent <name>      — show agent details");
-            println!("  /memory            — list memory entries");
-            println!("  /memory <key>      — get a memory entry");
             println!("  /switch <name>     — switch active agent");
             println!("  /download <model>  — download a model from HuggingFace");
         }
-        "agent" => match arg {
-            None => {
-                let agents = runner.list_agents().await?;
-                if agents.is_empty() {
-                    println!("No agents registered.");
-                } else {
-                    for a in agents {
-                        let desc = if a.description.is_empty() {
-                            "(no description)"
-                        } else {
-                            a.description.as_str()
-                        };
-                        println!("  {} — {}", a.name, desc);
-                    }
-                }
-            }
-            Some(name) => {
-                let d = runner.agent_info(name).await?;
-                println!("Name:        {}", d.name);
-                println!("Description: {}", d.description);
-                let tools = if d.tools.is_empty() {
-                    "(none)".to_owned()
-                } else {
-                    d.tools
-                        .iter()
-                        .map(|t| t.as_str())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                };
-                let tags = if d.skill_tags.is_empty() {
-                    "(none)".to_owned()
-                } else {
-                    d.skill_tags
-                        .iter()
-                        .map(|t| t.as_str())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                };
-                println!("Tools:       {tools}");
-                println!("Skill tags:  {tags}");
-                if !d.system_prompt.is_empty() {
-                    println!("\nSystem prompt:\n{}", d.system_prompt);
-                }
-            }
-        },
-        "memory" => match arg {
-            None => {
-                let entries = runner.list_memory().await?;
-                if entries.is_empty() {
-                    println!("No memory entries.");
-                } else {
-                    for (key, value) in &entries {
-                        let preview = if value.len() > 80 {
-                            let end = value
-                                .char_indices()
-                                .nth(77)
-                                .map(|(i, _)| i)
-                                .unwrap_or(value.len());
-                            format!("{}...", &value[..end])
-                        } else {
-                            value.clone()
-                        };
-                        println!("  {key}: {preview}");
-                    }
-                }
-            }
-            Some(key) => match runner.get_memory(key).await? {
-                Some(value) => println!("{value}"),
-                None => println!("No entry for key '{key}'."),
-            },
-        },
         "switch" => match arg {
             Some(name) if !name.is_empty() => {
                 *agent = CompactString::from(name);

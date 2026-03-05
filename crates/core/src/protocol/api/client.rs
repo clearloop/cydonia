@@ -1,9 +1,7 @@
 //! Client trait — transport primitives plus typed provided methods.
 
 use crate::protocol::message::{
-    AgentDetail, AgentInfoRequest, AgentList, ClearSessionRequest, DownloadEvent, DownloadRequest,
-    GetMemoryRequest, McpAddRequest, McpAdded, McpRemoveRequest, McpRemoved, McpServerList,
-    MemoryEntry, MemoryList, SendRequest, SendResponse, SessionCleared, StreamEvent, StreamRequest,
+    DownloadEvent, DownloadRequest, SendRequest, SendResponse, StreamEvent, StreamRequest,
     client::ClientMessage, server::ServerMessage,
 };
 use anyhow::Result;
@@ -60,40 +58,6 @@ pub trait Client: Send {
             .map(|r| r.and_then(StreamEvent::try_from))
     }
 
-    /// Clear the session history for an agent.
-    fn clear_session(
-        &mut self,
-        req: ClearSessionRequest,
-    ) -> impl std::future::Future<Output = Result<SessionCleared>> + Send {
-        async move { SessionCleared::try_from(self.request(req.into()).await?) }
-    }
-
-    /// List all registered agents.
-    fn list_agents(&mut self) -> impl std::future::Future<Output = Result<AgentList>> + Send {
-        async move { AgentList::try_from(self.request(ClientMessage::ListAgents).await?) }
-    }
-
-    /// Get detailed info for a specific agent.
-    fn agent_info(
-        &mut self,
-        req: AgentInfoRequest,
-    ) -> impl std::future::Future<Output = Result<AgentDetail>> + Send {
-        async move { AgentDetail::try_from(self.request(req.into()).await?) }
-    }
-
-    /// List all memory entries.
-    fn list_memory(&mut self) -> impl std::future::Future<Output = Result<MemoryList>> + Send {
-        async move { MemoryList::try_from(self.request(ClientMessage::ListMemory).await?) }
-    }
-
-    /// Get a specific memory entry by key.
-    fn get_memory(
-        &mut self,
-        req: GetMemoryRequest,
-    ) -> impl std::future::Future<Output = Result<MemoryEntry>> + Send {
-        async move { MemoryEntry::try_from(self.request(req.into()).await?) }
-    }
-
     /// Download a model's files with progress reporting.
     fn download(
         &mut self,
@@ -110,27 +74,6 @@ pub trait Client: Send {
                 std::future::ready(Some(r))
             })
             .map(|r| r.and_then(DownloadEvent::try_from))
-    }
-
-    /// Add an MCP server.
-    fn mcp_add(
-        &mut self,
-        req: McpAddRequest,
-    ) -> impl std::future::Future<Output = Result<McpAdded>> + Send {
-        async move { McpAdded::try_from(self.request(req.into()).await?) }
-    }
-
-    /// Remove an MCP server.
-    fn mcp_remove(
-        &mut self,
-        req: McpRemoveRequest,
-    ) -> impl std::future::Future<Output = Result<McpRemoved>> + Send {
-        async move { McpRemoved::try_from(self.request(req.into()).await?) }
-    }
-
-    /// List connected MCP servers.
-    fn mcp_list(&mut self) -> impl std::future::Future<Output = Result<McpServerList>> + Send {
-        async move { McpServerList::try_from(self.request(ClientMessage::McpList).await?) }
     }
 
     /// Ping the server (keepalive).

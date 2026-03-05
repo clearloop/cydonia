@@ -1,6 +1,5 @@
 //! Messages sent by the gateway to the client.
 
-use crate::protocol::message::{AgentSummary, McpServerSummary};
 use compact_str::CompactString;
 use serde::{Deserialize, Serialize};
 
@@ -29,41 +28,6 @@ pub enum ServerMessage {
     StreamEnd {
         /// Source agent identifier.
         agent: CompactString,
-    },
-    /// Session cleared for an agent.
-    SessionCleared {
-        /// Agent whose session was cleared.
-        agent: CompactString,
-    },
-    /// List of registered agents.
-    AgentList {
-        /// Agent summaries.
-        agents: Vec<AgentSummary>,
-    },
-    /// Detailed agent information.
-    AgentDetail {
-        /// Agent name.
-        name: CompactString,
-        /// Agent description.
-        description: CompactString,
-        /// Registered tool names.
-        tools: Vec<CompactString>,
-        /// Skill tags.
-        skill_tags: Vec<CompactString>,
-        /// System prompt.
-        system_prompt: String,
-    },
-    /// List of memory entries.
-    MemoryList {
-        /// Key-value pairs.
-        entries: Vec<(String, String)>,
-    },
-    /// A single memory entry.
-    MemoryEntry {
-        /// Memory key.
-        key: String,
-        /// Memory value (None if not found).
-        value: Option<String>,
     },
     /// Download has started for a model.
     DownloadStart {
@@ -98,25 +62,6 @@ pub enum ServerMessage {
         code: u16,
         /// Error message.
         message: String,
-    },
-    /// MCP server added successfully.
-    McpAdded {
-        /// Server name.
-        name: CompactString,
-        /// Tools provided by this server.
-        tools: Vec<CompactString>,
-    },
-    /// MCP server removed successfully.
-    McpRemoved {
-        /// Server name.
-        name: CompactString,
-        /// Tools that were removed.
-        tools: Vec<CompactString>,
-    },
-    /// List of connected MCP servers.
-    McpServerList {
-        /// Connected servers.
-        servers: Vec<McpServerSummary>,
     },
     /// Pong response to client ping.
     Pong,

@@ -1,17 +1,13 @@
 //! Server trait implementation for the Daemon.
 
-use crate::{config, daemon::Daemon};
-use anyhow::{Result, bail};
+use crate::daemon::Daemon;
+use anyhow::Result;
 use futures_util::{StreamExt, pin_mut};
-use memory::Memory;
 use wcore::AgentEvent;
 use wcore::protocol::{
     api::Server,
     message::{
-        AgentDetail, AgentInfoRequest, AgentList, AgentSummary, ClearSessionRequest, DownloadEvent,
-        DownloadRequest, GetMemoryRequest, McpAddRequest, McpAdded, McpRemoveRequest, McpRemoved,
-        McpServerList, McpServerSummary, MemoryEntry, MemoryList, SendRequest, SendResponse,
-        SessionCleared, StreamEvent, StreamRequest,
+        DownloadEvent, DownloadRequest, SendRequest, SendResponse, StreamEvent, StreamRequest,
     },
 };
 
@@ -48,51 +44,6 @@ impl Server for Daemon {
 
             yield StreamEvent::End { agent: agent.clone() };
         }
-    }
-
-    async fn clear_session(&self, req: ClearSessionRequest) -> Result<SessionCleared> {
-        self.runtime.clear_session(&req.agent).await;
-        Ok(SessionCleared { agent: req.agent })
-    }
-
-    async fn list_agents(&self) -> Result<AgentList> {
-        let agents = self
-            .runtime
-            .agents()
-            .await
-            .into_iter()
-            .map(|a| AgentSummary {
-                name: a.name.clone(),
-                description: a.description.clone(),
-            })
-            .collect();
-        Ok(AgentList { agents })
-    }
-
-    async fn agent_info(&self, req: AgentInfoRequest) -> Result<AgentDetail> {
-        match self.runtime.agent(&req.agent).await {
-            Some(a) => Ok(AgentDetail {
-                name: a.name.clone(),
-                description: a.description.clone(),
-                tools: a.tools.to_vec(),
-                skill_tags: a.skill_tags.to_vec(),
-                system_prompt: a.system_prompt.clone(),
-            }),
-            None => bail!("agent not found: {}", req.agent),
-        }
-    }
-
-    async fn list_memory(&self) -> Result<MemoryList> {
-        let entries = self.runtime.hook.memory.entries();
-        Ok(MemoryList { entries })
-    }
-
-    async fn get_memory(&self, req: GetMemoryRequest) -> Result<MemoryEntry> {
-        let value = self.runtime.hook.memory.get(&req.key);
-        Ok(MemoryEntry {
-            key: req.key,
-            value,
-        })
     }
 
     fn download(
@@ -146,56 +97,6 @@ impl Server for Daemon {
                 yield Err(anyhow::anyhow!("this daemon was built without local model support"));
             }
         }
-    }
-
-    async fn mcp_add(&self, req: McpAddRequest) -> Result<McpAdded> {
-        let config = config::McpServerConfig {
-            name: req.name.clone(),
-            command: req.command,
-            args: req.args,
-            env: req.env,
-            auto_restart: true,
-        };
-        let tools = self.runtime.hook.mcp.add(config).await?;
-
-        // Register newly added MCP tools on Runtime's registry.
-        for (tool, handler) in self.runtime.hook.mcp.tool_handlers().await {
-            if tools.iter().any(|t| t == &*tool.name) {
-                self.runtime.register_tool(tool, handler).await;
-            }
-        }
-
-        Ok(McpAdded {
-            name: req.name,
-            tools,
-        })
-    }
-
-    async fn mcp_remove(&self, req: McpRemoveRequest) -> Result<McpRemoved> {
-        let tools = self.runtime.hook.mcp.remove(&req.name).await?;
-
-        // Unregister removed MCP tools from Runtime's registry.
-        for tool_name in &tools {
-            self.runtime.unregister_tool(tool_name).await;
-        }
-
-        Ok(McpRemoved {
-            name: req.name,
-            tools,
-        })
-    }
-
-    async fn mcp_list(&self) -> Result<McpServerList> {
-        let servers = self
-            .runtime
-            .hook
-            .mcp
-            .list()
-            .await
-            .into_iter()
-            .map(|(name, tools)| McpServerSummary { name, tools })
-            .collect();
-        Ok(McpServerList { servers })
     }
 
     async fn ping(&self) -> Result<()> {
