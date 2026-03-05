@@ -9,14 +9,15 @@
 //! - [`model`]: Unified LLM interface types and traits.
 //! - Agent event types: [`AgentEvent`], [`AgentStep`], [`AgentResponse`], [`AgentStopReason`].
 
-pub use agent::{Agent, AgentBuilder, AgentConfig, parse_agent_md};
-pub use dispatch::{Dispatcher, Handler, ToolRegistry};
-pub use event::{AgentEvent, AgentResponse, AgentStep, AgentStopReason};
-pub use hook::Hook;
+pub use agent::{
+    Agent, AgentBuilder, AgentConfig,
+    event::{AgentEvent, AgentResponse, AgentStep, AgentStopReason},
+    parse_agent_md,
+    tool::{Dispatcher, Handler, ToolRegistry},
+};
+pub use runtime::hook::Hook;
 
 mod agent;
-mod dispatch;
-mod event;
-pub mod hook;
 pub mod model;
+mod runtime;
 pub mod utils;

@@ -5,7 +5,7 @@
 //! methods at the appropriate lifecycle points. `DaemonHook` composes
 //! multiple Hook implementations by delegating to each.
 
-use crate::{AgentConfig, AgentEvent, dispatch::ToolRegistry};
+use crate::{AgentConfig, AgentEvent, agent::tool::ToolRegistry};
 use std::future::Future;
 
 /// Lifecycle backend for agent building, event observation, and tool registration.
