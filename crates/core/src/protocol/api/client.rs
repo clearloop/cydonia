@@ -2,9 +2,9 @@
 
 use crate::protocol::message::{
     AgentDetail, AgentInfoRequest, AgentList, ClearSessionRequest, DownloadEvent, DownloadRequest,
-    GetMemoryRequest, McpAddRequest, McpAdded, McpReloaded, McpRemoveRequest, McpRemoved,
-    McpServerList, MemoryEntry, MemoryList, SendRequest, SendResponse, SessionCleared,
-    SkillsReloaded, StreamEvent, StreamRequest, client::ClientMessage, server::ServerMessage,
+    GetMemoryRequest, McpAddRequest, McpAdded, McpRemoveRequest, McpRemoved, McpServerList,
+    MemoryEntry, MemoryList, SendRequest, SendResponse, SessionCleared, StreamEvent, StreamRequest,
+    client::ClientMessage, server::ServerMessage,
 };
 use anyhow::Result;
 use futures_core::Stream;
@@ -112,13 +112,6 @@ pub trait Client: Send {
             .map(|r| r.and_then(DownloadEvent::try_from))
     }
 
-    /// Reload skills from disk.
-    fn reload_skills(
-        &mut self,
-    ) -> impl std::future::Future<Output = Result<SkillsReloaded>> + Send {
-        async move { SkillsReloaded::try_from(self.request(ClientMessage::ReloadSkills).await?) }
-    }
-
     /// Add an MCP server.
     fn mcp_add(
         &mut self,
@@ -133,11 +126,6 @@ pub trait Client: Send {
         req: McpRemoveRequest,
     ) -> impl std::future::Future<Output = Result<McpRemoved>> + Send {
         async move { McpRemoved::try_from(self.request(req.into()).await?) }
-    }
-
-    /// Reload MCP servers from config.
-    fn mcp_reload(&mut self) -> impl std::future::Future<Output = Result<McpReloaded>> + Send {
-        async move { McpReloaded::try_from(self.request(ClientMessage::McpReload).await?) }
     }
 
     /// List connected MCP servers.

@@ -1,22 +1,20 @@
-//! Walrus MCP handler — hot-reload and config persistence.
+//! Walrus MCP handler — MCP server management.
 
 use crate::{config::McpServerConfig, hook::mcp::McpBridge};
 use anyhow::Result;
 use compact_str::CompactString;
-use std::{path::PathBuf, pin::Pin, sync::Arc};
+use std::{pin::Pin, sync::Arc};
 use tokio::sync::{Mutex, RwLock};
 use wcore::{Handler, model::Tool};
 
-/// MCP bridge owner with hot-reload and config persistence.
+/// MCP bridge owner.
 ///
 /// Implements [`Hook`] — `tools` returns MCP server tools, `dispatch`
 /// routes tool calls to MCP peers. `on_build_agent` is a no-op (MCP
 /// does not modify agent configs).
 pub struct McpHandler {
-    config_dir: PathBuf,
     bridge: RwLock<Arc<McpBridge>>,
-    /// Serializes mutating operations (add/remove/reload) to prevent
-    /// concurrent disk read-modify-write races.
+    /// Serializes mutating operations (add/remove) to prevent races.
     op_lock: Mutex<()>,
 }
 
@@ -50,28 +48,12 @@ impl McpHandler {
     }
 
     /// Load MCP servers from the given configs at startup.
-    pub async fn load(config_dir: PathBuf, configs: &[McpServerConfig]) -> Self {
+    pub async fn load(configs: &[McpServerConfig]) -> Self {
         let bridge = Self::build_bridge(configs).await;
         Self {
-            config_dir,
             bridge: RwLock::new(Arc::new(bridge)),
             op_lock: Mutex::new(()),
         }
-    }
-
-    /// Reload MCP servers from a config file. Builds a fresh bridge and
-    /// swaps atomically. Returns the list of `(server_name, tool_names)`.
-    pub async fn reload(
-        &self,
-        load_configs: impl FnOnce(&std::path::Path) -> Result<Vec<McpServerConfig>>,
-    ) -> Result<Vec<(CompactString, Vec<CompactString>)>> {
-        let _guard = self.op_lock.lock().await;
-        let config_path = self.config_dir.join("walrus.toml");
-        let configs = load_configs(&config_path)?;
-        let bridge = Self::build_bridge(&configs).await;
-        let servers = bridge.list_servers().await;
-        *self.bridge.write().await = Arc::new(bridge);
-        Ok(servers)
     }
 
     /// Add an MCP server and connect it incrementally.

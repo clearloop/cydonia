@@ -160,13 +160,6 @@ pub struct MemoryEntry {
     pub value: Option<String>,
 }
 
-/// Skills reloaded confirmation.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SkillsReloaded {
-    /// Number of skills loaded.
-    pub count: usize,
-}
-
 /// MCP server added confirmation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpAdded {
@@ -183,13 +176,6 @@ pub struct McpRemoved {
     pub name: CompactString,
     /// Tools that were removed.
     pub tools: Vec<CompactString>,
-}
-
-/// MCP servers reloaded confirmation.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct McpReloaded {
-    /// Connected servers after reload.
-    pub servers: Vec<McpServerSummary>,
 }
 
 /// List of connected MCP servers.
@@ -370,12 +356,6 @@ impl From<MemoryEntry> for ServerMessage {
     }
 }
 
-impl From<SkillsReloaded> for ServerMessage {
-    fn from(r: SkillsReloaded) -> Self {
-        Self::SkillsReloaded { count: r.count }
-    }
-}
-
 impl From<McpAdded> for ServerMessage {
     fn from(r: McpAdded) -> Self {
         Self::McpAdded {
@@ -391,12 +371,6 @@ impl From<McpRemoved> for ServerMessage {
             name: r.name,
             tools: r.tools,
         }
-    }
-}
-
-impl From<McpReloaded> for ServerMessage {
-    fn from(r: McpReloaded) -> Self {
-        Self::McpReloaded { servers: r.servers }
     }
 }
 
@@ -527,16 +501,6 @@ impl TryFrom<ServerMessage> for MemoryEntry {
     }
 }
 
-impl TryFrom<ServerMessage> for SkillsReloaded {
-    type Error = anyhow::Error;
-    fn try_from(msg: ServerMessage) -> anyhow::Result<Self> {
-        match msg {
-            ServerMessage::SkillsReloaded { count } => Ok(Self { count }),
-            other => Err(error_or_unexpected(other)),
-        }
-    }
-}
-
 impl TryFrom<ServerMessage> for McpAdded {
     type Error = anyhow::Error;
     fn try_from(msg: ServerMessage) -> anyhow::Result<Self> {
@@ -552,16 +516,6 @@ impl TryFrom<ServerMessage> for McpRemoved {
     fn try_from(msg: ServerMessage) -> anyhow::Result<Self> {
         match msg {
             ServerMessage::McpRemoved { name, tools } => Ok(Self { name, tools }),
-            other => Err(error_or_unexpected(other)),
-        }
-    }
-}
-
-impl TryFrom<ServerMessage> for McpReloaded {
-    type Error = anyhow::Error;
-    fn try_from(msg: ServerMessage) -> anyhow::Result<Self> {
-        match msg {
-            ServerMessage::McpReloaded { servers } => Ok(Self { servers }),
             other => Err(error_or_unexpected(other)),
         }
     }

@@ -2,9 +2,9 @@
 
 use crate::protocol::message::{
     AgentDetail, AgentInfoRequest, AgentList, ClearSessionRequest, DownloadEvent, DownloadRequest,
-    GetMemoryRequest, McpAddRequest, McpAdded, McpReloaded, McpRemoveRequest, McpRemoved,
-    McpServerList, MemoryEntry, MemoryList, SendRequest, SendResponse, SessionCleared,
-    SkillsReloaded, StreamEvent, StreamRequest, client::ClientMessage, server::ServerMessage,
+    GetMemoryRequest, McpAddRequest, McpAdded, McpRemoveRequest, McpRemoved, McpServerList,
+    MemoryEntry, MemoryList, SendRequest, SendResponse, SessionCleared, StreamEvent, StreamRequest,
+    client::ClientMessage, server::ServerMessage,
 };
 use anyhow::Result;
 use futures_core::Stream;
@@ -56,9 +56,6 @@ pub trait Server: Sync {
     /// Handle `Download` — download model files with progress.
     fn download(&self, req: DownloadRequest) -> impl Stream<Item = Result<DownloadEvent>> + Send;
 
-    /// Handle `ReloadSkills` — reload skills from disk.
-    fn reload_skills(&self) -> impl std::future::Future<Output = Result<SkillsReloaded>> + Send;
-
     /// Handle `McpAdd` — add an MCP server.
     fn mcp_add(
         &self,
@@ -70,9 +67,6 @@ pub trait Server: Sync {
         &self,
         req: McpRemoveRequest,
     ) -> impl std::future::Future<Output = Result<McpRemoved>> + Send;
-
-    /// Handle `McpReload` — reload MCP servers from config.
-    fn mcp_reload(&self) -> impl std::future::Future<Output = Result<McpReloaded>> + Send;
 
     /// Handle `McpList` — list connected MCP servers.
     fn mcp_list(&self) -> impl std::future::Future<Output = Result<McpServerList>> + Send;
@@ -121,9 +115,6 @@ pub trait Server: Sync {
                         yield result_to_msg(result);
                     }
                 }
-                ClientMessage::ReloadSkills => {
-                    yield result_to_msg(self.reload_skills().await);
-                }
                 ClientMessage::McpAdd { name, command, args, env } => {
                     yield result_to_msg(
                         self.mcp_add(McpAddRequest { name, command, args, env }).await,
@@ -133,9 +124,6 @@ pub trait Server: Sync {
                     yield result_to_msg(
                         self.mcp_remove(McpRemoveRequest { name }).await,
                     );
-                }
-                ClientMessage::McpReload => {
-                    yield result_to_msg(self.mcp_reload().await);
                 }
                 ClientMessage::McpList => {
                     yield result_to_msg(self.mcp_list().await);

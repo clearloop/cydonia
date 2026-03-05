@@ -46,8 +46,6 @@ pub enum ClientMessage {
         /// HuggingFace model ID (e.g. "microsoft/Phi-3.5-mini-instruct").
         model: CompactString,
     },
-    /// Reload skills from disk.
-    ReloadSkills,
     /// Add an MCP server to config and reload.
     McpAdd {
         /// Server name.
@@ -66,8 +64,6 @@ pub enum ClientMessage {
         /// Server name to remove.
         name: CompactString,
     },
-    /// Reload MCP servers from walrus.toml.
-    McpReload,
     /// List connected MCP servers and their tools.
     McpList,
     /// Ping the server (keepalive).

@@ -99,11 +99,6 @@ pub enum ServerMessage {
         /// Error message.
         message: String,
     },
-    /// Skills were reloaded successfully.
-    SkillsReloaded {
-        /// Number of skills loaded.
-        count: usize,
-    },
     /// MCP server added successfully.
     McpAdded {
         /// Server name.
@@ -117,11 +112,6 @@ pub enum ServerMessage {
         name: CompactString,
         /// Tools that were removed.
         tools: Vec<CompactString>,
-    },
-    /// MCP servers reloaded from config.
-    McpReloaded {
-        /// Connected servers after reload.
-        servers: Vec<McpServerSummary>,
     },
     /// List of connected MCP servers.
     McpServerList {

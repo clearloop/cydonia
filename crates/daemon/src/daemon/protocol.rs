@@ -9,9 +9,9 @@ use wcore::protocol::{
     api::Server,
     message::{
         AgentDetail, AgentInfoRequest, AgentList, AgentSummary, ClearSessionRequest, DownloadEvent,
-        DownloadRequest, GetMemoryRequest, McpAddRequest, McpAdded, McpReloaded, McpRemoveRequest,
-        McpRemoved, McpServerList, McpServerSummary, MemoryEntry, MemoryList, SendRequest,
-        SendResponse, SessionCleared, SkillsReloaded, StreamEvent, StreamRequest,
+        DownloadRequest, GetMemoryRequest, McpAddRequest, McpAdded, McpRemoveRequest, McpRemoved,
+        McpServerList, McpServerSummary, MemoryEntry, MemoryList, SendRequest, SendResponse,
+        SessionCleared, StreamEvent, StreamRequest,
     },
 };
 
@@ -148,12 +148,6 @@ impl Server for Daemon {
         }
     }
 
-    async fn reload_skills(&self) -> Result<SkillsReloaded> {
-        let count = self.runtime.hook.skills.reload().await?;
-        tracing::info!("reloaded {count} skill(s)");
-        Ok(SkillsReloaded { count })
-    }
-
     async fn mcp_add(&self, req: McpAddRequest) -> Result<McpAdded> {
         let config = config::McpServerConfig {
             name: req.name.clone(),
@@ -189,39 +183,6 @@ impl Server for Daemon {
             name: req.name,
             tools,
         })
-    }
-
-    async fn mcp_reload(&self) -> Result<McpReloaded> {
-        // Collect old tool names before reload.
-        let old_tool_names: Vec<compact_str::CompactString> = self
-            .runtime
-            .hook
-            .mcp
-            .tool_handlers()
-            .await
-            .into_iter()
-            .map(|(t, _)| t.name)
-            .collect();
-
-        let servers = self
-            .runtime
-            .hook
-            .mcp
-            .reload(|path| {
-                let config = crate::DaemonConfig::load(path)?;
-                Ok(config.mcp_servers.into_values().collect::<Vec<_>>())
-            })
-            .await?;
-
-        // Atomically swap old MCP tools for new ones on Runtime.
-        let new_tools = self.runtime.hook.mcp.tool_handlers().await;
-        self.runtime.replace_tools(&old_tool_names, new_tools).await;
-
-        let servers = servers
-            .into_iter()
-            .map(|(name, tools)| McpServerSummary { name, tools })
-            .collect();
-        Ok(McpReloaded { servers })
     }
 
     async fn mcp_list(&self) -> Result<McpServerList> {

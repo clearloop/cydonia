@@ -60,8 +60,7 @@ impl<'a> Builder<'a> {
             .values()
             .cloned()
             .collect::<Vec<_>>();
-        let mcp_handler =
-            hook::mcp::McpHandler::load(self.config_dir.to_path_buf(), &mcp_servers).await;
+        let mcp_handler = hook::mcp::McpHandler::load(&mcp_servers).await;
 
         DaemonHook::new(memory, skills, mcp_handler)
     }
