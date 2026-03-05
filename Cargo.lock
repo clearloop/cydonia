@@ -6702,7 +6702,6 @@ dependencies = [
  "walrus-memory",
  "walrus-model",
  "walrus-protocol",
- "walrus-runtime",
  "walrus-skill",
  "walrus-socket",
 ]
@@ -6765,21 +6764,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
-]
-
-[[package]]
-name = "walrus-runtime"
-version = "0.0.2"
-dependencies = [
- "anyhow",
- "async-stream",
- "compact_str 0.8.1",
- "futures-core",
- "futures-util",
- "tokio",
- "tracing",
- "walrus-core",
- "walrus-memory",
 ]
 
 [[package]]

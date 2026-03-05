@@ -19,7 +19,6 @@ memory = { path = "hook/memory", package = "walrus-memory", version = "0.0.2" }
 model = { path = "crates/model", package = "walrus-model", version = "0.0.2" }
 protocol = { path = "crates/protocol", package = "walrus-protocol", version = "0.0.2" }
 router = { path = "channel/router", package = "walrus-channel-router", version = "0.0.2" }
-runtime = { path = "crates/runtime", package = "walrus-runtime", version = "0.0.2" }
 skill = { path = "hook/skill", package = "walrus-skill", version = "0.0.2" }
 socket = { path = "protocol/socket", package = "walrus-socket", version = "0.0.2" }
 telegram = { path = "channel/telegram", package = "walrus-telegram", version = "0.0.2" }
@@ -88,7 +87,6 @@ packages = [
     "mcp",
     "memory",
     "model",
-    "runtime",
     "skill",
     "daemon",
     "cli",

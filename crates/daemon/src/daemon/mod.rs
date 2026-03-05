@@ -12,12 +12,12 @@ use crate::{
 use anyhow::Result;
 use compact_str::CompactString;
 use model::ProviderManager;
-use runtime::Runtime;
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
 use tokio::sync::{broadcast, mpsc, oneshot};
+use wcore::Runtime;
 
 pub(crate) mod builder;
 pub(crate) mod event;
