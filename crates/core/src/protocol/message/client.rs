@@ -3,6 +3,31 @@
 use compact_str::CompactString;
 use serde::{Deserialize, Serialize};
 
+/// Send a message to an agent and receive a complete response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SendRequest {
+    /// Target agent identifier.
+    pub agent: CompactString,
+    /// Message content.
+    pub content: String,
+}
+
+/// Send a message to an agent and receive a streamed response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StreamRequest {
+    /// Target agent identifier.
+    pub agent: CompactString,
+    /// Message content.
+    pub content: String,
+}
+
+/// Request download of a model's files with progress reporting.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DownloadRequest {
+    /// HuggingFace model ID.
+    pub model: CompactString,
+}
+
 /// Messages sent by the client to the gateway.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -28,4 +53,28 @@ pub enum ClientMessage {
     },
     /// Ping the server (keepalive).
     Ping,
+}
+
+impl From<SendRequest> for ClientMessage {
+    fn from(r: SendRequest) -> Self {
+        Self::Send {
+            agent: r.agent,
+            content: r.content,
+        }
+    }
+}
+
+impl From<StreamRequest> for ClientMessage {
+    fn from(r: StreamRequest) -> Self {
+        Self::Stream {
+            agent: r.agent,
+            content: r.content,
+        }
+    }
+}
+
+impl From<DownloadRequest> for ClientMessage {
+    fn from(r: DownloadRequest) -> Self {
+        Self::Download { model: r.model }
+    }
 }

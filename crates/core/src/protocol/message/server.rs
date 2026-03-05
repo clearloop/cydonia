@@ -3,59 +3,77 @@
 use compact_str::CompactString;
 use serde::{Deserialize, Serialize};
 
-/// Messages sent by the gateway to the client.
+/// Complete response from an agent.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum ServerMessage {
-    /// Complete response from an agent.
-    Response {
-        /// Source agent identifier.
-        agent: CompactString,
-        /// Response content.
-        content: String,
-    },
-    /// Start of a streamed response.
-    StreamStart {
+pub struct SendResponse {
+    /// Source agent identifier.
+    pub agent: CompactString,
+    /// Response content.
+    pub content: String,
+}
+
+/// Events emitted during a streamed agent response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum StreamEvent {
+    /// Stream has started.
+    Start {
         /// Source agent identifier.
         agent: CompactString,
     },
     /// A chunk of streamed content.
-    StreamChunk {
+    Chunk {
         /// Chunk content.
         content: String,
     },
-    /// End of a streamed response.
-    StreamEnd {
+    /// Stream has ended.
+    End {
         /// Source agent identifier.
         agent: CompactString,
     },
-    /// Download has started for a model.
-    DownloadStart {
+}
+
+/// Events emitted during a model download.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum DownloadEvent {
+    /// Download has started.
+    Start {
         /// Model being downloaded.
         model: CompactString,
     },
     /// A file download has started.
-    DownloadFileStart {
+    FileStart {
         /// Filename within the repo.
         filename: String,
         /// Total size in bytes.
         size: u64,
     },
     /// Download progress for current file (delta, not cumulative).
-    DownloadProgress {
-        /// Bytes downloaded in this chunk (delta).
+    Progress {
+        /// Bytes downloaded in this chunk.
         bytes: u64,
     },
     /// A file download has completed.
-    DownloadFileEnd {
+    FileEnd {
         /// Filename within the repo.
         filename: String,
     },
-    /// All downloads complete for a model.
-    DownloadEnd {
+    /// All downloads complete.
+    End {
         /// Model that was downloaded.
         model: CompactString,
     },
+}
+
+/// Messages sent by the gateway to the client.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ServerMessage {
+    /// Complete response from an agent.
+    Response(SendResponse),
+    /// A streamed response event.
+    Stream(StreamEvent),
+    /// A model download event.
+    Download(DownloadEvent),
     /// Error response.
     Error {
         /// Error code.
@@ -65,4 +83,61 @@ pub enum ServerMessage {
     },
     /// Pong response to client ping.
     Pong,
+}
+
+impl From<SendResponse> for ServerMessage {
+    fn from(r: SendResponse) -> Self {
+        Self::Response(r)
+    }
+}
+
+impl From<StreamEvent> for ServerMessage {
+    fn from(e: StreamEvent) -> Self {
+        Self::Stream(e)
+    }
+}
+
+impl From<DownloadEvent> for ServerMessage {
+    fn from(e: DownloadEvent) -> Self {
+        Self::Download(e)
+    }
+}
+
+fn error_or_unexpected(msg: ServerMessage) -> anyhow::Error {
+    match msg {
+        ServerMessage::Error { code, message } => {
+            anyhow::anyhow!("server error ({code}): {message}")
+        }
+        other => anyhow::anyhow!("unexpected response: {other:?}"),
+    }
+}
+
+impl TryFrom<ServerMessage> for SendResponse {
+    type Error = anyhow::Error;
+    fn try_from(msg: ServerMessage) -> anyhow::Result<Self> {
+        match msg {
+            ServerMessage::Response(r) => Ok(r),
+            other => Err(error_or_unexpected(other)),
+        }
+    }
+}
+
+impl TryFrom<ServerMessage> for StreamEvent {
+    type Error = anyhow::Error;
+    fn try_from(msg: ServerMessage) -> anyhow::Result<Self> {
+        match msg {
+            ServerMessage::Stream(e) => Ok(e),
+            other => Err(error_or_unexpected(other)),
+        }
+    }
+}
+
+impl TryFrom<ServerMessage> for DownloadEvent {
+    type Error = anyhow::Error;
+    fn try_from(msg: ServerMessage) -> anyhow::Result<Self> {
+        match msg {
+            ServerMessage::Download(e) => Ok(e),
+            other => Err(error_or_unexpected(other)),
+        }
+    }
 }

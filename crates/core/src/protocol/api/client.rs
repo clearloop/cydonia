@@ -50,7 +50,7 @@ pub trait Client: Send {
                 if *done {
                     return std::future::ready(None);
                 }
-                if matches!(&r, Ok(ServerMessage::StreamEnd { .. })) {
+                if matches!(&r, Ok(ServerMessage::Stream(StreamEvent::End { .. }))) {
                     *done = true;
                 }
                 std::future::ready(Some(r))
@@ -68,7 +68,7 @@ pub trait Client: Send {
                 if *done {
                     return std::future::ready(None);
                 }
-                if matches!(&r, Ok(ServerMessage::DownloadEnd { .. })) {
+                if matches!(&r, Ok(ServerMessage::Download(DownloadEvent::End { .. }))) {
                     *done = true;
                 }
                 std::future::ready(Some(r))
