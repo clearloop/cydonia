@@ -7,19 +7,13 @@
 //!
 //! All SQL lives in `sql/*.sql` files, loaded via `include_str!`.
 
-pub use crate::utils::cosine_similarity;
-use std::sync::Arc;
-
-mod embedder;
-mod mem;
-mod sqlite;
-pub mod tools;
-mod utils;
-
-pub use embedder::NoEmbedder;
 pub use mem::InMemory;
 pub use sqlite::SqliteMemory;
-pub use wcore::{Embedder, Memory, MemoryEntry, RecallOptions};
+use std::sync::Arc;
+pub use wcore::{Embedder, Memory, MemoryEntry, RecallOptions, memory::tools};
+
+mod mem;
+mod sqlite;
 
 /// Apply memory to an agent config — appends compiled memory to the system prompt.
 pub fn with_memory(mut config: wcore::AgentConfig, memory: &impl Memory) -> wcore::AgentConfig {
@@ -40,10 +34,10 @@ impl wcore::Hook for InMemory {
         registry: &mut wcore::ToolRegistry,
     ) -> impl std::future::Future<Output = ()> + Send {
         let mem = Arc::new(self.clone());
-        let remember = tools::remember(Arc::clone(&mem));
-        let recall = tools::recall(mem);
-        registry.insert(remember.tool, remember.handler);
-        registry.insert(recall.tool, recall.handler);
+        let (tool, handler) = tools::remember(Arc::clone(&mem));
+        registry.insert(tool, handler);
+        let (tool, handler) = tools::recall(mem);
+        registry.insert(tool, handler);
         async {}
     }
 }

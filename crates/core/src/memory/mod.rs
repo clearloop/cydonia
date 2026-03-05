@@ -8,42 +8,12 @@
 
 use anyhow::Result;
 use compact_str::CompactString;
+pub use embedder::{Embedder, NoEmbedder};
 use serde_json::Value;
 use std::future::Future;
 
 pub mod embedder;
-
-pub use embedder::{Embedder, NoEmbedder};
-
-/// A structured memory entry with metadata and optional embedding.
-#[derive(Debug, Clone, Default)]
-pub struct MemoryEntry {
-    /// Entry key (identity string).
-    pub key: CompactString,
-    /// Entry value (unbounded content).
-    pub value: String,
-    /// Optional structured metadata (JSON).
-    pub metadata: Option<Value>,
-    /// Unix timestamp when the entry was created.
-    pub created_at: u64,
-    /// Unix timestamp when the entry was last accessed.
-    pub accessed_at: u64,
-    /// Number of times the entry has been accessed.
-    pub access_count: u32,
-    /// Optional embedding vector for semantic search.
-    pub embedding: Option<Vec<f32>>,
-}
-
-/// Options controlling memory recall behavior.
-#[derive(Debug, Clone, Default)]
-pub struct RecallOptions {
-    /// Maximum number of results (0 = implementation default).
-    pub limit: usize,
-    /// Filter by creation time range (start, end) in unix seconds.
-    pub time_range: Option<(u64, u64)>,
-    /// Minimum relevance score threshold (0.0–1.0).
-    pub relevance_threshold: Option<f32>,
-}
+pub mod tools;
 
 /// Structured knowledge memory for LLM agents.
 ///
@@ -109,4 +79,34 @@ pub trait Memory: Send + Sync {
         let compiled = self.compile();
         async move { compiled }
     }
+}
+
+/// A structured memory entry with metadata and optional embedding.
+#[derive(Debug, Clone, Default)]
+pub struct MemoryEntry {
+    /// Entry key (identity string).
+    pub key: CompactString,
+    /// Entry value (unbounded content).
+    pub value: String,
+    /// Optional structured metadata (JSON).
+    pub metadata: Option<Value>,
+    /// Unix timestamp when the entry was created.
+    pub created_at: u64,
+    /// Unix timestamp when the entry was last accessed.
+    pub accessed_at: u64,
+    /// Number of times the entry has been accessed.
+    pub access_count: u32,
+    /// Optional embedding vector for semantic search.
+    pub embedding: Option<Vec<f32>>,
+}
+
+/// Options controlling memory recall behavior.
+#[derive(Debug, Clone, Default)]
+pub struct RecallOptions {
+    /// Maximum number of results (0 = implementation default).
+    pub limit: usize,
+    /// Filter by creation time range (start, end) in unix seconds.
+    pub time_range: Option<(u64, u64)>,
+    /// Minimum relevance score threshold (0.0–1.0).
+    pub relevance_threshold: Option<f32>,
 }
