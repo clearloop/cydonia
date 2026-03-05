@@ -6,7 +6,6 @@
 pub use mcp::{McpBridge, McpHandler, McpServerConfig};
 pub use skill::{Skill, SkillHandler, SkillRegistry, SkillTier};
 
-pub mod agent;
 pub mod hub;
 pub mod mcp;
 pub mod skill;

@@ -6,6 +6,8 @@ use model::ProviderManager;
 use std::path::{Path, PathBuf};
 use wcore::Runtime;
 
+const SYSTEM_AGENT: &str = include_str!("../../prompts/system.md");
+
 /// Step-by-step builder for the daemon's [`Runtime`].
 ///
 /// Each logical phase (providers, hook, agents) is a separate method.
@@ -67,7 +69,7 @@ impl<'a> Builder<'a> {
     /// Load agents from markdown files and add them to the runtime.
     fn load_agents(&self, runtime: &mut Runtime<ProviderManager, DaemonHook>) -> Result<()> {
         let agents = crate::config::load_agents_dir(&self.config_dir.join(config::AGENTS_DIR))?;
-        runtime.add_agent(system::agent::system_agent()?);
+        runtime.add_agent(wcore::parse_agent_md(SYSTEM_AGENT)?);
         for agent in agents {
             tracing::info!("registered agent '{}'", agent.name);
             runtime.add_agent(agent);

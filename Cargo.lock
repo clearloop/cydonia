@@ -3804,7 +3804,7 @@ dependencies = [
 
 [[package]]
 name = "openwalrus"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "anyhow",
  "clap",
@@ -6607,7 +6607,7 @@ dependencies = [
 
 [[package]]
 name = "walrus-channel"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "anyhow",
  "compact_str 0.8.1",
@@ -6622,7 +6622,7 @@ dependencies = [
 
 [[package]]
 name = "walrus-core"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -6640,7 +6640,7 @@ dependencies = [
 
 [[package]]
 name = "walrus-daemon"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -6664,7 +6664,7 @@ dependencies = [
 
 [[package]]
 name = "walrus-memory"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "anyhow",
  "compact_str 0.8.1",
@@ -6675,7 +6675,7 @@ dependencies = [
 
 [[package]]
 name = "walrus-model"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -6695,7 +6695,7 @@ dependencies = [
 
 [[package]]
 name = "walrus-socket"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -6709,7 +6709,7 @@ dependencies = [
 
 [[package]]
 name = "walrus-system"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "anyhow",
  "compact_str 0.8.1",
