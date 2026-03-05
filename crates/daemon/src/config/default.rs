@@ -1,42 +1,35 @@
 //! Default configuration and first-run scaffolding.
 
-use crate::config::{AGENTS_DIR, CRON_DIR, DATA_DIR, DaemonConfig, SKILLS_DIR};
+use crate::config::DaemonConfig;
 use anyhow::{Context, Result};
-use model::ProviderConfig;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-impl Default for DaemonConfig {
-    fn default() -> Self {
-        Self {
-            models: vec![ProviderConfig {
-                model: "deepseek-chat".into(),
-                api_key: None,
-                base_url: None,
-                loader: None,
-                quantization: None,
-                chat_template: None,
-            }],
-            channels: Vec::new(),
-            mcp_servers: Vec::new(),
-        }
-    }
+/// Agents subdirectory (contains *.md files).
+pub const AGENTS_DIR: &str = "agents";
+/// Skills subdirectory.
+pub const SKILLS_DIR: &str = "skills";
+/// Cron subdirectory (contains *.md files).
+pub const CRON_DIR: &str = "cron";
+/// Data subdirectory.
+pub const DATA_DIR: &str = "data";
+
+#[allow(dead_code)]
+/// SQLite memory database filename.
+pub const MEMORY_DB: &str = "memory.db";
+
+/// Resolve the global configuration directory (`~/.walrus/`).
+pub fn global_config_dir() -> PathBuf {
+    dirs::home_dir().expect("no home directory").join(".walrus")
 }
 
-/// Default agent markdown content for first-run scaffold.
-pub const DEFAULT_AGENT_MD: &str = r#"---
-name: assistant
-description: A helpful assistant
-tools:
-  - remember
----
-
-You are a helpful assistant. Be concise.
-"#;
+/// Pinned socket path (`~/.walrus/walrus.sock`).
+pub fn socket_path() -> PathBuf {
+    global_config_dir().join("walrus.sock")
+}
 
 /// Scaffold the full config directory structure on first run.
 ///
-/// Creates subdirectories (agents, skills, cron, data), writes a default
-/// walrus.toml and a default assistant agent markdown file.
+/// Creates subdirectories (agents, skills, cron, data) and writes a default walrus.toml.
 pub fn scaffold_config_dir(config_dir: &Path) -> Result<()> {
     std::fs::create_dir_all(config_dir.join(AGENTS_DIR))
         .context("failed to create agents directory")?;
@@ -52,10 +45,6 @@ pub fn scaffold_config_dir(config_dir: &Path) -> Result<()> {
         .context("failed to serialize default config")?;
     std::fs::write(&gateway_toml, contents)
         .with_context(|| format!("failed to write {}", gateway_toml.display()))?;
-
-    let agent_path = config_dir.join(AGENTS_DIR).join("assistant.md");
-    std::fs::write(&agent_path, DEFAULT_AGENT_MD)
-        .with_context(|| format!("failed to write {}", agent_path.display()))?;
 
     Ok(())
 }

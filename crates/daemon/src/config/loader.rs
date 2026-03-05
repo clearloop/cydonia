@@ -1,11 +1,11 @@
 //! Directory-based configuration loading for agents and cron jobs.
 //!
 //! Handles filesystem I/O: reads directories, sorts entries, delegates
-//! parsing to [`wcore::parse_agent_md`] and [`wcron::parser::parse_cron_md`].
+//! parsing to [`wcore::parse_agent_md`] and [`system::cron::parser::parse_cron_md`].
 
 use std::path::Path;
+use system::cron::parser::{CronEntry, parse_cron_md};
 use wcore::AgentConfig;
-use wcron::parser::{CronEntry, parse_cron_md};
 
 /// Load all agent markdown files from a directory.
 ///
@@ -35,7 +35,7 @@ pub fn load_agents_dir(path: &Path) -> anyhow::Result<Vec<AgentConfig>> {
 
 /// Load all cron markdown files from a directory.
 ///
-/// Each `.md` file is parsed with [`wcron::parser::parse_cron_md`]. Non-`.md`
+/// Each `.md` file is parsed with [`system::cron::parser::parse_cron_md`]. Non-`.md`
 /// files are silently skipped. Entries are sorted by filename for deterministic
 /// ordering. Returns an empty vec if the directory does not exist.
 pub fn load_cron_dir(path: &Path) -> anyhow::Result<Vec<CronEntry>> {

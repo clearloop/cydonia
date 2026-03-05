@@ -5,15 +5,13 @@
 //! [`Agent::run_stream`]. `run_stream()` is the canonical step loop —
 //! `run()` collects its events and returns the final response.
 
-use crate::{
-    dispatch::Dispatcher,
-    event::{AgentEvent, AgentResponse, AgentStep, AgentStopReason},
-    model::{Message, Model, Request},
-};
+use crate::model::{Message, Model, Request};
 use anyhow::Result;
 use async_stream::stream;
+use event::{AgentEvent, AgentResponse, AgentStep, AgentStopReason};
 use futures_core::Stream;
 use tokio::sync::mpsc;
+use tool::Dispatcher;
 
 pub use builder::AgentBuilder;
 pub use config::AgentConfig;
@@ -21,7 +19,9 @@ pub use parser::parse_agent_md;
 
 mod builder;
 pub mod config;
+pub mod event;
 mod parser;
+pub mod tool;
 
 /// A stateful agent execution unit.
 ///

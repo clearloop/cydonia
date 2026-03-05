@@ -11,7 +11,7 @@ repository.workspace = true
 keywords.workspace = true
 
 [[bin]]
-name = "openwalrus"
+name = "walrus"
 path = "src/bin/main.rs"
 
 [features]
@@ -23,8 +23,8 @@ cuda = ["daemon/cuda"]
 
 [dependencies]
 daemon = { workspace = true, optional = true }
-protocol.workspace = true
 socket.workspace = true
+wcore.workspace = true
 
 # crates.io
 anyhow.workspace = true

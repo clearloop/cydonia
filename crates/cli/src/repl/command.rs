@@ -4,12 +4,12 @@ use crate::repl::runner::Runner;
 use anyhow::Result;
 use compact_str::CompactString;
 use futures_util::StreamExt;
-use protocol::message::DownloadEvent;
 use rustyline::{
     Context,
     completion::{Completer, Pair},
 };
 use std::io::Write;
+use wcore::protocol::message::DownloadEvent;
 
 pub const SLASH_COMMANDS: &[&str] = &["/help", "/agent", "/memory", "/switch", "/download"];
 

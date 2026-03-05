@@ -4,15 +4,15 @@ use anyhow::Result;
 use compact_str::CompactString;
 use futures_core::Stream;
 use futures_util::StreamExt;
-use protocol::{
+use socket::{ClientConfig, Connection, WalrusClient};
+use std::path::Path;
+use wcore::protocol::{
     api::Client,
     message::{
         AgentDetail, AgentInfoRequest, AgentSummary, DownloadEvent, DownloadRequest,
         GetMemoryRequest, SendRequest, StreamEvent, StreamRequest,
     },
 };
-use socket::{ClientConfig, Connection, WalrusClient};
-use std::path::Path;
 
 /// Runs agents via a walrusd Unix domain socket connection.
 pub struct Runner {

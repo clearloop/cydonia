@@ -1,7 +1,7 @@
 [package]
-name = "walrus-daemon"
-description = "The Walrus daemon"
-documentation = "https://docs.rs/walrus-daemon"
+name = "walrus-system"
+description = "Walrus system hooks — skill, MCP, and cron subsystems"
+documentation = "https://docs.rs/walrus-system"
 readme = "README.md"
 version.workspace = true
 edition.workspace = true
@@ -10,30 +10,20 @@ license.workspace = true
 repository.workspace = true
 keywords.workspace = true
 
-[features]
-default = []
-local = ["model/local"]
-metal = ["model/metal"]
-cuda = ["model/cuda"]
-
 [dependencies]
-channel.workspace = true
-memory.workspace = true
-model.workspace = true
-socket.workspace = true
-system.workspace = true
 wcore.workspace = true
 
 # crates.io
 anyhow.workspace = true
-async-stream.workspace = true
+chrono.workspace = true
 compact_str.workspace = true
-dirs.workspace = true
+cron.workspace = true
 futures-core.workspace = true
 futures-util.workspace = true
+rmcp.workspace = true
+schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+serde_yaml.workspace = true
 tokio.workspace = true
-toml.workspace = true
 tracing.workspace = true
-tracing-subscriber.workspace = true

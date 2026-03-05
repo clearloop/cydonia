@@ -4,12 +4,12 @@
 //! `on_build_agent` delegates to skills and memory; `on_register_tools`
 //! delegates to memory, cron, and MCP sub-hooks in sequence.
 
-use mcp::McpHandler;
 use memory::InMemory;
-use skill::SkillHandler;
 use std::future::Future;
+use system::cron::CronHandler;
+use system::mcp::McpHandler;
+use system::skill::SkillHandler;
 use wcore::{AgentConfig, AgentEvent, Hook, ToolRegistry};
-use wcron::CronHandler;
 
 /// Stateful Hook implementation for the daemon.
 ///

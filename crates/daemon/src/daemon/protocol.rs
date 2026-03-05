@@ -4,7 +4,8 @@ use crate::daemon::Daemon;
 use anyhow::{Result, bail};
 use futures_util::{StreamExt, pin_mut};
 use memory::Memory;
-use protocol::{
+use wcore::AgentEvent;
+use wcore::protocol::{
     api::Server,
     message::{
         AgentDetail, AgentInfoRequest, AgentList, AgentSummary, ClearSessionRequest, DownloadEvent,
@@ -13,7 +14,6 @@ use protocol::{
         SendResponse, SessionCleared, SkillsReloaded, StreamEvent, StreamRequest,
     },
 };
-use wcore::AgentEvent;
 
 impl Server for Daemon {
     async fn send(&self, req: SendRequest) -> Result<SendResponse> {
@@ -155,7 +155,7 @@ impl Server for Daemon {
     }
 
     async fn mcp_add(&self, req: McpAddRequest) -> Result<McpAdded> {
-        let config = mcp::McpServerConfig {
+        let config = system::mcp::McpServerConfig {
             name: req.name.clone(),
             command: req.command,
             args: req.args,
@@ -209,7 +209,7 @@ impl Server for Daemon {
             .mcp
             .reload(|path| {
                 let config = crate::DaemonConfig::load(path)?;
-                Ok(config.mcp_servers)
+                Ok(config.mcp_servers.into_values().collect::<Vec<_>>())
             })
             .await?;
 

@@ -9,15 +9,16 @@ use crate::{
     daemon::event::{DaemonEvent, DaemonEventSender},
     hook::DaemonHook,
 };
+use ::socket::server::accept_loop;
 use anyhow::Result;
 use compact_str::CompactString;
 use model::ProviderManager;
-use runtime::Runtime;
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
 use tokio::sync::{broadcast, mpsc, oneshot};
+use wcore::Runtime;
 
 pub(crate) mod builder;
 pub(crate) mod event;
@@ -132,7 +133,7 @@ fn setup_socket(
 
     let socket_shutdown = bridge_shutdown(shutdown_tx.subscribe());
     let socket_tx = event_tx.clone();
-    let join = tokio::spawn(socket::server::accept_loop(
+    let join = tokio::spawn(accept_loop(
         listener,
         move |msg, reply| {
             let _ = socket_tx.send(DaemonEvent::Socket { msg, reply });
@@ -145,7 +146,8 @@ fn setup_socket(
 
 /// Build the channel router and spawn channel transports.
 async fn setup_channels(config: &DaemonConfig, event_tx: &DaemonEventSender) {
-    let router = router::build_router(&config.channels);
+    let channels = config.channels.values().cloned().collect::<Vec<_>>();
+    let router = channel::build_router(&channels);
     let router = Arc::new(router);
     let channel_tx = event_tx.clone();
     let on_message = Arc::new(move |agent: CompactString, content: String| {
@@ -165,7 +167,7 @@ async fn setup_channels(config: &DaemonConfig, event_tx: &DaemonEventSender) {
                 .unwrap_or(Err("event loop dropped".to_owned()))
         }
     });
-    router::spawn_channels(&config.channels, router, on_message).await;
+    channel::spawn_channels(&channels, router, on_message).await;
 }
 
 /// Spawn the cron scheduler wired into the event loop.
@@ -173,10 +175,10 @@ async fn setup_cron(
     runtime: &Arc<Runtime<ProviderManager, DaemonHook>>,
     shutdown_tx: &broadcast::Sender<()>,
     event_tx: &DaemonEventSender,
-) -> mpsc::UnboundedSender<wcron::CronJob> {
+) -> mpsc::UnboundedSender<system::cron::CronJob> {
     let cron_jobs = runtime.hook.cron.jobs().await;
     let cron_tx = event_tx.clone();
-    wcron::spawn_with_callback(
+    system::cron::spawn_with_callback(
         cron_jobs,
         move |job| {
             let tx = cron_tx.clone();

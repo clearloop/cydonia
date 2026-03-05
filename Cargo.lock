@@ -3828,8 +3828,8 @@ dependencies = [
  "toml 0.8.23",
  "tracing",
  "tracing-subscriber",
+ "walrus-core",
  "walrus-daemon",
- "walrus-protocol",
  "walrus-socket",
 ]
 
@@ -6617,16 +6617,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "walrus-channel-router"
+name = "walrus-channel"
 version = "0.0.2"
 dependencies = [
  "anyhow",
  "compact_str 0.8.1",
+ "futures-core",
+ "reqwest 0.12.26",
  "serde",
+ "serde_json",
  "tokio",
  "tracing",
- "walrus-pchannel",
- "walrus-telegram",
+ "walrus-core",
 ]
 
 [[package]]
@@ -6648,25 +6650,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "walrus-cron"
-version = "0.0.2"
-dependencies = [
- "anyhow",
- "chrono",
- "compact_str 0.8.1",
- "cron",
- "futures-core",
- "futures-util",
- "serde",
- "serde_json",
- "serde_yaml",
- "tokio",
- "tracing",
- "walrus-core",
- "walrus-protocol",
-]
-
-[[package]]
 name = "walrus-daemon"
 version = "0.0.2"
 dependencies = [
@@ -6682,32 +6665,12 @@ dependencies = [
  "toml 0.8.23",
  "tracing",
  "tracing-subscriber",
- "walrus-channel-router",
+ "walrus-channel",
  "walrus-core",
- "walrus-cron",
- "walrus-mcp",
  "walrus-memory",
  "walrus-model",
- "walrus-pchannel",
- "walrus-protocol",
- "walrus-runtime",
- "walrus-skill",
  "walrus-socket",
-]
-
-[[package]]
-name = "walrus-mcp"
-version = "0.0.2"
-dependencies = [
- "anyhow",
- "compact_str 0.8.1",
- "rmcp",
- "schemars 1.2.1",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
- "walrus-core",
+ "walrus-system",
 ]
 
 [[package]]
@@ -6742,88 +6705,37 @@ dependencies = [
 ]
 
 [[package]]
-name = "walrus-pchannel"
-version = "0.0.2"
-dependencies = [
- "anyhow",
- "compact_str 0.8.1",
- "futures-core",
- "serde",
- "tokio",
- "walrus-core",
-]
-
-[[package]]
-name = "walrus-protocol"
-version = "0.0.2"
-dependencies = [
- "anyhow",
- "async-stream",
- "compact_str 0.8.1",
- "futures-core",
- "futures-util",
- "serde",
- "serde_json",
- "tokio",
-]
-
-[[package]]
-name = "walrus-runtime"
-version = "0.0.2"
-dependencies = [
- "anyhow",
- "async-stream",
- "compact_str 0.8.1",
- "futures-core",
- "futures-util",
- "tokio",
- "tracing",
- "walrus-core",
- "walrus-memory",
-]
-
-[[package]]
-name = "walrus-skill"
-version = "0.0.2"
-dependencies = [
- "anyhow",
- "compact_str 0.8.1",
- "serde",
- "serde_yaml",
- "tokio",
- "tracing",
- "walrus-core",
-]
-
-[[package]]
 name = "walrus-socket"
 version = "0.0.2"
 dependencies = [
  "anyhow",
  "async-stream",
- "compact_str 0.8.1",
- "dirs",
  "futures-core",
- "futures-util",
  "serde",
  "serde_json",
  "tokio",
  "tracing",
- "walrus-protocol",
+ "walrus-core",
 ]
 
 [[package]]
-name = "walrus-telegram"
+name = "walrus-system"
 version = "0.0.2"
 dependencies = [
  "anyhow",
+ "chrono",
  "compact_str 0.8.1",
- "reqwest 0.12.26",
+ "cron",
+ "futures-core",
+ "futures-util",
+ "rmcp",
+ "schemars 1.2.1",
  "serde",
  "serde_json",
+ "serde_yaml",
  "tokio",
  "tracing",
- "walrus-pchannel",
+ "walrus-core",
 ]
 
 [[package]]
