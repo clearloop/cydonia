@@ -2,7 +2,21 @@
 
 use crate::hook::skill::{SkillRegistry, loader};
 use anyhow::Result;
+use schemars::JsonSchema;
+use serde::Deserialize;
 use std::{path::PathBuf, sync::Mutex};
+
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct SearchSkillInput {
+    /// Keyword to match skill names and descriptions
+    pub query: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct LoadSkillInput {
+    /// Skill name
+    pub name: String,
+}
 
 /// Skill registry owner.
 ///

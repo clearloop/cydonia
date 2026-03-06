@@ -4,10 +4,12 @@ pub use ::model::{ProviderConfig, ProviderManager};
 use anyhow::Result;
 use compact_str::CompactString;
 pub use default::{
-    AGENTS_DIR, DATA_DIR, GLOBAL_CONFIG_DIR, SKILLS_DIR, SOCKET_PATH, scaffold_config_dir,
+    AGENTS_DIR, DATA_DIR, GLOBAL_CONFIG_DIR, SKILLS_DIR, SOCKET_PATH, WORK_DIR,
+    scaffold_config_dir, scaffold_work_dir,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 pub use {agent::AgentConfig, loader::load_agents_dir};
 pub use {channel::ChannelConfig, mcp::McpServerConfig};
 
@@ -33,6 +35,11 @@ pub struct DaemonConfig {
     /// Agent configurations.
     #[serde(default)]
     pub agents: AgentConfig,
+    /// Optional symlink path for the workspace sandbox root (`~/.walrus/work/`).
+    ///
+    /// When set, a symlink is created at this path pointing to `~/.walrus/work/`.
+    #[serde(default)]
+    pub work_dir: Option<PathBuf>,
 }
 
 impl DaemonConfig {
@@ -83,6 +90,7 @@ impl Default for DaemonConfig {
             channels: Default::default(),
             mcp_servers: Default::default(),
             agents: AgentConfig::default(),
+            work_dir: None,
         }
     }
 }
@@ -106,6 +114,7 @@ impl Default for DaemonConfig {
             channels: Default::default(),
             mcp_servers: Default::default(),
             agents: AgentConfig::default(),
+            work_dir: None,
         }
     }
 }

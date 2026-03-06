@@ -6,6 +6,7 @@
 
 use crate::{
     DaemonConfig,
+    config::{GLOBAL_CONFIG_DIR, scaffold_work_dir},
     daemon::event::{DaemonEvent, DaemonEventSender},
     hook::DaemonHook,
 };
@@ -58,6 +59,7 @@ impl Daemon {
         config: &DaemonConfig,
         config_dir: &Path,
     ) -> Result<DaemonHandle> {
+        scaffold_work_dir(&GLOBAL_CONFIG_DIR, config.work_dir.as_deref())?;
         let (event_tx, event_rx) = mpsc::unbounded_channel::<DaemonEvent>();
         let daemon = Daemon::build(config, config_dir, event_tx.clone()).await?;
 
