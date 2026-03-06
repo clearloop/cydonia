@@ -6671,6 +6671,7 @@ dependencies = [
  "compact_str 0.8.1",
  "rusqlite",
  "serde_json",
+ "toml_edit",
  "walrus-core",
 ]
 

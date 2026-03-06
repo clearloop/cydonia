@@ -39,14 +39,20 @@ pub trait Memory: Send + Sync {
 
     /// Compile memory into a string for system prompt injection.
     ///
-    /// Always returns the memory usage instructions. If entries exist,
-    /// appends a `## Your profile` section with all stored key-value pairs.
+    /// Always returns the memory usage instructions. Appends a `## Your profile`
+    /// section containing only `user.*` and `soul.*` entries — stable identity
+    /// facts safe to embed unconditionally. All other entries are retrieval-only
+    /// and surface exclusively via the `recall` tool.
     fn compile(&self) -> String {
-        let entries = self.entries();
         let mut out = MEMORY_PROMPT.to_string();
-        if !entries.is_empty() {
+        let profile: Vec<_> = self
+            .entries()
+            .into_iter()
+            .filter(|(k, _)| k.starts_with("user.") || k.starts_with("soul."))
+            .collect();
+        if !profile.is_empty() {
             out.push_str("\n\n## Your profile\n\n");
-            for (key, value) in &entries {
+            for (key, value) in &profile {
                 out.push_str(&format!("**{key}**: {value}\n"));
             }
         }
