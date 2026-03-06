@@ -1,10 +1,12 @@
-//! Memory tool schemas and handlers for agent tool registration.
+//! Memory tool schema constructors.
+//!
+//! Returns [`Tool`] schema definitions for `remember` and `recall`.
+//! No handlers — dispatch is handled statically by the daemon event loop.
 
-use crate::{Handler, Memory, RecallOptions, model::Tool};
-use std::sync::Arc;
+use crate::model::Tool;
 
-/// Build the `remember` tool + handler for the given memory backend.
-pub fn remember<M: Memory + 'static>(mem: Arc<M>) -> (Tool, Handler) {
+/// Build the `remember` tool schema.
+pub fn remember_schema() -> Tool {
     let schema = serde_json::json!({
         "type": "object",
         "properties": {
@@ -13,32 +15,16 @@ pub fn remember<M: Memory + 'static>(mem: Arc<M>) -> (Tool, Handler) {
         },
         "required": ["key", "value"]
     });
-    let tool = Tool {
+    Tool {
         name: "remember".into(),
         description: "Store a key-value pair in memory.".into(),
         parameters: serde_json::from_value(schema).unwrap(),
         strict: false,
-    };
-    let handler: Handler = Arc::new(move |args| {
-        let mem = Arc::clone(&mem);
-        Box::pin(async move {
-            let parsed: serde_json::Value = match serde_json::from_str(&args) {
-                Ok(v) => v,
-                Err(e) => return format!("invalid arguments: {e}"),
-            };
-            let key = parsed["key"].as_str().unwrap_or("");
-            let value = parsed["value"].as_str().unwrap_or("");
-            match mem.store(key.to_owned(), value.to_owned()).await {
-                Ok(()) => format!("remembered: {key}"),
-                Err(e) => format!("failed to store: {e}"),
-            }
-        })
-    });
-    (tool, handler)
+    }
 }
 
-/// Build the `recall` tool + handler for the given memory backend.
-pub fn recall<M: Memory + 'static>(mem: Arc<M>) -> (Tool, Handler) {
+/// Build the `recall` tool schema.
+pub fn recall_schema() -> Tool {
     let schema = serde_json::json!({
         "type": "object",
         "properties": {
@@ -47,37 +33,10 @@ pub fn recall<M: Memory + 'static>(mem: Arc<M>) -> (Tool, Handler) {
         },
         "required": ["query"]
     });
-    let tool = Tool {
+    Tool {
         name: "recall".into(),
         description: "Search memory for entries relevant to a query.".into(),
         parameters: serde_json::from_value(schema).unwrap(),
         strict: false,
-    };
-    let handler: Handler = Arc::new(move |args| {
-        let mem = Arc::clone(&mem);
-        Box::pin(async move {
-            let parsed: serde_json::Value = match serde_json::from_str(&args) {
-                Ok(v) => v,
-                Err(e) => return format!("invalid arguments: {e}"),
-            };
-            let query = parsed["query"].as_str().unwrap_or("");
-            let limit = parsed["limit"].as_u64().unwrap_or(10) as usize;
-            let options = RecallOptions {
-                limit,
-                ..Default::default()
-            };
-            match mem.recall(query, options).await {
-                Ok(entries) if entries.is_empty() => "no memories found".to_owned(),
-                Ok(entries) => {
-                    let mut out = String::new();
-                    for entry in &entries {
-                        out.push_str(&format!("{}: {}\n", entry.key, entry.value));
-                    }
-                    out
-                }
-                Err(e) => format!("recall failed: {e}"),
-            }
-        })
-    });
-    (tool, handler)
+    }
 }
