@@ -17,7 +17,7 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
-use tokio::sync::{broadcast, mpsc, oneshot};
+use tokio::sync::{RwLock, broadcast, mpsc, oneshot};
 use wcore::Runtime;
 
 pub(crate) mod builder;
@@ -25,10 +25,62 @@ pub(crate) mod event;
 mod protocol;
 
 /// Shared daemon state — holds the runtime. Cheap to clone (`Arc`-backed).
+///
+/// The runtime is stored behind `Arc<RwLock<Arc<Runtime>>>` so that
+/// [`Daemon::reload`] can swap it atomically while in-flight requests that
+/// already cloned the inner `Arc` complete normally.
 #[derive(Clone)]
 pub struct Daemon {
-    /// The walrus runtime.
-    pub runtime: Arc<Runtime<ProviderManager, DaemonHook>>,
+    /// The walrus runtime, swappable via [`Daemon::reload`].
+    pub runtime: Arc<RwLock<Arc<Runtime<ProviderManager, DaemonHook>>>>,
+    /// Config directory — stored so [`Daemon::reload`] can re-read config from disk.
+    pub(crate) config_dir: PathBuf,
+}
+
+impl Daemon {
+    /// Load config, build runtime, bind the Unix domain socket, and start serving.
+    ///
+    /// Returns a [`DaemonHandle`] with the socket path and a shutdown trigger.
+    pub async fn start(config_dir: &Path) -> Result<DaemonHandle> {
+        let config_path = config_dir.join("walrus.toml");
+        let config = DaemonConfig::load(&config_path)?;
+        tracing::info!("loaded configuration from {}", config_path.display());
+        Self::start_with_config(&config, config_dir).await
+    }
+
+    /// Start with an already-loaded config. Useful when the caller resolves
+    /// config separately (e.g. CLI with scaffold logic).
+    pub async fn start_with_config(
+        config: &DaemonConfig,
+        config_dir: &Path,
+    ) -> Result<DaemonHandle> {
+        let (event_tx, event_rx) = mpsc::unbounded_channel::<DaemonEvent>();
+        let daemon = Daemon::build(config, config_dir).await?;
+
+        // Broadcast shutdown — all subsystems subscribe.
+        let (shutdown_tx, _) = broadcast::channel::<()>(1);
+        let shutdown_event_tx = event_tx.clone();
+        let mut shutdown_rx = shutdown_tx.subscribe();
+        tokio::spawn(async move {
+            let _ = shutdown_rx.recv().await;
+            let _ = shutdown_event_tx.send(DaemonEvent::Shutdown);
+        });
+
+        let (socket_path, socket_join) = setup_socket(&shutdown_tx, &event_tx)?;
+        setup_channels(config, &event_tx).await;
+
+        let d = daemon.clone();
+        let event_loop_join = tokio::spawn(async move {
+            d.handle_events(event_rx).await;
+        });
+
+        Ok(DaemonHandle {
+            socket_path,
+            shutdown_tx: Some(shutdown_tx),
+            socket_join: Some(socket_join),
+            event_loop_join: Some(event_loop_join),
+        })
+    }
 }
 
 /// Handle returned by [`Daemon::start`] — holds the socket path and shutdown trigger.
@@ -54,58 +106,6 @@ impl DaemonHandle {
         }
         let _ = std::fs::remove_file(&self.socket_path);
         Ok(())
-    }
-}
-
-impl Daemon {
-    /// Load config, build runtime, bind the Unix domain socket, and start serving.
-    ///
-    /// Returns a [`DaemonHandle`] with the socket path and a shutdown trigger.
-    pub async fn start(config_dir: &Path) -> Result<DaemonHandle> {
-        let config_path = config_dir.join("walrus.toml");
-        let config = DaemonConfig::load(&config_path)?;
-        tracing::info!("loaded configuration from {}", config_path.display());
-        Self::start_with_config(&config, config_dir).await
-    }
-
-    /// Start with an already-loaded config. Useful when the caller resolves
-    /// config separately (e.g. CLI with scaffold logic).
-    pub async fn start_with_config(
-        config: &DaemonConfig,
-        config_dir: &Path,
-    ) -> Result<DaemonHandle> {
-        let (event_tx, event_rx) = mpsc::unbounded_channel::<DaemonEvent>();
-        let runtime = builder::Builder::new(config, config_dir).build().await?;
-        let runtime = Arc::new(runtime);
-        let daemon = Daemon {
-            runtime: Arc::clone(&runtime),
-        };
-
-        // Broadcast shutdown — all subsystems subscribe.
-        let (shutdown_tx, _) = broadcast::channel::<()>(1);
-
-        // Bridge broadcast shutdown into the event loop.
-        let shutdown_event_tx = event_tx.clone();
-        let mut shutdown_rx = shutdown_tx.subscribe();
-        tokio::spawn(async move {
-            let _ = shutdown_rx.recv().await;
-            let _ = shutdown_event_tx.send(DaemonEvent::Shutdown);
-        });
-
-        let (socket_path, socket_join) = setup_socket(&shutdown_tx, &event_tx)?;
-        setup_channels(config, &event_tx).await;
-
-        let d = daemon.clone();
-        let event_loop_join = tokio::spawn(async move {
-            d.handle_events(event_rx).await;
-        });
-
-        Ok(DaemonHandle {
-            socket_path,
-            shutdown_tx: Some(shutdown_tx),
-            socket_join: Some(socket_join),
-            event_loop_join: Some(event_loop_join),
-        })
     }
 }
 

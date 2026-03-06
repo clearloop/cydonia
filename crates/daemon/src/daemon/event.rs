@@ -8,6 +8,7 @@
 use crate::daemon::Daemon;
 use compact_str::CompactString;
 use futures_util::{StreamExt, pin_mut};
+use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 use wcore::protocol::{
     api::Server,
@@ -75,7 +76,8 @@ impl Daemon {
         let runtime = self.runtime.clone();
         tokio::spawn(async move {
             tracing::info!(%agent, "channel dispatch");
-            let result = match runtime.send_to(&agent, &content).await {
+            let rt: Arc<_> = runtime.read().await.clone();
+            let result = match rt.send_to(&agent, &content).await {
                 Ok(resp) => Ok(resp.final_response.unwrap_or_default()),
                 Err(e) => Err(e.to_string()),
             };

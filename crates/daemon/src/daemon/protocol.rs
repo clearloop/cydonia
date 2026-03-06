@@ -3,6 +3,7 @@
 use crate::daemon::Daemon;
 use anyhow::Result;
 use futures_util::{StreamExt, pin_mut};
+use std::sync::Arc;
 use wcore::AgentEvent;
 use wcore::protocol::{
     api::Server,
@@ -13,7 +14,8 @@ use wcore::protocol::{
 
 impl Server for Daemon {
     async fn send(&self, req: SendRequest) -> Result<SendResponse> {
-        let response = self.runtime.send_to(&req.agent, &req.content).await?;
+        let rt: Arc<_> = self.runtime.read().await.clone();
+        let response = rt.send_to(&req.agent, &req.content).await?;
         Ok(SendResponse {
             agent: req.agent,
             content: response.final_response.unwrap_or_default(),
@@ -30,7 +32,8 @@ impl Server for Daemon {
         async_stream::try_stream! {
             yield StreamEvent::Start { agent: agent.clone() };
 
-            let stream = runtime.stream_to(&agent, &content);
+            let rt: Arc<_> = runtime.read().await.clone();
+            let stream = rt.stream_to(&agent, &content);
             pin_mut!(stream);
             while let Some(event) = stream.next().await {
                 match event {
