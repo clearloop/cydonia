@@ -1,14 +1,16 @@
 //! Server trait implementation for the Daemon.
 
-use crate::daemon::Daemon;
+use crate::{daemon::Daemon, ext::hub};
 use anyhow::Result;
+use compact_str::CompactString;
 use futures_util::{StreamExt, pin_mut};
 use std::sync::Arc;
 use wcore::AgentEvent;
 use wcore::protocol::{
     api::Server,
     message::{
-        DownloadEvent, DownloadRequest, SendRequest, SendResponse, StreamEvent, StreamRequest,
+        DownloadEvent, DownloadRequest, HubAction, HubEvent, SendRequest, SendResponse,
+        StreamEvent, StreamRequest,
     },
 };
 
@@ -104,5 +106,30 @@ impl Server for Daemon {
 
     async fn ping(&self) -> Result<()> {
         Ok(())
+    }
+
+    fn hub(
+        &self,
+        package: CompactString,
+        action: HubAction,
+    ) -> impl futures_core::Stream<Item = Result<HubEvent>> + Send {
+        async_stream::try_stream! {
+            match action {
+                HubAction::Install => {
+                    let s = hub::install(package);
+                    pin_mut!(s);
+                    while let Some(event) = s.next().await {
+                        yield event?;
+                    }
+                }
+                HubAction::Uninstall => {
+                    let s = hub::uninstall(package);
+                    pin_mut!(s);
+                    while let Some(event) = s.next().await {
+                        yield event?;
+                    }
+                }
+            }
+        }
     }
 }

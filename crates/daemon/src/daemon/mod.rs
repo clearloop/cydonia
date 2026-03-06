@@ -86,7 +86,7 @@ impl Daemon {
 /// Handle returned by [`Daemon::start`] — holds the socket path and shutdown trigger.
 pub struct DaemonHandle {
     /// The Unix domain socket path the daemon is listening on.
-    pub socket_path: PathBuf,
+    pub socket_path: &'static Path,
     shutdown_tx: Option<broadcast::Sender<()>>,
     socket_join: Option<tokio::task::JoinHandle<()>>,
     event_loop_join: Option<tokio::task::JoinHandle<()>>,
@@ -104,7 +104,7 @@ impl DaemonHandle {
         if let Some(join) = self.event_loop_join.take() {
             join.await?;
         }
-        let _ = std::fs::remove_file(&self.socket_path);
+        let _ = std::fs::remove_file(self.socket_path);
         Ok(())
     }
 }
@@ -115,16 +115,16 @@ impl DaemonHandle {
 fn setup_socket(
     shutdown_tx: &broadcast::Sender<()>,
     event_tx: &DaemonEventSender,
-) -> Result<(PathBuf, tokio::task::JoinHandle<()>)> {
-    let resolved_path = crate::config::socket_path();
+) -> Result<(&'static Path, tokio::task::JoinHandle<()>)> {
+    let resolved_path: &'static Path = &crate::config::SOCKET_PATH;
     if let Some(parent) = resolved_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
     if resolved_path.exists() {
-        std::fs::remove_file(&resolved_path)?;
+        std::fs::remove_file(resolved_path)?;
     }
 
-    let listener = tokio::net::UnixListener::bind(&resolved_path)?;
+    let listener = tokio::net::UnixListener::bind(resolved_path)?;
     tracing::info!("daemon listening on {}", resolved_path.display());
 
     let socket_shutdown = bridge_shutdown(shutdown_tx.subscribe());

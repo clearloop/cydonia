@@ -70,6 +70,26 @@ pub enum DownloadEvent {
     },
 }
 
+/// Events emitted during a hub install or uninstall operation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum HubEvent {
+    /// Operation has started.
+    Start {
+        /// Package being operated on.
+        package: CompactString,
+    },
+    /// A progress step message.
+    Step {
+        /// Human-readable step description.
+        message: String,
+    },
+    /// Operation has completed.
+    End {
+        /// Package that was operated on.
+        package: CompactString,
+    },
+}
+
 /// Messages sent by the gateway to the client.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -89,6 +109,8 @@ pub enum ServerMessage {
     },
     /// Pong response to client ping.
     Pong,
+    /// A hub install/uninstall event.
+    Hub(HubEvent),
 }
 
 impl From<SendResponse> for ServerMessage {
@@ -106,6 +128,12 @@ impl From<StreamEvent> for ServerMessage {
 impl From<DownloadEvent> for ServerMessage {
     fn from(e: DownloadEvent) -> Self {
         Self::Download(e)
+    }
+}
+
+impl From<HubEvent> for ServerMessage {
+    fn from(e: HubEvent) -> Self {
+        Self::Hub(e)
     }
 }
 

@@ -1,8 +1,8 @@
 //! Server trait — one async method per protocol operation.
 
 use crate::protocol::message::{
-    DownloadEvent, DownloadRequest, SendRequest, SendResponse, StreamEvent, StreamRequest,
-    client::ClientMessage, server::ServerMessage,
+    DownloadEvent, DownloadRequest, HubAction, HubEvent, SendRequest, SendResponse, StreamEvent,
+    StreamRequest, client::ClientMessage, server::ServerMessage,
 };
 use anyhow::Result;
 use futures_core::Stream;
@@ -32,6 +32,13 @@ pub trait Server: Sync {
 
     /// Handle `Ping` — keepalive.
     fn ping(&self) -> impl std::future::Future<Output = Result<()>> + Send;
+
+    /// Handle `Hub` — install or uninstall a hub package.
+    fn hub(
+        &self,
+        package: compact_str::CompactString,
+        action: HubAction,
+    ) -> impl Stream<Item = Result<HubEvent>> + Send;
 
     /// Dispatch a `ClientMessage` to the appropriate handler method.
     ///
@@ -65,6 +72,13 @@ pub trait Server: Sync {
                             message: e.to_string(),
                         },
                     };
+                }
+                ClientMessage::Hub { package, action } => {
+                    let s = self.hub(package, action);
+                    tokio::pin!(s);
+                    while let Some(result) = s.next().await {
+                        yield result_to_msg(result);
+                    }
                 }
             }
         }

@@ -3,5 +3,5 @@
 pub mod client;
 pub mod server;
 
-pub use client::{ClientMessage, DownloadRequest, SendRequest, StreamRequest};
-pub use server::{DownloadEvent, SendResponse, ServerMessage, StreamEvent};
+pub use client::{ClientMessage, DownloadRequest, HubAction, SendRequest, StreamRequest};
+pub use server::{DownloadEvent, HubEvent, SendResponse, ServerMessage, StreamEvent};

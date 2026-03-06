@@ -3,6 +3,16 @@
 use compact_str::CompactString;
 use serde::{Deserialize, Serialize};
 
+/// Hub package action.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HubAction {
+    /// Install a hub package.
+    Install,
+    /// Uninstall a hub package.
+    Uninstall,
+}
+
 /// Send a message to an agent and receive a complete response.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SendRequest {
@@ -53,6 +63,13 @@ pub enum ClientMessage {
     },
     /// Ping the server (keepalive).
     Ping,
+    /// Install or uninstall a hub package.
+    Hub {
+        /// Package identifier in `scope/name` format.
+        package: CompactString,
+        /// Action to perform.
+        action: HubAction,
+    },
 }
 
 impl From<SendRequest> for ClientMessage {

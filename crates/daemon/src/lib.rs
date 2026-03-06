@@ -3,6 +3,7 @@
 
 pub mod config;
 pub mod daemon;
+pub mod ext;
 pub mod hook;
 
 pub use config::DaemonConfig;

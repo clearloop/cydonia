@@ -4,7 +4,7 @@ pub use ::model::{ProviderConfig, ProviderManager};
 use anyhow::Result;
 use compact_str::CompactString;
 pub use default::{
-    AGENTS_DIR, DATA_DIR, SKILLS_DIR, global_config_dir, scaffold_config_dir, socket_path,
+    AGENTS_DIR, DATA_DIR, GLOBAL_CONFIG_DIR, SKILLS_DIR, SOCKET_PATH, scaffold_config_dir,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
