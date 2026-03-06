@@ -3,6 +3,7 @@
 use crate::config::DaemonConfig;
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 
 /// Agents subdirectory (contains *.md files).
 pub const AGENTS_DIR: &str = "agents";
@@ -15,15 +16,12 @@ pub const DATA_DIR: &str = "data";
 /// SQLite memory database filename.
 pub const MEMORY_DB: &str = "memory.db";
 
-/// Resolve the global configuration directory (`~/.walrus/`).
-pub fn global_config_dir() -> PathBuf {
-    dirs::home_dir().expect("no home directory").join(".walrus")
-}
+/// Global configuration directory (`~/.walrus/`).
+pub static GLOBAL_CONFIG_DIR: LazyLock<PathBuf> =
+    LazyLock::new(|| dirs::home_dir().expect("no home directory").join(".walrus"));
 
 /// Pinned socket path (`~/.walrus/walrus.sock`).
-pub fn socket_path() -> PathBuf {
-    global_config_dir().join("walrus.sock")
-}
+pub static SOCKET_PATH: LazyLock<PathBuf> = LazyLock::new(|| GLOBAL_CONFIG_DIR.join("walrus.sock"));
 
 /// Scaffold the full config directory structure on first run.
 ///

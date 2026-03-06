@@ -1,97 +1,105 @@
 //! Messages sent by the gateway to the client.
 
-use crate::protocol::message::{AgentSummary, McpServerSummary};
 use compact_str::CompactString;
 use serde::{Deserialize, Serialize};
 
-/// Messages sent by the gateway to the client.
+/// Complete response from an agent.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum ServerMessage {
-    /// Complete response from an agent.
-    Response {
-        /// Source agent identifier.
-        agent: CompactString,
-        /// Response content.
-        content: String,
-    },
-    /// Start of a streamed response.
-    StreamStart {
+pub struct SendResponse {
+    /// Source agent identifier.
+    pub agent: CompactString,
+    /// Response content.
+    pub content: String,
+}
+
+/// Events emitted during a streamed agent response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum StreamEvent {
+    /// Stream has started.
+    Start {
         /// Source agent identifier.
         agent: CompactString,
     },
     /// A chunk of streamed content.
-    StreamChunk {
+    Chunk {
         /// Chunk content.
         content: String,
     },
-    /// End of a streamed response.
-    StreamEnd {
+    /// Stream has ended.
+    End {
         /// Source agent identifier.
         agent: CompactString,
     },
-    /// Session cleared for an agent.
-    SessionCleared {
-        /// Agent whose session was cleared.
-        agent: CompactString,
-    },
-    /// List of registered agents.
-    AgentList {
-        /// Agent summaries.
-        agents: Vec<AgentSummary>,
-    },
-    /// Detailed agent information.
-    AgentDetail {
-        /// Agent name.
-        name: CompactString,
-        /// Agent description.
-        description: CompactString,
-        /// Registered tool names.
-        tools: Vec<CompactString>,
-        /// Skill tags.
-        skill_tags: Vec<CompactString>,
-        /// System prompt.
-        system_prompt: String,
-    },
-    /// List of memory entries.
-    MemoryList {
-        /// Key-value pairs.
-        entries: Vec<(String, String)>,
-    },
-    /// A single memory entry.
-    MemoryEntry {
-        /// Memory key.
-        key: String,
-        /// Memory value (None if not found).
-        value: Option<String>,
-    },
-    /// Download has started for a model.
-    DownloadStart {
+}
+
+/// Events emitted during a model download.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum DownloadEvent {
+    /// Download has started.
+    Start {
         /// Model being downloaded.
         model: CompactString,
     },
     /// A file download has started.
-    DownloadFileStart {
+    FileStart {
+        /// Model being downloaded.
+        model: CompactString,
         /// Filename within the repo.
         filename: String,
         /// Total size in bytes.
         size: u64,
     },
     /// Download progress for current file (delta, not cumulative).
-    DownloadProgress {
-        /// Bytes downloaded in this chunk (delta).
+    Progress {
+        /// Model being downloaded.
+        model: CompactString,
+        /// Bytes downloaded in this chunk.
         bytes: u64,
     },
     /// A file download has completed.
-    DownloadFileEnd {
+    FileEnd {
+        /// Model being downloaded.
+        model: CompactString,
         /// Filename within the repo.
         filename: String,
     },
-    /// All downloads complete for a model.
-    DownloadEnd {
+    /// All downloads complete.
+    End {
         /// Model that was downloaded.
         model: CompactString,
     },
+}
+
+/// Events emitted during a hub install or uninstall operation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum HubEvent {
+    /// Operation has started.
+    Start {
+        /// Package being operated on.
+        package: CompactString,
+    },
+    /// A progress step message.
+    Step {
+        /// Human-readable step description.
+        message: String,
+    },
+    /// Operation has completed.
+    End {
+        /// Package that was operated on.
+        package: CompactString,
+    },
+}
+
+/// Messages sent by the gateway to the client.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ServerMessage {
+    /// Complete response from an agent.
+    Response(SendResponse),
+    /// A streamed response event.
+    Stream(StreamEvent),
+    /// A model download event.
+    Download(DownloadEvent),
     /// Error response.
     Error {
         /// Error code.
@@ -99,35 +107,81 @@ pub enum ServerMessage {
         /// Error message.
         message: String,
     },
-    /// Skills were reloaded successfully.
-    SkillsReloaded {
-        /// Number of skills loaded.
-        count: usize,
-    },
-    /// MCP server added successfully.
-    McpAdded {
-        /// Server name.
-        name: CompactString,
-        /// Tools provided by this server.
-        tools: Vec<CompactString>,
-    },
-    /// MCP server removed successfully.
-    McpRemoved {
-        /// Server name.
-        name: CompactString,
-        /// Tools that were removed.
-        tools: Vec<CompactString>,
-    },
-    /// MCP servers reloaded from config.
-    McpReloaded {
-        /// Connected servers after reload.
-        servers: Vec<McpServerSummary>,
-    },
-    /// List of connected MCP servers.
-    McpServerList {
-        /// Connected servers.
-        servers: Vec<McpServerSummary>,
-    },
     /// Pong response to client ping.
     Pong,
+    /// A hub install/uninstall event.
+    Hub(HubEvent),
+}
+
+impl From<SendResponse> for ServerMessage {
+    fn from(r: SendResponse) -> Self {
+        Self::Response(r)
+    }
+}
+
+impl From<StreamEvent> for ServerMessage {
+    fn from(e: StreamEvent) -> Self {
+        Self::Stream(e)
+    }
+}
+
+impl From<DownloadEvent> for ServerMessage {
+    fn from(e: DownloadEvent) -> Self {
+        Self::Download(e)
+    }
+}
+
+impl From<HubEvent> for ServerMessage {
+    fn from(e: HubEvent) -> Self {
+        Self::Hub(e)
+    }
+}
+
+fn error_or_unexpected(msg: ServerMessage) -> anyhow::Error {
+    match msg {
+        ServerMessage::Error { code, message } => {
+            anyhow::anyhow!("server error ({code}): {message}")
+        }
+        other => anyhow::anyhow!("unexpected response: {other:?}"),
+    }
+}
+
+impl TryFrom<ServerMessage> for SendResponse {
+    type Error = anyhow::Error;
+    fn try_from(msg: ServerMessage) -> anyhow::Result<Self> {
+        match msg {
+            ServerMessage::Response(r) => Ok(r),
+            other => Err(error_or_unexpected(other)),
+        }
+    }
+}
+
+impl TryFrom<ServerMessage> for StreamEvent {
+    type Error = anyhow::Error;
+    fn try_from(msg: ServerMessage) -> anyhow::Result<Self> {
+        match msg {
+            ServerMessage::Stream(e) => Ok(e),
+            other => Err(error_or_unexpected(other)),
+        }
+    }
+}
+
+impl TryFrom<ServerMessage> for DownloadEvent {
+    type Error = anyhow::Error;
+    fn try_from(msg: ServerMessage) -> anyhow::Result<Self> {
+        match msg {
+            ServerMessage::Download(e) => Ok(e),
+            other => Err(error_or_unexpected(other)),
+        }
+    }
+}
+
+impl TryFrom<ServerMessage> for HubEvent {
+    type Error = anyhow::Error;
+    fn try_from(msg: ServerMessage) -> anyhow::Result<Self> {
+        match msg {
+            ServerMessage::Hub(e) => Ok(e),
+            other => Err(error_or_unexpected(other)),
+        }
+    }
 }

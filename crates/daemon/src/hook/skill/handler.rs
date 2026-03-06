@@ -1,20 +1,17 @@
-//! Walrus skill handler — hot-reload and config persistence.
+//! Walrus skill handler — initial load from disk.
 
 use crate::hook::skill::{SkillRegistry, SkillTier, loader};
 use anyhow::Result;
 use std::path::PathBuf;
-use tokio::sync::RwLock;
 
-/// Skill registry owner with hot-reload support.
+/// Skill registry owner.
 ///
 /// Implements [`Hook`] — `on_build_agent` enriches the system prompt with
 /// matching skills based on agent tags. Tools and dispatch are no-ops
 /// (skills inject behavior via prompt, not via tools).
 pub struct SkillHandler {
-    skills_dir: PathBuf,
-
     /// The skill registry.
-    pub registry: RwLock<SkillRegistry>,
+    pub(crate) registry: SkillRegistry,
 }
 
 impl SkillHandler {
@@ -35,27 +32,6 @@ impl SkillHandler {
         } else {
             SkillRegistry::new()
         };
-        Ok(Self {
-            skills_dir,
-            registry: RwLock::new(registry),
-        })
-    }
-
-    /// Reload skills from disk, replacing the entire registry.
-    /// Returns the number of skills loaded.
-    pub async fn reload(&self) -> Result<usize> {
-        let registry = if self.skills_dir.exists() {
-            loader::load_skills_dir(&self.skills_dir, SkillTier::Workspace)?
-        } else {
-            SkillRegistry::new()
-        };
-        let count = registry.len();
-        *self.registry.write().await = registry;
-        Ok(count)
-    }
-
-    /// Access the skill registry lock for read.
-    pub fn registry(&self) -> &RwLock<SkillRegistry> {
-        &self.registry
+        Ok(Self { registry })
     }
 }

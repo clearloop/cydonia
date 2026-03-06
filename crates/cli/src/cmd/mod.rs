@@ -9,7 +9,8 @@ use std::path::PathBuf;
 pub mod attach;
 #[cfg(feature = "daemon")]
 pub mod daemon;
-pub mod send;
+pub mod hub;
+pub mod model;
 
 /// Walrus CLI client — connects to walrusd via Unix domain socket.
 #[derive(Parser, Debug)]
@@ -53,9 +54,13 @@ impl Cli {
                 let runner = connect(&socket_path).await?;
                 cmd.run(runner, agent).await
             }
-            Command::Send(cmd) => {
+            Command::Hub(cmd) => {
                 let mut runner = connect(&socket_path).await?;
-                cmd.run(&mut runner, &agent).await
+                cmd.run(&mut runner).await
+            }
+            Command::Model(cmd) => {
+                let mut runner = connect(&socket_path).await?;
+                cmd.run(&mut runner).await
             }
             #[cfg(feature = "daemon")]
             Command::Daemon(cmd) => cmd.run().await,
@@ -68,8 +73,10 @@ impl Cli {
 pub enum Command {
     /// Attach to an agent via the interactive chat REPL.
     Attach(attach::Attach),
-    /// Send a one-shot message to an agent.
-    Send(send::Send),
+    /// Install or uninstall hub packages.
+    Hub(hub::Hub),
+    /// Manage local models.
+    Model(model::Model),
     /// Start the walrus daemon in the foreground.
     #[cfg(feature = "daemon")]
     Daemon(daemon::Daemon),

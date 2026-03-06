@@ -1,23 +1,23 @@
 //! Server trait implementation for the Daemon.
 
-use crate::{config, daemon::Daemon};
-use anyhow::{Result, bail};
+use crate::{daemon::Daemon, ext::hub};
+use anyhow::Result;
+use compact_str::CompactString;
 use futures_util::{StreamExt, pin_mut};
-use memory::Memory;
+use std::sync::Arc;
 use wcore::AgentEvent;
 use wcore::protocol::{
     api::Server,
     message::{
-        AgentDetail, AgentInfoRequest, AgentList, AgentSummary, ClearSessionRequest, DownloadEvent,
-        DownloadRequest, GetMemoryRequest, McpAddRequest, McpAdded, McpReloaded, McpRemoveRequest,
-        McpRemoved, McpServerList, McpServerSummary, MemoryEntry, MemoryList, SendRequest,
-        SendResponse, SessionCleared, SkillsReloaded, StreamEvent, StreamRequest,
+        DownloadEvent, DownloadRequest, HubAction, HubEvent, SendRequest, SendResponse,
+        StreamEvent, StreamRequest,
     },
 };
 
 impl Server for Daemon {
     async fn send(&self, req: SendRequest) -> Result<SendResponse> {
-        let response = self.runtime.send_to(&req.agent, &req.content).await?;
+        let rt: Arc<_> = self.runtime.read().await.clone();
+        let response = rt.send_to(&req.agent, &req.content).await?;
         Ok(SendResponse {
             agent: req.agent,
             content: response.final_response.unwrap_or_default(),
@@ -34,7 +34,8 @@ impl Server for Daemon {
         async_stream::try_stream! {
             yield StreamEvent::Start { agent: agent.clone() };
 
-            let stream = runtime.stream_to(&agent, &content);
+            let rt: Arc<_> = runtime.read().await.clone();
+            let stream = rt.stream_to(&agent, &content);
             pin_mut!(stream);
             while let Some(event) = stream.next().await {
                 match event {
@@ -48,51 +49,6 @@ impl Server for Daemon {
 
             yield StreamEvent::End { agent: agent.clone() };
         }
-    }
-
-    async fn clear_session(&self, req: ClearSessionRequest) -> Result<SessionCleared> {
-        self.runtime.clear_session(&req.agent).await;
-        Ok(SessionCleared { agent: req.agent })
-    }
-
-    async fn list_agents(&self) -> Result<AgentList> {
-        let agents = self
-            .runtime
-            .agents()
-            .await
-            .into_iter()
-            .map(|a| AgentSummary {
-                name: a.name.clone(),
-                description: a.description.clone(),
-            })
-            .collect();
-        Ok(AgentList { agents })
-    }
-
-    async fn agent_info(&self, req: AgentInfoRequest) -> Result<AgentDetail> {
-        match self.runtime.agent(&req.agent).await {
-            Some(a) => Ok(AgentDetail {
-                name: a.name.clone(),
-                description: a.description.clone(),
-                tools: a.tools.to_vec(),
-                skill_tags: a.skill_tags.to_vec(),
-                system_prompt: a.system_prompt.clone(),
-            }),
-            None => bail!("agent not found: {}", req.agent),
-        }
-    }
-
-    async fn list_memory(&self) -> Result<MemoryList> {
-        let entries = self.runtime.hook.memory.entries();
-        Ok(MemoryList { entries })
-    }
-
-    async fn get_memory(&self, req: GetMemoryRequest) -> Result<MemoryEntry> {
-        let value = self.runtime.hook.memory.get(&req.key);
-        Ok(MemoryEntry {
-            key: req.key,
-            value,
-        })
     }
 
     fn download(
@@ -114,13 +70,13 @@ impl Server for Daemon {
                 while let Some(event) = drx.recv().await {
                     let dl_event = match event {
                         model::local::download::DownloadEvent::FileStart { filename, size } => {
-                            DownloadEvent::FileStart { filename, size }
+                            DownloadEvent::FileStart { model: req.model.clone(), filename, size }
                         }
                         model::local::download::DownloadEvent::Progress { bytes } => {
-                            DownloadEvent::Progress { bytes }
+                            DownloadEvent::Progress { model: req.model.clone(), bytes }
                         }
                         model::local::download::DownloadEvent::FileEnd { filename } => {
-                            DownloadEvent::FileEnd { filename }
+                            DownloadEvent::FileEnd { model: req.model.clone(), filename }
                         }
                     };
                     yield dl_event;
@@ -148,96 +104,32 @@ impl Server for Daemon {
         }
     }
 
-    async fn reload_skills(&self) -> Result<SkillsReloaded> {
-        let count = self.runtime.hook.skills.reload().await?;
-        tracing::info!("reloaded {count} skill(s)");
-        Ok(SkillsReloaded { count })
-    }
-
-    async fn mcp_add(&self, req: McpAddRequest) -> Result<McpAdded> {
-        let config = config::McpServerConfig {
-            name: req.name.clone(),
-            command: req.command,
-            args: req.args,
-            env: req.env,
-            auto_restart: true,
-        };
-        let tools = self.runtime.hook.mcp.add(config).await?;
-
-        // Register newly added MCP tools on Runtime's registry.
-        for (tool, handler) in self.runtime.hook.mcp.tool_handlers().await {
-            if tools.iter().any(|t| t == &*tool.name) {
-                self.runtime.register_tool(tool, handler).await;
-            }
-        }
-
-        Ok(McpAdded {
-            name: req.name,
-            tools,
-        })
-    }
-
-    async fn mcp_remove(&self, req: McpRemoveRequest) -> Result<McpRemoved> {
-        let tools = self.runtime.hook.mcp.remove(&req.name).await?;
-
-        // Unregister removed MCP tools from Runtime's registry.
-        for tool_name in &tools {
-            self.runtime.unregister_tool(tool_name).await;
-        }
-
-        Ok(McpRemoved {
-            name: req.name,
-            tools,
-        })
-    }
-
-    async fn mcp_reload(&self) -> Result<McpReloaded> {
-        // Collect old tool names before reload.
-        let old_tool_names: Vec<compact_str::CompactString> = self
-            .runtime
-            .hook
-            .mcp
-            .tool_handlers()
-            .await
-            .into_iter()
-            .map(|(t, _)| t.name)
-            .collect();
-
-        let servers = self
-            .runtime
-            .hook
-            .mcp
-            .reload(|path| {
-                let config = crate::DaemonConfig::load(path)?;
-                Ok(config.mcp_servers.into_values().collect::<Vec<_>>())
-            })
-            .await?;
-
-        // Atomically swap old MCP tools for new ones on Runtime.
-        let new_tools = self.runtime.hook.mcp.tool_handlers().await;
-        self.runtime.replace_tools(&old_tool_names, new_tools).await;
-
-        let servers = servers
-            .into_iter()
-            .map(|(name, tools)| McpServerSummary { name, tools })
-            .collect();
-        Ok(McpReloaded { servers })
-    }
-
-    async fn mcp_list(&self) -> Result<McpServerList> {
-        let servers = self
-            .runtime
-            .hook
-            .mcp
-            .list()
-            .await
-            .into_iter()
-            .map(|(name, tools)| McpServerSummary { name, tools })
-            .collect();
-        Ok(McpServerList { servers })
-    }
-
     async fn ping(&self) -> Result<()> {
         Ok(())
+    }
+
+    fn hub(
+        &self,
+        package: CompactString,
+        action: HubAction,
+    ) -> impl futures_core::Stream<Item = Result<HubEvent>> + Send {
+        async_stream::try_stream! {
+            match action {
+                HubAction::Install => {
+                    let s = hub::install(package);
+                    pin_mut!(s);
+                    while let Some(event) = s.next().await {
+                        yield event?;
+                    }
+                }
+                HubAction::Uninstall => {
+                    let s = hub::uninstall(package);
+                    pin_mut!(s);
+                    while let Some(event) = s.next().await {
+                        yield event?;
+                    }
+                }
+            }
+        }
     }
 }

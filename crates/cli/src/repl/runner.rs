@@ -6,12 +6,9 @@ use futures_core::Stream;
 use futures_util::StreamExt;
 use socket::{ClientConfig, Connection, WalrusClient};
 use std::path::Path;
-use wcore::protocol::{
-    api::Client,
-    message::{
-        AgentDetail, AgentInfoRequest, AgentSummary, DownloadEvent, DownloadRequest,
-        GetMemoryRequest, SendRequest, StreamEvent, StreamRequest,
-    },
+use wcore::protocol::message::{
+    DownloadEvent, DownloadRequest, HubAction, HubEvent, HubRequest, SendRequest, StreamEvent,
+    StreamRequest,
 };
 
 /// Runs agents via a walrusd Unix domain socket connection.
@@ -32,6 +29,7 @@ impl Runner {
 
     /// Send a one-shot message and return the response content.
     pub async fn send(&mut self, agent: &str, content: &str) -> Result<String> {
+        use wcore::protocol::api::Client;
         let resp = self
             .connection
             .send(SendRequest {
@@ -48,6 +46,7 @@ impl Runner {
         agent: &'a str,
         content: &'a str,
     ) -> impl Stream<Item = Result<String>> + Send + 'a {
+        use wcore::protocol::api::Client;
         self.connection
             .stream(StreamRequest {
                 agent: CompactString::from(agent),
@@ -63,45 +62,27 @@ impl Runner {
             })
     }
 
-    /// List all registered agents.
-    pub async fn list_agents(&mut self) -> Result<Vec<AgentSummary>> {
-        let resp = self.connection.list_agents().await?;
-        Ok(resp.agents)
-    }
-
-    /// Get detailed info for a specific agent.
-    pub async fn agent_info(&mut self, agent: &str) -> Result<AgentDetail> {
-        self.connection
-            .agent_info(AgentInfoRequest {
-                agent: CompactString::from(agent),
-            })
-            .await
-    }
-
-    /// List all memory entries.
-    pub async fn list_memory(&mut self) -> Result<Vec<(String, String)>> {
-        let resp = self.connection.list_memory().await?;
-        Ok(resp.entries)
-    }
-
     /// Send a download request and return a stream of progress events.
     pub fn download_stream(
         &mut self,
         model: &str,
     ) -> impl Stream<Item = Result<DownloadEvent>> + '_ {
+        use wcore::protocol::api::Client;
         self.connection.download(DownloadRequest {
             model: CompactString::from(model),
         })
     }
 
-    /// Get a specific memory entry by key.
-    pub async fn get_memory(&mut self, key: &str) -> Result<Option<String>> {
-        let resp = self
-            .connection
-            .get_memory(GetMemoryRequest {
-                key: key.to_string(),
-            })
-            .await?;
-        Ok(resp.value)
+    /// Send a hub install/uninstall request and return a stream of progress events.
+    pub fn hub_stream(
+        &mut self,
+        package: &str,
+        action: HubAction,
+    ) -> impl Stream<Item = Result<HubEvent>> + '_ {
+        use wcore::protocol::api::Client;
+        self.connection.hub(HubRequest {
+            package: CompactString::from(package),
+            action,
+        })
     }
 }

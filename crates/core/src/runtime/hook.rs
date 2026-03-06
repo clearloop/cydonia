@@ -49,8 +49,12 @@ impl Hook for () {}
 /// and registers `remember`/`recall` tools via `on_register_tools`.
 impl<M: Memory + Clone + 'static> Hook for M {
     fn on_build_agent(&self, mut config: AgentConfig) -> AgentConfig {
-        let compiled = self.compile();
-        if !compiled.is_empty() {
+        let has_memory_tool = config
+            .tools
+            .iter()
+            .any(|t| t == "recall" || t == "remember");
+        if has_memory_tool {
+            let compiled = self.compile();
             config.system_prompt = format!("{}\n\n{compiled}", config.system_prompt);
         }
         config

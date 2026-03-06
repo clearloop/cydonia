@@ -6611,7 +6611,6 @@ version = "0.0.3"
 dependencies = [
  "anyhow",
  "compact_str 0.8.1",
- "futures-core",
  "reqwest 0.12.26",
  "serde",
  "serde_json",
@@ -6655,6 +6654,7 @@ dependencies = [
  "serde_yaml",
  "tokio",
  "toml 0.8.23",
+ "toml_edit",
  "tracing",
  "tracing-subscriber",
  "walrus-channel",
@@ -6672,6 +6672,7 @@ dependencies = [
  "compact_str 0.8.1",
  "rusqlite",
  "serde_json",
+ "toml_edit",
  "walrus-core",
 ]
 

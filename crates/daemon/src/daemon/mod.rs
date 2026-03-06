@@ -17,7 +17,7 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
-use tokio::sync::{broadcast, mpsc, oneshot};
+use tokio::sync::{RwLock, broadcast, mpsc, oneshot};
 use wcore::Runtime;
 
 pub(crate) mod builder;
@@ -25,36 +25,16 @@ pub(crate) mod event;
 mod protocol;
 
 /// Shared daemon state — holds the runtime. Cheap to clone (`Arc`-backed).
+///
+/// The runtime is stored behind `Arc<RwLock<Arc<Runtime>>>` so that
+/// [`Daemon::reload`] can swap it atomically while in-flight requests that
+/// already cloned the inner `Arc` complete normally.
 #[derive(Clone)]
 pub struct Daemon {
-    /// The walrus runtime.
-    pub runtime: Arc<Runtime<ProviderManager, DaemonHook>>,
-}
-
-/// Handle returned by [`Daemon::start`] — holds the socket path and shutdown trigger.
-pub struct DaemonHandle {
-    /// The Unix domain socket path the daemon is listening on.
-    pub socket_path: PathBuf,
-    shutdown_tx: Option<broadcast::Sender<()>>,
-    socket_join: Option<tokio::task::JoinHandle<()>>,
-    event_loop_join: Option<tokio::task::JoinHandle<()>>,
-}
-
-impl DaemonHandle {
-    /// Trigger graceful shutdown and wait for all subsystems to stop.
-    pub async fn shutdown(mut self) -> Result<()> {
-        if let Some(tx) = self.shutdown_tx.take() {
-            let _ = tx.send(());
-        }
-        if let Some(join) = self.socket_join.take() {
-            join.await?;
-        }
-        if let Some(join) = self.event_loop_join.take() {
-            join.await?;
-        }
-        let _ = std::fs::remove_file(&self.socket_path);
-        Ok(())
-    }
+    /// The walrus runtime, swappable via [`Daemon::reload`].
+    pub runtime: Arc<RwLock<Arc<Runtime<ProviderManager, DaemonHook>>>>,
+    /// Config directory — stored so [`Daemon::reload`] can re-read config from disk.
+    pub(crate) config_dir: PathBuf,
 }
 
 impl Daemon {
@@ -75,16 +55,10 @@ impl Daemon {
         config_dir: &Path,
     ) -> Result<DaemonHandle> {
         let (event_tx, event_rx) = mpsc::unbounded_channel::<DaemonEvent>();
-        let runtime = builder::Builder::new(config, config_dir).build().await?;
-        let runtime = Arc::new(runtime);
-        let daemon = Daemon {
-            runtime: Arc::clone(&runtime),
-        };
+        let daemon = Daemon::build(config, config_dir).await?;
 
         // Broadcast shutdown — all subsystems subscribe.
         let (shutdown_tx, _) = broadcast::channel::<()>(1);
-
-        // Bridge broadcast shutdown into the event loop.
         let shutdown_event_tx = event_tx.clone();
         let mut shutdown_rx = shutdown_tx.subscribe();
         tokio::spawn(async move {
@@ -109,22 +83,48 @@ impl Daemon {
     }
 }
 
+/// Handle returned by [`Daemon::start`] — holds the socket path and shutdown trigger.
+pub struct DaemonHandle {
+    /// The Unix domain socket path the daemon is listening on.
+    pub socket_path: &'static Path,
+    shutdown_tx: Option<broadcast::Sender<()>>,
+    socket_join: Option<tokio::task::JoinHandle<()>>,
+    event_loop_join: Option<tokio::task::JoinHandle<()>>,
+}
+
+impl DaemonHandle {
+    /// Trigger graceful shutdown and wait for all subsystems to stop.
+    pub async fn shutdown(mut self) -> Result<()> {
+        if let Some(tx) = self.shutdown_tx.take() {
+            let _ = tx.send(());
+        }
+        if let Some(join) = self.socket_join.take() {
+            join.await?;
+        }
+        if let Some(join) = self.event_loop_join.take() {
+            join.await?;
+        }
+        let _ = std::fs::remove_file(self.socket_path);
+        Ok(())
+    }
+}
+
 // ── Transport setup helpers ──────────────────────────────────────────
 
 /// Bind the Unix domain socket and spawn the accept loop.
 fn setup_socket(
     shutdown_tx: &broadcast::Sender<()>,
     event_tx: &DaemonEventSender,
-) -> Result<(PathBuf, tokio::task::JoinHandle<()>)> {
-    let resolved_path = crate::config::socket_path();
+) -> Result<(&'static Path, tokio::task::JoinHandle<()>)> {
+    let resolved_path: &'static Path = &crate::config::SOCKET_PATH;
     if let Some(parent) = resolved_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
     if resolved_path.exists() {
-        std::fs::remove_file(&resolved_path)?;
+        std::fs::remove_file(resolved_path)?;
     }
 
-    let listener = tokio::net::UnixListener::bind(&resolved_path)?;
+    let listener = tokio::net::UnixListener::bind(resolved_path)?;
     tracing::info!("daemon listening on {}", resolved_path.display());
 
     let socket_shutdown = bridge_shutdown(shutdown_tx.subscribe());

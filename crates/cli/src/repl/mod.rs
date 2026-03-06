@@ -52,7 +52,7 @@ impl ChatRepl {
                         continue;
                     }
                     let _ = self.editor.add_history_entry(&line);
-                    if handle_slash(&mut self.runner, &mut self.agent, &line).await? {
+                    if handle_slash(&mut self.agent, &line).await? {
                         continue;
                     }
                     let stream = self.runner.stream(&self.agent, &line);

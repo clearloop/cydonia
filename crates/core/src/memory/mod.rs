@@ -15,6 +15,8 @@ use std::future::Future;
 pub mod embedder;
 pub mod tools;
 
+const MEMORY_PROMPT: &str = include_str!("../../prompts/memory.md");
+
 /// Structured knowledge memory for LLM agents.
 ///
 /// Implementations store named key-value pairs that get compiled
@@ -35,23 +37,25 @@ pub trait Memory: Send + Sync {
     /// Remove a key. Returns the removed value if it existed.
     fn remove(&self, key: &str) -> Option<String>;
 
-    /// Compile all entries into a string for system prompt injection.
+    /// Compile memory into a string for system prompt injection.
+    ///
+    /// Always returns the memory usage instructions. Appends a `## Your profile`
+    /// section containing only `user.*` and `soul.*` entries — stable identity
+    /// facts safe to embed unconditionally. All other entries are retrieval-only
+    /// and surface exclusively via the `recall` tool.
     fn compile(&self) -> String {
-        let entries = self.entries();
-        if entries.is_empty() {
-            return String::new();
-        }
-
-        let mut out = String::from("<memory>\n");
-        for (key, value) in &entries {
-            out.push_str(&format!("<{key}>\n"));
-            out.push_str(value);
-            if !value.ends_with('\n') {
-                out.push('\n');
+        let mut out = MEMORY_PROMPT.to_string();
+        let profile: Vec<_> = self
+            .entries()
+            .into_iter()
+            .filter(|(k, _)| k.starts_with("user.") || k.starts_with("soul."))
+            .collect();
+        if !profile.is_empty() {
+            out.push_str("\n\n## Your profile\n\n");
+            for (key, value) in &profile {
+                out.push_str(&format!("**{key}**: {value}\n"));
             }
-            out.push_str(&format!("</{key}>\n"));
         }
-        out.push_str("</memory>");
         out
     }
 

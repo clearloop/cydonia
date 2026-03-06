@@ -54,6 +54,7 @@ tokio = { version = "1", features = [
     "time",
 ] }
 toml = "0.8"
+toml_edit = "0.22"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
@@ -69,4 +70,4 @@ overflow-checks = false
 strip = true
 
 [workspace.metadata.conta]
-packages = ["socket", "wcore", "channel", "memory", "model", "daemon", "cli"]
+packages = ["wcore", "socket", "channel", "memory", "model", "daemon", "cli"]
