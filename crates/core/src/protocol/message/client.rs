@@ -38,6 +38,15 @@ pub struct DownloadRequest {
     pub model: CompactString,
 }
 
+/// Install or uninstall a hub package.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HubRequest {
+    /// Package identifier in `scope/name` format.
+    pub package: CompactString,
+    /// Action to perform.
+    pub action: HubAction,
+}
+
 /// Messages sent by the client to the gateway.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -93,5 +102,14 @@ impl From<StreamRequest> for ClientMessage {
 impl From<DownloadRequest> for ClientMessage {
     fn from(r: DownloadRequest) -> Self {
         Self::Download { model: r.model }
+    }
+}
+
+impl From<HubRequest> for ClientMessage {
+    fn from(r: HubRequest) -> Self {
+        Self::Hub {
+            package: r.package,
+            action: r.action,
+        }
     }
 }

@@ -175,3 +175,13 @@ impl TryFrom<ServerMessage> for DownloadEvent {
         }
     }
 }
+
+impl TryFrom<ServerMessage> for HubEvent {
+    type Error = anyhow::Error;
+    fn try_from(msg: ServerMessage) -> anyhow::Result<Self> {
+        match msg {
+            ServerMessage::Hub(e) => Ok(e),
+            other => Err(error_or_unexpected(other)),
+        }
+    }
+}
