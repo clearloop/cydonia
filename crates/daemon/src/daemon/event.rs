@@ -4,6 +4,9 @@
 //! represented as [`DaemonEvent`] variants sent through a single
 //! `mpsc::unbounded_channel`. The [`Daemon`] processes them via
 //! [`handle_events`](Daemon::handle_events).
+//!
+//! Tool call routing is fully delegated to [`DaemonHook::dispatch_tool`] —
+//! no tool name matching happens here.
 
 use crate::daemon::Daemon;
 use compact_str::CompactString;
@@ -11,7 +14,7 @@ use futures_util::{StreamExt, pin_mut};
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 use wcore::{
-    Memory, RecallOptions, ToolRequest,
+    ToolRequest,
     protocol::{
         api::Server,
         message::{client::ClientMessage, server::ServerMessage},
@@ -37,7 +40,7 @@ pub(crate) enum DaemonEvent {
         /// Oneshot channel to send the response back to the channel loop.
         reply: oneshot::Sender<Result<String, String>>,
     },
-    /// A tool call from an agent, dispatched statically to memory or MCP.
+    /// A tool call from an agent, routed through `DaemonHook::dispatch_tool`.
     ToolCall(ToolRequest),
     /// Graceful shutdown request.
     Shutdown,
@@ -105,62 +108,14 @@ impl Daemon {
         });
     }
 
-    /// Statically dispatch a tool call to memory or MCP.
-    ///
-    /// System tools (`remember`, `recall`) are called directly on the memory
-    /// backend via the runtime's hook. All other tool names are routed to the
-    /// MCP bridge.
+    /// Route a tool call through `DaemonHook::dispatch_tool`.
     fn handle_tool_call(&self, req: ToolRequest) {
         let runtime = self.runtime.clone();
         tokio::spawn(async move {
             tracing::debug!(tool = %req.name, "tool dispatch");
             let rt = runtime.read().await.clone();
-            let result = match req.name.as_str() {
-                "remember" => Self::dispatch_remember(&rt.hook, &req.args).await,
-                "recall" => Self::dispatch_recall(&rt.hook, &req.args).await,
-                name => {
-                    let bridge = rt.hook.mcp.bridge().await;
-                    bridge.call(name, &req.args).await
-                }
-            };
+            let result = rt.hook.dispatch_tool(&req.name, &req.args).await;
             let _ = req.reply.send(result);
         });
-    }
-
-    /// Parse args and call `memory.store`.
-    async fn dispatch_remember(hook: &crate::hook::DaemonHook, args: &str) -> String {
-        let parsed: serde_json::Value = match serde_json::from_str(args) {
-            Ok(v) => v,
-            Err(e) => return format!("invalid arguments: {e}"),
-        };
-        let key = parsed["key"].as_str().unwrap_or("").to_owned();
-        let value = parsed["value"].as_str().unwrap_or("").to_owned();
-        match hook.memory.store(key.clone(), value).await {
-            Ok(()) => format!("remembered: {key}"),
-            Err(e) => format!("failed to store: {e}"),
-        }
-    }
-
-    /// Parse args and call `memory.recall`.
-    async fn dispatch_recall(hook: &crate::hook::DaemonHook, args: &str) -> String {
-        let parsed: serde_json::Value = match serde_json::from_str(args) {
-            Ok(v) => v,
-            Err(e) => return format!("invalid arguments: {e}"),
-        };
-        let query = parsed["query"].as_str().unwrap_or("");
-        let limit = parsed["limit"].as_u64().unwrap_or(10) as usize;
-        let options = RecallOptions {
-            limit,
-            ..Default::default()
-        };
-        match hook.memory.recall(query, options).await {
-            Ok(entries) if entries.is_empty() => "no memories found".to_owned(),
-            Ok(entries) => entries
-                .iter()
-                .map(|e| format!("{}: {}", e.key, e.value))
-                .collect::<Vec<_>>()
-                .join("\n"),
-            Err(e) => format!("recall failed: {e}"),
-        }
     }
 }

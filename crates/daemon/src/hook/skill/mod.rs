@@ -16,7 +16,8 @@ pub mod registry;
 
 impl Hook for SkillHandler {
     fn on_build_agent(&self, mut config: wcore::AgentConfig) -> wcore::AgentConfig {
-        for skill in self.registry.find_by_tags(&config.skill_tags) {
+        let registry = self.registry.lock().unwrap();
+        for skill in registry.find_by_tags(&config.skill_tags) {
             if !skill.body.is_empty() {
                 config.system_prompt.push_str("\n\n");
                 config.system_prompt.push_str(&skill.body);

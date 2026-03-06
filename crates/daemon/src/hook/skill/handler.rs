@@ -2,7 +2,7 @@
 
 use crate::hook::skill::{SkillRegistry, SkillTier, loader};
 use anyhow::Result;
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Mutex};
 
 /// Skill registry owner.
 ///
@@ -10,8 +10,10 @@ use std::path::PathBuf;
 /// matching skills based on agent tags. Tools and dispatch are no-ops
 /// (skills inject behavior via prompt, not via tools).
 pub struct SkillHandler {
-    /// The skill registry.
-    pub(crate) registry: SkillRegistry,
+    /// The skill registry (Mutex for interior-mutability from `dispatch_load_skill`).
+    pub registry: Mutex<SkillRegistry>,
+    /// Base directory from which skills are loaded.
+    pub skills_dir: PathBuf,
 }
 
 impl SkillHandler {
@@ -32,6 +34,9 @@ impl SkillHandler {
         } else {
             SkillRegistry::new()
         };
-        Ok(Self { registry })
+        Ok(Self {
+            registry: Mutex::new(registry),
+            skills_dir,
+        })
     }
 }
