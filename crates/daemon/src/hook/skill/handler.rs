@@ -1,6 +1,6 @@
 //! Walrus skill handler — initial load from disk.
 
-use crate::hook::skill::{SkillRegistry, SkillTier, loader};
+use crate::hook::skill::{SkillRegistry, loader};
 use anyhow::Result;
 use std::{path::PathBuf, sync::Mutex};
 
@@ -21,7 +21,7 @@ impl SkillHandler {
     /// by creating an empty registry.
     pub fn load(skills_dir: PathBuf) -> Result<Self> {
         let registry = if skills_dir.exists() {
-            match loader::load_skills_dir(&skills_dir, SkillTier::Workspace) {
+            match loader::load_skills_dir(&skills_dir) {
                 Ok(r) => {
                     tracing::info!("loaded {} skill(s)", r.len());
                     r

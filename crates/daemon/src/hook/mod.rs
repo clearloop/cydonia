@@ -7,7 +7,7 @@
 
 use crate::hook::{
     os::OsHook,
-    skill::{SkillHandler, SkillTier, loader},
+    skill::{SkillHandler, loader},
 };
 use mcp::McpHandler;
 use memory::InMemory;
@@ -187,11 +187,7 @@ impl DaemonHook {
             Err(e) => return format!("failed to parse skill: {e}"),
         };
         let body = skill.body.clone();
-        self.skills
-            .registry
-            .lock()
-            .unwrap()
-            .add(skill, SkillTier::Workspace);
+        self.skills.registry.lock().unwrap().add(skill);
         let dir_path = skill_dir.display();
         format!("{body}\n\nSkill directory: {dir_path}")
     }
@@ -199,7 +195,6 @@ impl DaemonHook {
 
 impl Hook for DaemonHook {
     fn on_build_agent(&self, config: AgentConfig) -> AgentConfig {
-        let config = self.skills.on_build_agent(config);
         self.memory.on_build_agent(config)
     }
 
