@@ -3,7 +3,7 @@
 
 pub mod config;
 pub mod daemon;
-pub(crate) mod hook;
+pub mod hook;
 
 pub use config::DaemonConfig;
 pub use daemon::{Daemon, DaemonHandle};

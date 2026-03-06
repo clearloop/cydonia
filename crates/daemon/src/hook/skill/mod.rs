@@ -12,7 +12,7 @@ pub use {
 
 mod handler;
 pub mod loader;
-mod registry;
+pub mod registry;
 
 impl Hook for SkillHandler {
     fn on_build_agent(&self, mut config: wcore::AgentConfig) -> wcore::AgentConfig {
