@@ -55,9 +55,7 @@ impl<M: Memory + Clone + 'static> Hook for M {
             .any(|t| t == "recall" || t == "remember");
         if has_memory_tool {
             let compiled = self.compile();
-            if !compiled.is_empty() {
-                config.system_prompt = format!("{}\n\n{compiled}", config.system_prompt);
-            }
+            config.system_prompt = format!("{}\n\n{compiled}", config.system_prompt);
         }
         config
     }
