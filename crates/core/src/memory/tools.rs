@@ -4,39 +4,41 @@
 //! No handlers — dispatch is handled statically by the daemon event loop.
 
 use crate::model::Tool;
+use schemars::JsonSchema;
+use serde::Deserialize;
+
+#[derive(Deserialize, JsonSchema)]
+pub struct RememberInput {
+    /// Memory key
+    pub key: String,
+    /// Value to remember
+    pub value: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct RecallInput {
+    /// Search query for relevant memories
+    pub query: String,
+    /// Maximum number of results (default: 10)
+    pub limit: Option<u32>,
+}
 
 /// Build the `remember` tool schema.
 pub fn remember_schema() -> Tool {
-    let schema = serde_json::json!({
-        "type": "object",
-        "properties": {
-            "key": { "type": "string", "description": "Memory key" },
-            "value": { "type": "string", "description": "Value to remember" }
-        },
-        "required": ["key", "value"]
-    });
     Tool {
         name: "remember".into(),
         description: "Store a key-value pair in memory.".into(),
-        parameters: serde_json::from_value(schema).unwrap(),
+        parameters: schemars::schema_for!(RememberInput),
         strict: false,
     }
 }
 
 /// Build the `recall` tool schema.
 pub fn recall_schema() -> Tool {
-    let schema = serde_json::json!({
-        "type": "object",
-        "properties": {
-            "query": { "type": "string", "description": "Search query for relevant memories" },
-            "limit": { "type": "integer", "description": "Maximum number of results (default: 10)" }
-        },
-        "required": ["query"]
-    });
     Tool {
         name: "recall".into(),
         description: "Search memory for entries relevant to a query.".into(),
-        parameters: serde_json::from_value(schema).unwrap(),
+        parameters: schemars::schema_for!(RecallInput),
         strict: false,
     }
 }

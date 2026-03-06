@@ -11,7 +11,12 @@ use crate::hook::{
 };
 use mcp::McpHandler;
 use memory::InMemory;
-use wcore::{AgentConfig, AgentEvent, Hook, Memory, RecallOptions, ToolRegistry, model::Tool};
+use schemars::JsonSchema;
+use serde::Deserialize;
+use wcore::{
+    AgentConfig, AgentEvent, Hook, Memory, RecallInput, RecallOptions, RememberInput, ToolRegistry,
+    model::Tool,
+};
 
 pub mod mcp;
 pub mod os;
@@ -66,36 +71,31 @@ impl DaemonHook {
     // ── Memory tools ─────────────────────────────────────────────────
 
     async fn dispatch_remember(&self, args: &str) -> String {
-        let parsed: serde_json::Value = match serde_json::from_str(args) {
+        let input: RememberInput = match serde_json::from_str(args) {
             Ok(v) => v,
             Err(e) => return format!("invalid arguments: {e}"),
         };
-        let key = match parsed["key"].as_str() {
-            Some(k) if !k.is_empty() => k.to_owned(),
-            _ => return "missing required field: key".to_owned(),
-        };
-        let value = match parsed["value"].as_str() {
-            Some(v) => v.to_owned(),
-            None => return "missing required field: value".to_owned(),
-        };
-        match self.memory.store(key.clone(), value).await {
+        if input.key.is_empty() {
+            return "missing required field: key".to_owned();
+        }
+        let key = input.key.clone();
+        match self.memory.store(input.key, input.value).await {
             Ok(()) => format!("remembered: {key}"),
             Err(e) => format!("failed to store: {e}"),
         }
     }
 
     async fn dispatch_recall(&self, args: &str) -> String {
-        let parsed: serde_json::Value = match serde_json::from_str(args) {
+        let input: RecallInput = match serde_json::from_str(args) {
             Ok(v) => v,
             Err(e) => return format!("invalid arguments: {e}"),
         };
-        let query = parsed["query"].as_str().unwrap_or("");
-        let limit = parsed["limit"].as_u64().unwrap_or(10) as usize;
+        let limit = input.limit.unwrap_or(10) as usize;
         let options = RecallOptions {
             limit,
             ..Default::default()
         };
-        match self.memory.recall(query, options).await {
+        match self.memory.recall(&input.query, options).await {
             Ok(entries) if entries.is_empty() => "no memories found".to_owned(),
             Ok(entries) => entries
                 .iter()
@@ -109,11 +109,11 @@ impl DaemonHook {
     // ── MCP tools ────────────────────────────────────────────────────
 
     async fn dispatch_search_mcp(&self, args: &str) -> String {
-        let parsed: serde_json::Value = match serde_json::from_str(args) {
+        let input: SearchMcpInput = match serde_json::from_str(args) {
             Ok(v) => v,
             Err(e) => return format!("invalid arguments: {e}"),
         };
-        let query = parsed["query"].as_str().unwrap_or("").to_lowercase();
+        let query = input.query.to_lowercase();
         let bridge = self.mcp.bridge().await;
         let tools = bridge.tools().await;
         let matches: Vec<String> = tools
@@ -132,31 +132,23 @@ impl DaemonHook {
     }
 
     async fn dispatch_call_mcp_tool(&self, args: &str) -> String {
-        let parsed: serde_json::Value = match serde_json::from_str(args) {
+        let input: CallMcpToolInput = match serde_json::from_str(args) {
             Ok(v) => v,
             Err(e) => return format!("invalid arguments: {e}"),
         };
-        let name = match parsed["name"].as_str() {
-            Some(n) => n,
-            None => return "missing required field: name".to_owned(),
-        };
-        let tool_args = match &parsed["args"] {
-            serde_json::Value::String(s) => s.clone(),
-            serde_json::Value::Null => String::new(),
-            other => return format!("args must be a JSON string, got: {other}"),
-        };
+        let tool_args = input.args.unwrap_or_default();
         let bridge = self.mcp.bridge().await;
-        bridge.call(name, &tool_args).await
+        bridge.call(&input.name, &tool_args).await
     }
 
     // ── Skill tools ──────────────────────────────────────────────────
 
     async fn dispatch_search_skill(&self, args: &str) -> String {
-        let parsed: serde_json::Value = match serde_json::from_str(args) {
+        let input: SearchSkillInput = match serde_json::from_str(args) {
             Ok(v) => v,
             Err(e) => return format!("invalid arguments: {e}"),
         };
-        let query = parsed["query"].as_str().unwrap_or("").to_lowercase();
+        let query = input.query.to_lowercase();
         let registry = self.skills.registry.lock().unwrap();
         let matches: Vec<String> = registry
             .skills()
@@ -175,14 +167,11 @@ impl DaemonHook {
     }
 
     async fn dispatch_load_skill(&self, args: &str) -> String {
-        let parsed: serde_json::Value = match serde_json::from_str(args) {
+        let input: LoadSkillInput = match serde_json::from_str(args) {
             Ok(v) => v,
             Err(e) => return format!("invalid arguments: {e}"),
         };
-        let name = match parsed["name"].as_str() {
-            Some(n) => n,
-            None => return "missing required field: name".to_owned(),
-        };
+        let name = &input.name;
         // Guard against path traversal in the skill name.
         if name.contains("..") || name.contains('/') || name.contains('\\') {
             return format!("invalid skill name: {name}");
@@ -247,58 +236,59 @@ impl Hook for DaemonHook {
     }
 }
 
+#[derive(Deserialize, JsonSchema)]
+struct SearchMcpInput {
+    /// Keyword to match tool names and descriptions
+    query: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct CallMcpToolInput {
+    /// Tool name
+    name: String,
+    /// JSON-encoded arguments string
+    args: Option<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct SearchSkillInput {
+    /// Keyword to match skill names and descriptions
+    query: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct LoadSkillInput {
+    /// Skill name
+    name: String,
+}
+
 impl DaemonHook {
     /// Register MCP and skill discovery tool schemas.
     fn register_system_tools(&self, tools: &mut ToolRegistry) {
-        let schemas: &[(&str, &str, serde_json::Value)] = &[
-            (
-                "search_mcp",
-                "Search available MCP tools by keyword.",
-                serde_json::json!({
-                    "type": "object",
-                    "properties": { "query": { "type": "string", "description": "Keyword to match tool names and descriptions" } },
-                    "required": ["query"]
-                }),
-            ),
-            (
-                "call_mcp_tool",
-                "Call an MCP tool by name with JSON-encoded arguments.",
-                serde_json::json!({
-                    "type": "object",
-                    "properties": {
-                        "name": { "type": "string", "description": "Tool name" },
-                        "args": { "type": "string", "description": "JSON-encoded arguments string" }
-                    },
-                    "required": ["name"]
-                }),
-            ),
-            (
-                "search_skill",
-                "Search available skills by keyword. Returns name and description only.",
-                serde_json::json!({
-                    "type": "object",
-                    "properties": { "query": { "type": "string", "description": "Keyword to match skill names and descriptions" } },
-                    "required": ["query"]
-                }),
-            ),
-            (
-                "load_skill",
-                "Load a skill by name. Returns its instructions and the skill directory path for resolving relative file references.",
-                serde_json::json!({
-                    "type": "object",
-                    "properties": { "name": { "type": "string", "description": "Skill name" } },
-                    "required": ["name"]
-                }),
-            ),
-        ];
-
-        for (name, description, schema) in schemas {
-            tools.insert(Tool {
-                name: (*name).into(),
-                description: (*description).to_owned(),
-                parameters: serde_json::from_value(schema.clone()).expect("valid static schema"),
-                strict: false,
-            });
-        }
+        tools.insert(Tool {
+            name: "search_mcp".into(),
+            description: "Search available MCP tools by keyword.".into(),
+            parameters: schemars::schema_for!(SearchMcpInput),
+            strict: false,
+        });
+        tools.insert(Tool {
+            name: "call_mcp_tool".into(),
+            description: "Call an MCP tool by name with JSON-encoded arguments.".into(),
+            parameters: schemars::schema_for!(CallMcpToolInput),
+            strict: false,
+        });
+        tools.insert(Tool {
+            name: "search_skill".into(),
+            description: "Search available skills by keyword. Returns name and description only."
+                .into(),
+            parameters: schemars::schema_for!(SearchSkillInput),
+            strict: false,
+        });
+        tools.insert(Tool {
+            name: "load_skill".into(),
+            description: "Load a skill by name. Returns its instructions and the skill directory path for resolving relative file references.".into(),
+            parameters: schemars::schema_for!(LoadSkillInput),
+            strict: false,
+        });
     }
 }
