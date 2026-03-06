@@ -67,7 +67,7 @@ impl Daemon {
 
     /// Construct the provider manager from config.
     async fn build_providers(config: &DaemonConfig) -> Result<ProviderManager> {
-        let models = config.models.values().cloned().collect::<Vec<_>>();
+        let models = config.model.providers.values().cloned().collect::<Vec<_>>();
         let manager = ProviderManager::from_configs(&models).await?;
         tracing::info!(
             "provider manager initialized — active model: {}",
