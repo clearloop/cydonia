@@ -65,24 +65,6 @@ impl<M: Model + Send + Sync + Clone + 'static, H: Hook + 'static> Runtime<M, H> 
         self.tools.write().await.remove(name)
     }
 
-    /// Atomically replace a set of tools.
-    ///
-    /// Removes `old_names` and inserts `new_tools` under a single write lock
-    /// — no window where agents see partial state.
-    pub async fn replace_tools(
-        &self,
-        old_names: &[CompactString],
-        new_tools: Vec<(Tool, Handler)>,
-    ) {
-        let mut registry = self.tools.write().await;
-        for name in old_names {
-            registry.remove(name);
-        }
-        for (tool, handler) in new_tools {
-            registry.insert(tool, handler);
-        }
-    }
-
     /// Build a filtered [`ToolRegistry`] snapshot for the named agent.
     ///
     /// Reads the agent's `config.tools` list and filters the shared registry.
@@ -131,13 +113,6 @@ impl<M: Model + Send + Sync + Clone + 'static, H: Hook + 'static> Runtime<M, H> 
     /// Get the per-agent mutex by name.
     pub fn agent_mutex(&self, name: &str) -> Option<Arc<Mutex<Agent<M>>>> {
         self.agents.get(name).cloned()
-    }
-
-    /// Clear the conversation history for a named agent.
-    pub async fn clear_session(&self, agent: &str) {
-        if let Some(mutex) = self.agents.get(agent) {
-            mutex.lock().await.clear_history();
-        }
     }
 
     // --- Execution ---
