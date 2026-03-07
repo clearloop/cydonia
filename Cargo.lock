@@ -7102,6 +7102,8 @@ dependencies = [
  "futures-util",
  "hf-hub 0.5.0",
  "mistralrs",
+ "proc-macro2",
+ "quote",
  "reqwest 0.12.26",
  "serde",
  "serde_json",
