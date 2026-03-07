@@ -1,23 +1,24 @@
-//! Telegram bot command dispatch.
+//! Discord bot command dispatch.
 //!
 //! Executes parsed bot commands (hub install/uninstall, model download)
-//! by streaming progress back to the originating Telegram chat.
+//! by streaming progress back to the originating Discord channel.
 
 use crate::command::BotCommand;
 use compact_str::CompactString;
 use futures_util::StreamExt;
+use serenity::model::id::ChannelId;
 use socket::{ClientConfig, Connection, WalrusClient};
 use std::path::PathBuf;
-use teloxide::prelude::*;
+use std::sync::Arc;
 use wcore::protocol::api::Client;
 use wcore::protocol::message::{DownloadEvent, DownloadRequest, HubAction, HubEvent, HubRequest};
 
-/// Execute a bot command, streaming progress messages back to the originating chat.
+/// Execute a bot command, streaming progress messages back to the originating channel.
 pub(crate) async fn dispatch_command(
     cmd: BotCommand,
     socket_path: PathBuf,
-    bot: Bot,
-    chat_id: i64,
+    http: Arc<serenity::http::Http>,
+    channel_id: ChannelId,
 ) {
     let config = ClientConfig { socket_path };
     let client = WalrusClient::new(config);
@@ -31,13 +32,20 @@ pub(crate) async fn dispatch_command(
 
     match cmd {
         BotCommand::HubInstall { package } => {
-            run_hub(&mut connection, &bot, chat_id, package, HubAction::Install).await;
+            run_hub(
+                &mut connection,
+                &http,
+                channel_id,
+                package,
+                HubAction::Install,
+            )
+            .await;
         }
         BotCommand::HubUninstall { package } => {
             run_hub(
                 &mut connection,
-                &bot,
-                chat_id,
+                &http,
+                channel_id,
                 package,
                 HubAction::Uninstall,
             )
@@ -51,19 +59,17 @@ pub(crate) async fn dispatch_command(
             while let Some(result) = stream.next().await {
                 match result {
                     Ok(DownloadEvent::Start { model }) => {
-                        send_text(&bot, chat_id, format!("Downloading {model}...")).await;
+                        send_text(&http, channel_id, format!("Downloading {model}...")).await;
                     }
                     Ok(DownloadEvent::FileStart { filename, .. }) => {
-                        send_text(&bot, chat_id, format!("  {filename} starting...")).await;
+                        send_text(&http, channel_id, format!("  {filename} starting...")).await;
                     }
-                    Ok(DownloadEvent::Progress { .. }) => {
-                        // Too noisy for chat — skip.
-                    }
+                    Ok(DownloadEvent::Progress { .. }) => {}
                     Ok(DownloadEvent::FileEnd { filename, .. }) => {
-                        send_text(&bot, chat_id, format!("  {filename} done")).await;
+                        send_text(&http, channel_id, format!("  {filename} done")).await;
                     }
                     Ok(DownloadEvent::End { model }) => {
-                        send_text(&bot, chat_id, format!("Download complete: {model}")).await;
+                        send_text(&http, channel_id, format!("Download complete: {model}")).await;
                     }
                     Err(e) => {
                         tracing::warn!("download event error: {e}");
@@ -74,11 +80,11 @@ pub(crate) async fn dispatch_command(
     }
 }
 
-/// Stream a hub install/uninstall operation and send progress to chat.
+/// Stream a hub install/uninstall operation and send progress to the channel.
 async fn run_hub(
     connection: &mut Connection,
-    bot: &Bot,
-    chat_id: i64,
+    http: &Arc<serenity::http::Http>,
+    channel_id: ChannelId,
     package: String,
     action: HubAction,
 ) {
@@ -91,17 +97,17 @@ async fn run_hub(
         match result {
             Ok(HubEvent::Start { package }) => {
                 send_text(
-                    bot,
-                    chat_id,
+                    http,
+                    channel_id,
                     format!("Starting hub operation for {package}..."),
                 )
                 .await;
             }
             Ok(HubEvent::Step { message }) => {
-                send_text(bot, chat_id, format!("  {message}")).await;
+                send_text(http, channel_id, format!("  {message}")).await;
             }
             Ok(HubEvent::End { package }) => {
-                send_text(bot, chat_id, format!("Done: {package}")).await;
+                send_text(http, channel_id, format!("Done: {package}")).await;
             }
             Err(e) => {
                 tracing::warn!("hub event error: {e}");
@@ -110,9 +116,9 @@ async fn run_hub(
     }
 }
 
-/// Send a plain-text message to the chat.
-async fn send_text(bot: &Bot, chat_id: i64, content: String) {
-    if let Err(e) = bot.send_message(ChatId(chat_id), content).await {
+/// Send a plain-text message to the channel.
+async fn send_text(http: &Arc<serenity::http::Http>, channel_id: ChannelId, content: String) {
+    if let Err(e) = channel_id.say(http, content).await {
         tracing::warn!("failed to send bot command reply: {e}");
     }
 }

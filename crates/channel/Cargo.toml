@@ -17,6 +17,7 @@ compact_str.workspace = true
 futures-core.workspace = true
 futures-util.workspace = true
 serde.workspace = true
+serenity.workspace = true
 serde_json.workspace = true
 socket.workspace = true
 teloxide.workspace = true
