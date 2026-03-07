@@ -1,7 +1,6 @@
 //! OpenAI-compatible LLM provider.
 //!
-//! Covers OpenAI, Grok (xAI), Qwen (Alibaba), Kimi (Moonshot), Ollama,
-//! and any other service exposing the OpenAI chat completions API.
+//! Covers any service exposing the OpenAI chat completions API.
 
 use compact_str::CompactString;
 use reqwest::{Client, header::HeaderMap};
@@ -11,16 +10,8 @@ mod request;
 
 /// OpenAI-compatible endpoint URLs.
 pub mod endpoint {
-    /// OpenAI chat completions.
+    /// OpenAI chat completions (default for OpenAI standard).
     pub const OPENAI: &str = "https://api.openai.com/v1/chat/completions";
-    /// DeepSeek chat completions.
-    pub const DEEPSEEK: &str = "https://api.deepseek.com/chat/completions";
-    /// Grok (xAI) chat completions.
-    pub const GROK: &str = "https://api.x.ai/v1/chat/completions";
-    /// Qwen (Alibaba DashScope) chat completions.
-    pub const QWEN: &str = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
-    /// Kimi (Moonshot) chat completions.
-    pub const KIMI: &str = "https://api.moonshot.cn/v1/chat/completions";
     /// Ollama local chat completions.
     pub const OLLAMA: &str = "http://localhost:11434/v1/chat/completions";
 }

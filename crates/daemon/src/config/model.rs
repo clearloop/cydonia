@@ -32,7 +32,8 @@ impl Default for ModelConfig {
                 ProviderConfig {
                     model: "deepseek-chat".into(),
                     api_key: None,
-                    base_url: None,
+                    base_url: Some("https://api.deepseek.com/chat/completions".into()),
+                    standard: Default::default(),
                 },
             )]
             .into(),

@@ -8,28 +8,56 @@ use anyhow::{Result, bail};
 use compact_str::CompactString;
 use serde::{Deserialize, Serialize};
 
+/// API protocol standard for remote providers.
+///
+/// Only two wire formats exist: OpenAI-compatible and Anthropic.
+/// Defaults to `OpenAI` when omitted in config.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ApiStandard {
+    /// OpenAI-compatible chat completions API (covers DeepSeek, Grok, Qwen, Kimi, Ollama, etc.).
+    #[default]
+    OpenAI,
+    /// Anthropic Messages API.
+    Anthropic,
+}
+
 /// Remote provider configuration.
 ///
-/// Provider kind is inferred from the model name prefix — no explicit tag.
-/// Local models are handled by the built-in registry, not by this config.
+/// Any model name is valid — the `standard` field (or auto-detection from
+/// `base_url`) determines which API protocol to use. Local models are handled
+/// by the built-in registry, not by this config.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ProviderConfig {
-    /// Model identifier. Uses known prefixes (`deepseek-*`, `gpt-*`,
-    /// `claude-*`, etc.) to detect the provider kind.
+    /// Model identifier sent to the remote API.
     pub model: CompactString,
     /// API key for remote providers. Supports `${ENV_VAR}` expansion at the
     /// daemon layer.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_key: Option<String>,
-    /// Base URL override for remote providers.
+    /// Base URL for the remote provider endpoint.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base_url: Option<String>,
+    /// API protocol standard. Defaults to OpenAI if omitted.
+    #[serde(default)]
+    pub standard: ApiStandard,
 }
 
 impl ProviderConfig {
-    /// Detect the provider kind from the model name.
-    pub fn kind(&self) -> Result<ProviderKind> {
-        ProviderKind::from_model(&self.model)
+    /// Resolve the effective API standard.
+    ///
+    /// Returns `Anthropic` if the field is explicitly set to `Anthropic`,
+    /// or if `base_url` contains "anthropic". Otherwise `OpenAI`.
+    pub fn effective_standard(&self) -> ApiStandard {
+        if self.standard == ApiStandard::Anthropic {
+            return ApiStandard::Anthropic;
+        }
+        if let Some(url) = &self.base_url
+            && url.contains("anthropic")
+        {
+            return ApiStandard::Anthropic;
+        }
+        ApiStandard::OpenAI
     }
 
     /// Validate field combinations.
@@ -39,7 +67,6 @@ impl ProviderConfig {
         if self.model.is_empty() {
             bail!("model is required");
         }
-        self.kind()?;
         // Remote providers: api_key is required unless base_url is set
         // (e.g. Ollama which is keyless with a local base_url).
         if self.api_key.is_none() && self.base_url.is_none() {
@@ -49,64 +76,6 @@ impl ProviderConfig {
             );
         }
         Ok(())
-    }
-}
-
-/// Remote provider kind, inferred from the model name at runtime.
-///
-/// Not serialized — purely a dispatch enum for remote providers.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ProviderKind {
-    DeepSeek,
-    OpenAI,
-    Claude,
-    Grok,
-    Qwen,
-    Kimi,
-}
-
-impl ProviderKind {
-    /// Detect provider kind from a model name string.
-    ///
-    /// Matches known remote prefixes. Returns an error for unknown prefixes
-    /// or HuggingFace repo IDs (local models use the built-in registry).
-    pub fn from_model(model: &str) -> Result<Self> {
-        if model.contains('/') {
-            bail!(
-                "'{model}' looks like a HuggingFace repo ID — use the model registry for local models"
-            );
-        }
-
-        let prefixes: &[(&[&str], ProviderKind)] = &[
-            (&["deepseek-"], ProviderKind::DeepSeek),
-            (&["gpt-", "o1-", "o3-", "o4-"], ProviderKind::OpenAI),
-            (&["claude-"], ProviderKind::Claude),
-            (&["grok-"], ProviderKind::Grok),
-            (&["qwen-", "qwq-"], ProviderKind::Qwen),
-            (&["kimi-", "moonshot-"], ProviderKind::Kimi),
-        ];
-
-        for (patterns, kind) in prefixes {
-            for prefix in *patterns {
-                if model.starts_with(prefix) {
-                    return Ok(*kind);
-                }
-            }
-        }
-
-        bail!("unknown model prefix: '{model}' — cannot detect provider kind")
-    }
-
-    /// Human-readable name for logging.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::DeepSeek => "deepseek",
-            Self::OpenAI => "openai",
-            Self::Claude => "claude",
-            Self::Grok => "grok",
-            Self::Qwen => "qwen",
-            Self::Kimi => "kimi",
-        }
     }
 }
 
