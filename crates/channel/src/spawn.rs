@@ -1,8 +1,8 @@
 //! Channel spawn logic.
 //!
-//! Connects configured platform bots (Telegram, Discord) and routes messages
-//! to agents via callbacks. Bot commands (`/hub`, `/model`) are dispatched
-//! through the `on_command` callback which streams `ServerMessage` results.
+//! Connects configured platform bots (Telegram, Discord) and routes all
+//! messages through a single `on_message` callback that accepts a
+//! `ClientMessage` and returns a `ServerMessage` stream.
 
 use crate::command::parse_command;
 use crate::config::{ChannelConfig, DiscordConfig, TelegramConfig};
@@ -18,37 +18,30 @@ use wcore::protocol::message::{client::ClientMessage, server::ServerMessage};
 ///
 /// Spawns transports for each configured platform (Telegram, Discord).
 /// `default_agent` is used when a platform config does not specify an agent.
-/// `on_command` dispatches bot commands and returns a receiver for streamed results.
-pub async fn spawn_channels<F, Fut, C, CFut>(
+/// `on_message` dispatches any `ClientMessage` and returns a receiver for
+/// streamed `ServerMessage` results.
+pub async fn spawn_channels<C, CFut>(
     config: &ChannelConfig,
     default_agent: CompactString,
-    on_message: Arc<F>,
-    on_command: Arc<C>,
+    on_message: Arc<C>,
 ) where
-    F: Fn(CompactString, String) -> Fut + Send + Sync + 'static,
-    Fut: Future<Output = Result<String, String>> + Send + 'static,
     C: Fn(ClientMessage) -> CFut + Send + Sync + 'static,
     CFut: Future<Output = mpsc::UnboundedReceiver<ServerMessage>> + Send + 'static,
 {
-    // Telegram transport.
     if let Some(tg) = &config.telegram {
-        spawn_telegram(tg, &default_agent, on_message.clone(), on_command.clone()).await;
+        spawn_telegram(tg, &default_agent, on_message.clone()).await;
     }
 
-    // Discord transport.
     if let Some(dc) = &config.discord {
-        spawn_discord(dc, &default_agent, on_message.clone(), on_command.clone()).await;
+        spawn_discord(dc, &default_agent, on_message.clone()).await;
     }
 }
 
-async fn spawn_telegram<F, Fut, C, CFut>(
+async fn spawn_telegram<C, CFut>(
     tg: &TelegramConfig,
     default_agent: &CompactString,
-    on_message: Arc<F>,
-    on_command: Arc<C>,
+    on_message: Arc<C>,
 ) where
-    F: Fn(CompactString, String) -> Fut + Send + Sync + 'static,
-    Fut: Future<Output = Result<String, String>> + Send + 'static,
     C: Fn(ClientMessage) -> CFut + Send + Sync + 'static,
     CFut: Future<Output = mpsc::UnboundedReceiver<ServerMessage>> + Send + 'static,
 {
@@ -66,18 +59,15 @@ async fn spawn_telegram<F, Fut, C, CFut>(
         crate::telegram::poll_loop(poll_bot, tx).await;
     });
 
-    tokio::spawn(telegram_loop(rx, bot, agent, on_message, on_command));
+    tokio::spawn(telegram_loop(rx, bot, agent, on_message));
     tracing::info!(platform = "telegram", "channel transport started");
 }
 
-async fn spawn_discord<F, Fut, C, CFut>(
+async fn spawn_discord<C, CFut>(
     dc: &DiscordConfig,
     default_agent: &CompactString,
-    on_message: Arc<F>,
-    on_command: Arc<C>,
+    on_message: Arc<C>,
 ) where
-    F: Fn(CompactString, String) -> Fut + Send + Sync + 'static,
-    Fut: Future<Output = Result<String, String>> + Send + 'static,
     C: Fn(ClientMessage) -> CFut + Send + Sync + 'static,
     CFut: Future<Output = mpsc::UnboundedReceiver<ServerMessage>> + Send + 'static,
 {
@@ -98,7 +88,7 @@ async fn spawn_discord<F, Fut, C, CFut>(
     tokio::spawn(async move {
         match http_rx.await {
             Ok(http) => {
-                discord_loop(msg_rx, http, agent, on_message, on_command).await;
+                discord_loop(msg_rx, http, agent, on_message).await;
             }
             Err(_) => {
                 tracing::error!("discord gateway failed to send http client");
@@ -110,15 +100,12 @@ async fn spawn_discord<F, Fut, C, CFut>(
 }
 
 /// Telegram message loop: routes incoming messages to agents or bot commands.
-async fn telegram_loop<F, Fut, C, CFut>(
+async fn telegram_loop<C, CFut>(
     mut rx: mpsc::UnboundedReceiver<ChannelMessage>,
     bot: Bot,
     agent: CompactString,
-    on_message: Arc<F>,
-    on_command: Arc<C>,
+    on_message: Arc<C>,
 ) where
-    F: Fn(CompactString, String) -> Fut + Send + Sync + 'static,
-    Fut: Future<Output = Result<String, String>> + Send + 'static,
     C: Fn(ClientMessage) -> CFut + Send + Sync + 'static,
     CFut: Future<Output = mpsc::UnboundedReceiver<ServerMessage>> + Send + 'static,
 {
@@ -133,9 +120,9 @@ async fn telegram_loop<F, Fut, C, CFut>(
             match parse_command(&content) {
                 Some(cmd) => {
                     let b = bot.clone();
-                    let oc = on_command.clone();
+                    let om = on_message.clone();
                     tokio::spawn(async move {
-                        crate::telegram::command::dispatch_command(cmd, oc, b, chat_id).await;
+                        crate::telegram::command::dispatch_command(cmd, om, b, chat_id).await;
                     });
                 }
                 None => {
@@ -149,15 +136,23 @@ async fn telegram_loop<F, Fut, C, CFut>(
             continue;
         }
 
-        // Normal agent chat path.
-        match on_message(agent.clone(), content).await {
-            Ok(reply) => {
-                if let Err(e) = bot.send_message(ChatId(chat_id), reply).await {
-                    tracing::warn!(%agent, "failed to send channel reply: {e}");
+        // Normal agent chat path — send as ClientMessage::Send.
+        let client_msg = ClientMessage::Send {
+            agent: agent.clone(),
+            content,
+        };
+        let mut reply_rx = on_message(client_msg).await;
+        while let Some(server_msg) = reply_rx.recv().await {
+            match server_msg {
+                ServerMessage::Response(resp) => {
+                    if let Err(e) = bot.send_message(ChatId(chat_id), resp.content).await {
+                        tracing::warn!(%agent, "failed to send channel reply: {e}");
+                    }
                 }
-            }
-            Err(e) => {
-                tracing::warn!(%agent, "dispatch error: {e}");
+                ServerMessage::Error { message, .. } => {
+                    tracing::warn!(%agent, "dispatch error: {message}");
+                }
+                _ => {}
             }
         }
     }
@@ -166,15 +161,12 @@ async fn telegram_loop<F, Fut, C, CFut>(
 }
 
 /// Discord message loop: routes incoming messages to agents or bot commands.
-async fn discord_loop<F, Fut, C, CFut>(
+async fn discord_loop<C, CFut>(
     mut rx: mpsc::UnboundedReceiver<ChannelMessage>,
     http: Arc<serenity::http::Http>,
     agent: CompactString,
-    on_message: Arc<F>,
-    on_command: Arc<C>,
+    on_message: Arc<C>,
 ) where
-    F: Fn(CompactString, String) -> Fut + Send + Sync + 'static,
-    Fut: Future<Output = Result<String, String>> + Send + 'static,
     C: Fn(ClientMessage) -> CFut + Send + Sync + 'static,
     CFut: Future<Output = mpsc::UnboundedReceiver<ServerMessage>> + Send + 'static,
 {
@@ -190,9 +182,9 @@ async fn discord_loop<F, Fut, C, CFut>(
             match parse_command(&content) {
                 Some(cmd) => {
                     let h = http.clone();
-                    let oc = on_command.clone();
+                    let om = on_message.clone();
                     tokio::spawn(async move {
-                        crate::discord::command::dispatch_command(cmd, oc, h, channel_id).await;
+                        crate::discord::command::dispatch_command(cmd, om, h, channel_id).await;
                     });
                 }
                 None => {
@@ -204,13 +196,21 @@ async fn discord_loop<F, Fut, C, CFut>(
             continue;
         }
 
-        // Normal agent chat path.
-        match on_message(agent.clone(), content).await {
-            Ok(reply) => {
-                crate::discord::send_text(&http, channel_id, reply).await;
-            }
-            Err(e) => {
-                tracing::warn!(%agent, "dispatch error: {e}");
+        // Normal agent chat path — send as ClientMessage::Send.
+        let client_msg = ClientMessage::Send {
+            agent: agent.clone(),
+            content,
+        };
+        let mut reply_rx = on_message(client_msg).await;
+        while let Some(server_msg) = reply_rx.recv().await {
+            match server_msg {
+                ServerMessage::Response(resp) => {
+                    crate::discord::send_text(&http, channel_id, resp.content).await;
+                }
+                ServerMessage::Error { message, .. } => {
+                    tracing::warn!(%agent, "dispatch error: {message}");
+                }
+                _ => {}
             }
         }
     }

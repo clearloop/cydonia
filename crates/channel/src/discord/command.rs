@@ -16,7 +16,7 @@ use wcore::protocol::message::{
 /// Execute a bot command, streaming progress messages back to the originating channel.
 pub(crate) async fn dispatch_command<C, CFut>(
     cmd: BotCommand,
-    on_command: Arc<C>,
+    on_message: Arc<C>,
     http: Arc<serenity::http::Http>,
     channel_id: ChannelId,
 ) where
@@ -37,7 +37,7 @@ pub(crate) async fn dispatch_command<C, CFut>(
         },
     };
 
-    let mut rx = on_command(msg).await;
+    let mut rx = on_message(msg).await;
     while let Some(server_msg) = rx.recv().await {
         match server_msg {
             ServerMessage::Hub(event) => match event {

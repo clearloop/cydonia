@@ -12,7 +12,6 @@ use crate::{
 };
 use ::socket::server::accept_loop;
 use anyhow::Result;
-use compact_str::CompactString;
 use model::ProviderManager;
 use std::{
     path::{Path, PathBuf},
@@ -20,6 +19,7 @@ use std::{
 };
 use tokio::sync::{RwLock, broadcast, mpsc, oneshot};
 use wcore::Runtime;
+use wcore::protocol::message::client::ClientMessage;
 
 pub(crate) mod builder;
 pub(crate) mod event;
@@ -138,7 +138,7 @@ fn setup_socket(
     let join = tokio::spawn(accept_loop(
         listener,
         move |msg, reply| {
-            let _ = socket_tx.send(DaemonEvent::Socket { msg, reply });
+            let _ = socket_tx.send(DaemonEvent::Message { msg, reply });
         },
         socket_shutdown,
     ));
@@ -148,39 +148,18 @@ fn setup_socket(
 
 /// Spawn channel transports.
 async fn setup_channels(config: &DaemonConfig, event_tx: &DaemonEventSender) {
-    let channel_tx = event_tx.clone();
-    let on_message = Arc::new(move |agent: CompactString, content: String| {
-        let tx = channel_tx.clone();
+    let tx = event_tx.clone();
+    let on_message = Arc::new(move |msg: ClientMessage| {
+        let tx = tx.clone();
         async move {
-            let (reply_tx, reply_rx) = oneshot::channel();
-            let event = DaemonEvent::Channel {
-                agent,
-                content,
+            let (reply_tx, reply_rx) = mpsc::unbounded_channel();
+            let _ = tx.send(DaemonEvent::Message {
+                msg,
                 reply: reply_tx,
-            };
-            if tx.send(event).is_err() {
-                return Err("event loop closed".to_owned());
-            }
+            });
             reply_rx
-                .await
-                .unwrap_or(Err("event loop dropped".to_owned()))
         }
     });
-
-    let cmd_tx = event_tx.clone();
-    let on_command = Arc::new(
-        move |msg: wcore::protocol::message::client::ClientMessage| {
-            let tx = cmd_tx.clone();
-            async move {
-                let (reply_tx, reply_rx) = mpsc::unbounded_channel();
-                let _ = tx.send(DaemonEvent::Socket {
-                    msg,
-                    reply: reply_tx,
-                });
-                reply_rx
-            }
-        },
-    );
 
     // Use the first configured agent name as the default, falling back to "assistant".
     let agents_dir = crate::config::GLOBAL_CONFIG_DIR.join(crate::config::AGENTS_DIR);
@@ -188,8 +167,8 @@ async fn setup_channels(config: &DaemonConfig, event_tx: &DaemonEventSender) {
         .ok()
         .and_then(|agents| agents.into_iter().next())
         .map(|a| a.name)
-        .unwrap_or_else(|| CompactString::from("assistant"));
-    channel::spawn_channels(&config.channel, default_agent, on_message, on_command).await;
+        .unwrap_or_else(|| compact_str::CompactString::from("assistant"));
+    channel::spawn_channels(&config.channel, default_agent, on_message).await;
 }
 
 /// Bridge a broadcast receiver into a oneshot receiver.
