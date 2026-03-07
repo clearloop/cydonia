@@ -169,7 +169,13 @@ async fn setup_channels(config: &DaemonConfig, event_tx: &DaemonEventSender) {
                 .unwrap_or(Err("event loop dropped".to_owned()))
         }
     });
-    channel::spawn_channels(&channels, router, on_message).await;
+    channel::spawn_channels(
+        &channels,
+        router,
+        on_message,
+        Some((*crate::config::SOCKET_PATH).to_path_buf()),
+    )
+    .await;
 }
 
 /// Bridge a broadcast receiver into a oneshot receiver.

@@ -9,9 +9,10 @@ use crate::channel::Channel;
 use crate::message::{ChannelMessage, Platform};
 use crate::router::{ChannelRouter, RoutingRule, parse_platform};
 use crate::telegram::TelegramChannel;
+use crate::telegram::command::{dispatch_command, parse_command};
 use compact_str::CompactString;
 use serde::{Deserialize, Serialize};
-use std::{future::Future, sync::Arc};
+use std::{future::Future, path::PathBuf, sync::Arc};
 use tokio::sync::mpsc;
 
 /// Channel configuration entry.
@@ -55,18 +56,23 @@ pub fn build_router(configs: &[ChannelConfig]) -> ChannelRouter {
 /// For each channel config, connects to the platform and spawns a task that:
 /// 1. Receives messages from the platform
 /// 2. Routes to the correct agent via the router
-/// 3. Calls `on_message(agent, content)` to get a reply
-/// 4. Sends the reply back through the channel
+/// 3. If the message starts with `/`, attempts to parse and dispatch a bot command
+/// 4. Otherwise calls `on_message(agent, content)` to get a reply
+/// 5. Sends the reply back through the channel
 ///
 /// `on_message` is a callback that decouples from the daemon's Runtime type.
+/// `socket_path` is required for bot command dispatch; if `None`, `/` commands are dropped.
 pub async fn spawn_channels<F, Fut>(
     configs: &[ChannelConfig],
     router: Arc<ChannelRouter>,
     on_message: Arc<F>,
+    socket_path: Option<PathBuf>,
 ) where
     F: Fn(CompactString, String) -> Fut + Send + Sync + 'static,
     Fut: Future<Output = Result<String, String>> + Send + 'static,
 {
+    let socket_path = Arc::new(socket_path);
+
     for ch in configs {
         let Ok(platform) = parse_platform(&ch.platform) else {
             continue;
@@ -81,6 +87,7 @@ pub async fn spawn_channels<F, Fut>(
                         let sender = handle.sender();
                         let rr = Arc::clone(&router);
                         let cb = Arc::clone(&on_message);
+                        let sp = Arc::clone(&socket_path);
 
                         tokio::spawn(async move {
                             while let Some(msg) = handle.recv().await {
@@ -90,7 +97,7 @@ pub async fn spawn_channels<F, Fut>(
                             }
                         });
 
-                        tokio::spawn(channel_loop(rx, sender, rr, cb));
+                        tokio::spawn(channel_loop(rx, sender, rr, cb, sp));
 
                         tracing::info!(platform = "telegram", "channel transport started");
                     }
@@ -105,12 +112,14 @@ pub async fn spawn_channels<F, Fut>(
 
 /// Message loop for a single channel connection.
 ///
-/// Receives messages, routes to agents, dispatches via callback, sends replies.
+/// Receives messages, routes to agents, dispatches bot commands or the
+/// agent callback, and sends replies.
 async fn channel_loop<F, Fut>(
     mut rx: mpsc::UnboundedReceiver<ChannelMessage>,
     sender: crate::channel::ChannelSender,
     router: Arc<ChannelRouter>,
     on_message: Arc<F>,
+    socket_path: Arc<Option<PathBuf>>,
 ) where
     F: Fn(CompactString, String) -> Fut + Send + Sync + 'static,
     Fut: Future<Output = Result<String, String>> + Send + 'static,
@@ -119,6 +128,7 @@ async fn channel_loop<F, Fut>(
         let platform = msg.platform;
         let channel_id = msg.channel_id.clone();
         let sender_id = msg.sender_id.clone();
+        let content = msg.content.clone();
 
         let Some(agent) = router.route(platform, &channel_id) else {
             tracing::warn!(
@@ -130,10 +140,45 @@ async fn channel_loop<F, Fut>(
         };
 
         let agent = agent.clone();
-        let content = msg.content.clone();
 
         tracing::info!(%agent, %channel_id, %sender_id, "channel dispatch");
 
+        // Bot command path: `/cmd ...` messages bypass the agent.
+        if content.starts_with('/') {
+            match parse_command(&content) {
+                Some(cmd) => {
+                    if let Some(sp) = socket_path.as_ref().as_ref() {
+                        tokio::spawn(dispatch_command(
+                            cmd,
+                            sp.clone(),
+                            sender.clone(),
+                            platform,
+                            channel_id,
+                        ));
+                    } else {
+                        tracing::warn!(%channel_id, "bot command ignored: no socket_path configured");
+                    }
+                }
+                None => {
+                    tracing::warn!(%channel_id, content, "unrecognised bot command");
+                    let hint = ChannelMessage {
+                        platform,
+                        channel_id: channel_id.clone(),
+                        sender_id: CompactString::default(),
+                        content: "Unknown command. Available: /hub install <pkg>, /hub uninstall <pkg>, /model download <model>".to_owned(),
+                        attachments: Vec::new(),
+                        reply_to: None,
+                        timestamp: 0,
+                    };
+                    if let Err(e) = sender.send(hint).await {
+                        tracing::warn!(%agent, "failed to send command hint: {e}");
+                    }
+                }
+            }
+            continue;
+        }
+
+        // Normal agent chat path.
         match on_message(agent.clone(), content).await {
             Ok(reply) => {
                 let reply_msg = ChannelMessage {
