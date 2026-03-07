@@ -19,7 +19,6 @@ futures-util.workspace = true
 serde.workspace = true
 serenity.workspace = true
 serde_json.workspace = true
-socket.workspace = true
 teloxide.workspace = true
 tokio.workspace = true
 tracing.workspace = true

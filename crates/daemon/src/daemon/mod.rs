@@ -166,6 +166,22 @@ async fn setup_channels(config: &DaemonConfig, event_tx: &DaemonEventSender) {
                 .unwrap_or(Err("event loop dropped".to_owned()))
         }
     });
+
+    let cmd_tx = event_tx.clone();
+    let on_command = Arc::new(
+        move |msg: wcore::protocol::message::client::ClientMessage| {
+            let tx = cmd_tx.clone();
+            async move {
+                let (reply_tx, reply_rx) = mpsc::unbounded_channel();
+                let _ = tx.send(DaemonEvent::Socket {
+                    msg,
+                    reply: reply_tx,
+                });
+                reply_rx
+            }
+        },
+    );
+
     // Use the first configured agent name as the default, falling back to "assistant".
     let agents_dir = crate::config::GLOBAL_CONFIG_DIR.join(crate::config::AGENTS_DIR);
     let default_agent = crate::config::load_agents_dir(&agents_dir)
@@ -173,13 +189,7 @@ async fn setup_channels(config: &DaemonConfig, event_tx: &DaemonEventSender) {
         .and_then(|agents| agents.into_iter().next())
         .map(|a| a.name)
         .unwrap_or_else(|| CompactString::from("assistant"));
-    channel::spawn_channels(
-        &config.channel,
-        default_agent,
-        on_message,
-        Some((*crate::config::SOCKET_PATH).to_path_buf()),
-    )
-    .await;
+    channel::spawn_channels(&config.channel, default_agent, on_message, on_command).await;
 }
 
 /// Bridge a broadcast receiver into a oneshot receiver.

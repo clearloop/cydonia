@@ -7005,7 +7005,6 @@ dependencies = [
  "tokio",
  "tracing",
  "walrus-core",
- "walrus-socket",
 ]
 
 [[package]]

@@ -5,113 +5,76 @@
 
 use crate::command::BotCommand;
 use compact_str::CompactString;
-use futures_util::StreamExt;
 use serenity::model::id::ChannelId;
-use socket::{ClientConfig, Connection, WalrusClient};
-use std::path::PathBuf;
-use std::sync::Arc;
-use wcore::protocol::api::Client;
-use wcore::protocol::message::{DownloadEvent, DownloadRequest, HubAction, HubEvent, HubRequest};
+use std::{future::Future, sync::Arc};
+use tokio::sync::mpsc;
+use wcore::protocol::message::{
+    client::{ClientMessage, HubAction},
+    server::{DownloadEvent, HubEvent, ServerMessage},
+};
 
 /// Execute a bot command, streaming progress messages back to the originating channel.
-pub(crate) async fn dispatch_command(
+pub(crate) async fn dispatch_command<C, CFut>(
     cmd: BotCommand,
-    socket_path: PathBuf,
+    on_command: Arc<C>,
     http: Arc<serenity::http::Http>,
     channel_id: ChannelId,
-) {
-    let config = ClientConfig { socket_path };
-    let client = WalrusClient::new(config);
-    let mut connection = match client.connect().await {
-        Ok(c) => c,
-        Err(e) => {
-            tracing::error!("bot command: failed to connect to daemon: {e}");
-            return;
-        }
+) where
+    C: Fn(ClientMessage) -> CFut + Send + Sync + 'static,
+    CFut: Future<Output = mpsc::UnboundedReceiver<ServerMessage>> + Send + 'static,
+{
+    let msg = match cmd {
+        BotCommand::HubInstall { package } => ClientMessage::Hub {
+            package: CompactString::from(&package),
+            action: HubAction::Install,
+        },
+        BotCommand::HubUninstall { package } => ClientMessage::Hub {
+            package: CompactString::from(&package),
+            action: HubAction::Uninstall,
+        },
+        BotCommand::ModelDownload { model } => ClientMessage::Download {
+            model: CompactString::from(&model),
+        },
     };
 
-    match cmd {
-        BotCommand::HubInstall { package } => {
-            run_hub(
-                &mut connection,
-                &http,
-                channel_id,
-                package,
-                HubAction::Install,
-            )
-            .await;
-        }
-        BotCommand::HubUninstall { package } => {
-            run_hub(
-                &mut connection,
-                &http,
-                channel_id,
-                package,
-                HubAction::Uninstall,
-            )
-            .await;
-        }
-        BotCommand::ModelDownload { model } => {
-            let stream = connection.download(DownloadRequest {
-                model: CompactString::from(&model),
-            });
-            futures_util::pin_mut!(stream);
-            while let Some(result) = stream.next().await {
-                match result {
-                    Ok(DownloadEvent::Start { model }) => {
-                        send_text(&http, channel_id, format!("Downloading {model}...")).await;
-                    }
-                    Ok(DownloadEvent::FileStart { filename, .. }) => {
-                        send_text(&http, channel_id, format!("  {filename} starting...")).await;
-                    }
-                    Ok(DownloadEvent::Progress { .. }) => {}
-                    Ok(DownloadEvent::FileEnd { filename, .. }) => {
-                        send_text(&http, channel_id, format!("  {filename} done")).await;
-                    }
-                    Ok(DownloadEvent::End { model }) => {
-                        send_text(&http, channel_id, format!("Download complete: {model}")).await;
-                    }
-                    Err(e) => {
-                        tracing::warn!("download event error: {e}");
-                    }
+    let mut rx = on_command(msg).await;
+    while let Some(server_msg) = rx.recv().await {
+        match server_msg {
+            ServerMessage::Hub(event) => match event {
+                HubEvent::Start { package } => {
+                    send_text(
+                        &http,
+                        channel_id,
+                        format!("Starting hub operation for {package}..."),
+                    )
+                    .await;
                 }
+                HubEvent::Step { message } => {
+                    send_text(&http, channel_id, format!("  {message}")).await;
+                }
+                HubEvent::End { package } => {
+                    send_text(&http, channel_id, format!("Done: {package}")).await;
+                }
+            },
+            ServerMessage::Download(event) => match event {
+                DownloadEvent::Start { model } => {
+                    send_text(&http, channel_id, format!("Downloading {model}...")).await;
+                }
+                DownloadEvent::FileStart { filename, .. } => {
+                    send_text(&http, channel_id, format!("  {filename} starting...")).await;
+                }
+                DownloadEvent::Progress { .. } => {}
+                DownloadEvent::FileEnd { filename, .. } => {
+                    send_text(&http, channel_id, format!("  {filename} done")).await;
+                }
+                DownloadEvent::End { model } => {
+                    send_text(&http, channel_id, format!("Download complete: {model}")).await;
+                }
+            },
+            ServerMessage::Error { message, .. } => {
+                tracing::warn!("command error: {message}");
             }
-        }
-    }
-}
-
-/// Stream a hub install/uninstall operation and send progress to the channel.
-async fn run_hub(
-    connection: &mut Connection,
-    http: &Arc<serenity::http::Http>,
-    channel_id: ChannelId,
-    package: String,
-    action: HubAction,
-) {
-    let stream = connection.hub(HubRequest {
-        package: CompactString::from(&package),
-        action,
-    });
-    futures_util::pin_mut!(stream);
-    while let Some(result) = stream.next().await {
-        match result {
-            Ok(HubEvent::Start { package }) => {
-                send_text(
-                    http,
-                    channel_id,
-                    format!("Starting hub operation for {package}..."),
-                )
-                .await;
-            }
-            Ok(HubEvent::Step { message }) => {
-                send_text(http, channel_id, format!("  {message}")).await;
-            }
-            Ok(HubEvent::End { package }) => {
-                send_text(http, channel_id, format!("Done: {package}")).await;
-            }
-            Err(e) => {
-                tracing::warn!("hub event error: {e}");
-            }
+            _ => {}
         }
     }
 }
