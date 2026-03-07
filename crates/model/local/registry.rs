@@ -40,16 +40,41 @@ pub fn all() -> &'static [ModelEntry] {
 ///
 /// Quantization is auto-selected based on memory headroom:
 /// more headroom → less aggressive quantization → better quality.
-/// GGUF models are pre-quantized and don't use ISQ.
+/// GGUF models select the quantized file variant based on headroom.
 pub fn build_local(entry: &ModelEntry) -> crate::local::Local {
-    let isq = match entry.loader {
-        crate::config::Loader::Gguf => None,
-        _ => {
-            let headroom = crate::local::system_memory().saturating_sub(entry.memory.bytes());
-            recommend_isq(headroom)
-        }
+    let headroom = crate::local::system_memory().saturating_sub(entry.memory.bytes());
+    let (isq, gguf_file) = match entry.loader {
+        crate::config::Loader::Gguf => (None, recommend_gguf_file(entry, headroom)),
+        _ => (recommend_isq(headroom), None),
     };
-    crate::local::Local::lazy(entry.model_id, entry.loader, isq, None)
+    crate::local::Local::lazy(
+        entry.model_id,
+        entry.loader,
+        isq,
+        None,
+        gguf_file.as_deref(),
+    )
+}
+
+/// Pick GGUF filename based on memory headroom.
+///
+/// If `gguf_file` is set (explicit override), returns it directly.
+/// Otherwise constructs `{stem}-{quant}.gguf` using headroom tiers.
+fn recommend_gguf_file(entry: &ModelEntry, headroom: u64) -> Option<String> {
+    if let Some(file) = entry.gguf_file {
+        return Some(file.to_string());
+    }
+    let stem = entry.gguf_stem?;
+    let quant = if headroom >= 16 * GB {
+        "Q8_0"
+    } else if headroom >= 8 * GB {
+        "Q6_K"
+    } else if headroom >= 4 * GB {
+        "Q5_K_M"
+    } else {
+        "Q4_K_M"
+    };
+    Some(format!("{stem}-{quant}.gguf"))
 }
 
 /// Pick ISQ type based on available memory headroom.

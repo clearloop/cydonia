@@ -6,77 +6,89 @@ text = "qwen3-4b"
 [models.qwen3-06b]
 name = "Qwen3 0.6B"
 memory = "4gb"
-model_id = "Qwen/Qwen3-0.6B-Instruct-2507-GGUF"
+model_id = "unsloth/Qwen3-0.6B-GGUF"
 loader = "gguf"
+gguf_stem = "Qwen3-0.6B"
 
 [models.qwen3-17b]
 name = "Qwen3 1.7B"
 memory = "4gb"
-model_id = "Qwen/Qwen3-1.7B-Instruct-2507-GGUF"
+model_id = "unsloth/Qwen3-1.7B-GGUF"
 loader = "gguf"
+gguf_stem = "Qwen3-1.7B"
 
 [models.smollm2-17b]
 name = "SmolLM2 1.7B"
 memory = "4gb"
 model_id = "HuggingFaceTB/SmolLM2-1.7B-Instruct-GGUF"
 loader = "gguf"
+gguf_file = "smollm2-1.7b-instruct-q4_k_m.gguf"
 
 [models.gemma-3-1b]
 name = "Gemma 3 1B"
 memory = "4gb"
-model_id = "google/gemma-3-1b-it-GGUF"
+model_id = "unsloth/gemma-3-1b-it-GGUF"
 loader = "gguf"
+gguf_stem = "gemma-3-1b-it"
 
 # ── Small (8 GB) ─────────────────────────────────────────────────
 
 [models.qwen3-4b]
 name = "Qwen3 4B"
 memory = "8gb"
-model_id = "Qwen/Qwen3-4B-Instruct-2507-GGUF"
+model_id = "unsloth/Qwen3-4B-Instruct-2507-GGUF"
 loader = "gguf"
+gguf_stem = "Qwen3-4B-Instruct-2507"
 
 [models.phi-4-mini]
 name = "Phi-4 Mini"
 memory = "8gb"
-model_id = "microsoft/Phi-4-mini-instruct-gguf"
+model_id = "unsloth/Phi-4-mini-instruct-GGUF"
 loader = "gguf"
+gguf_stem = "Phi-4-mini-instruct"
 
 [models.gemma-3-4b]
 name = "Gemma 3 4B"
 memory = "8gb"
-model_id = "google/gemma-3-4b-it-GGUF"
+model_id = "unsloth/gemma-3-4b-it-GGUF"
 loader = "gguf"
+gguf_stem = "gemma-3-4b-it"
 
 # ── Medium (16 GB) ───────────────────────────────────────────────
 
 [models.qwen3-8b]
 name = "Qwen3 8B"
 memory = "16gb"
-model_id = "Qwen/Qwen3-8B-Instruct-2507-GGUF"
+model_id = "unsloth/Qwen3-8B-GGUF"
 loader = "gguf"
+gguf_stem = "Qwen3-8B"
 
 [models.llama31-8b]
 name = "Llama 3.1 8B"
 memory = "16gb"
-model_id = "meta-llama/Llama-3.1-8B-Instruct-GGUF"
+model_id = "unsloth/Llama-3.1-8B-Instruct-GGUF"
 loader = "gguf"
+gguf_stem = "Llama-3.1-8B-Instruct"
 
 [models.mistral-7b]
 name = "Mistral 7B"
 memory = "16gb"
-model_id = "mistralai/Mistral-7B-Instruct-v0.3-GGUF"
+model_id = "bartowski/Mistral-7B-Instruct-v0.3-GGUF"
 loader = "gguf"
+gguf_stem = "Mistral-7B-Instruct-v0.3"
 
 # ── Large (32 GB) ────────────────────────────────────────────────
 
 [models.qwen3-14b]
 name = "Qwen3 14B"
 memory = "32gb"
-model_id = "Qwen/Qwen3-14B-Instruct-2507-GGUF"
+model_id = "unsloth/Qwen3-14B-GGUF"
 loader = "gguf"
+gguf_stem = "Qwen3-14B"
 
 [models.qwen25-coder-14b]
 name = "Qwen2.5 Coder 14B"
 memory = "32gb"
-model_id = "Qwen/Qwen2.5-Coder-14B-Instruct-GGUF"
+model_id = "unsloth/Qwen2.5-Coder-14B-Instruct-GGUF"
 loader = "gguf"
+gguf_stem = "Qwen2.5-Coder-14B-Instruct"

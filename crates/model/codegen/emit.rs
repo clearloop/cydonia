@@ -77,6 +77,10 @@ pub fn write_registry(platform: &PlatformFile, out_dir: &Path) {
             pub loader: crate::config::Loader,
             #[doc = "Minimum system RAM."]
             pub memory: crate::config::MemoryThreshold,
+            #[doc = "GGUF filename stem for constructing quantized filenames (e.g. `Qwen3-0.6B`)."]
+            pub gguf_stem: Option<&'static str>,
+            #[doc = "Explicit GGUF filename override (takes priority over stem-based construction)."]
+            pub gguf_file: Option<&'static str>,
         }
 
         #[doc = "All curated models for the current platform."]
@@ -136,6 +140,8 @@ fn model_entry_tokens(key: &str, entry: &ParsedModel) -> TokenStream {
     let model_id = &entry.model_id;
     let loader = loader_tokens(&entry.loader);
     let mem = memory_tokens(&entry.memory);
+    let gguf_stem = option_str_tokens(&entry.gguf_stem);
+    let gguf_file = option_str_tokens(&entry.gguf_file);
 
     quote! {
         ModelEntry {
@@ -144,7 +150,16 @@ fn model_entry_tokens(key: &str, entry: &ParsedModel) -> TokenStream {
             model_id: #model_id,
             loader: #loader,
             memory: #mem,
+            gguf_stem: #gguf_stem,
+            gguf_file: #gguf_file,
         }
+    }
+}
+
+fn option_str_tokens(opt: &Option<String>) -> TokenStream {
+    match opt {
+        Some(s) => quote!(Some(#s)),
+        None => quote!(None),
     }
 }
 

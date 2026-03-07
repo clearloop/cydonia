@@ -26,6 +26,8 @@ pub struct ModelEntry {
     pub memory: String,
     pub model_id: String,
     pub loader: String,
+    pub gguf_stem: Option<String>,
+    pub gguf_file: Option<String>,
 }
 
 /// Load and parse a platform TOML file.

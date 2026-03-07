@@ -70,10 +70,12 @@ impl Local {
         loader: crate::config::Loader,
         isq: Option<mistralrs::IsqType>,
         chat_template: Option<String>,
+        gguf_file: Option<&str>,
     ) -> Self {
         let (tx, rx) = watch::channel(LocalState::Loading);
         let mid = CompactString::from(model_id);
         let id = mid.clone();
+        let gguf_file = gguf_file.map(String::from);
 
         // Dedicated OS thread with its own tokio runtime for model loading.
         // Everything (endpoint probe + model build) runs off the main runtime
@@ -96,7 +98,7 @@ impl Local {
                         Self::build_text(&id, isq, chat_template.as_deref()).await
                     }
                     crate::config::Loader::Gguf => {
-                        Self::build_gguf(&id, chat_template.as_deref()).await
+                        Self::build_gguf(&id, gguf_file.as_deref(), chat_template.as_deref()).await
                     }
                     crate::config::Loader::Vision => {
                         Self::build_vision(&id, isq, chat_template.as_deref()).await
@@ -137,9 +139,13 @@ impl Local {
     /// Build using `GgufModelBuilder`.
     ///
     /// GGUF quantized models from HuggingFace. The `model_id` is the HF repo
-    /// ID; mistralrs auto-discovers GGUF files in the repo.
-    pub async fn from_gguf(model_id: &str, chat_template: Option<&str>) -> anyhow::Result<Self> {
-        let model = Self::build_gguf(model_id, chat_template).await?;
+    /// ID and `gguf_file` is the specific quantized file to download.
+    pub async fn from_gguf(
+        model_id: &str,
+        gguf_file: Option<&str>,
+        chat_template: Option<&str>,
+    ) -> anyhow::Result<Self> {
+        let model = Self::build_gguf(model_id, gguf_file, chat_template).await?;
         Ok(Self::from_model(model))
     }
 
@@ -199,10 +205,11 @@ impl Local {
 
     async fn build_gguf(
         model_id: &str,
+        gguf_file: Option<&str>,
         chat_template: Option<&str>,
     ) -> anyhow::Result<mistralrs::Model> {
-        let mut builder =
-            mistralrs::GgufModelBuilder::new(model_id, Vec::<String>::new()).with_logging();
+        let files: Vec<String> = gguf_file.into_iter().map(String::from).collect();
+        let mut builder = mistralrs::GgufModelBuilder::new(model_id, files).with_logging();
         if let Some(template) = chat_template {
             builder = builder.with_chat_template(template);
         }
