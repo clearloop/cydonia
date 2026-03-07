@@ -198,7 +198,7 @@ install_prebuilt() {
     URL="https://github.com/${REPO}/releases/download/${VERSION}/${TARBALL}"
 
     info "downloading ${TARBALL}..."
-    curl -fsSL "$URL" -o "${TMPDIR_PATH}/${TARBALL}"
+    curl -fL# "$URL" -o "${TMPDIR_PATH}/${TARBALL}"
 
     info "extracting..."
     tar -xzf "${TMPDIR_PATH}/${TARBALL}" -C "${TMPDIR_PATH}"
