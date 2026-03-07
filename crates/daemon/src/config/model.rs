@@ -1,4 +1,4 @@
-//! Agent configuration.
+//! Model configuration.
 
 use compact_str::CompactString;
 use model::ProviderConfig;
@@ -9,7 +9,8 @@ use std::collections::BTreeMap;
 pub struct ModelConfig {
     /// Default models
     pub default: DefaultModels,
-    /// Providers
+    /// Remote providers (local models come from the built-in registry)
+    #[serde(default)]
     pub providers: BTreeMap<CompactString, ProviderConfig>,
 }
 
@@ -24,8 +25,6 @@ impl Default for ModelConfig {
                     model: "deepseek-chat".into(),
                     api_key: None,
                     base_url: None,
-                    quantization: None,
-                    chat_template: None,
                 },
             )]
             .into(),
@@ -34,22 +33,12 @@ impl Default for ModelConfig {
 }
 
 #[cfg(feature = "local")]
+#[allow(clippy::derivable_impls)] // conditional: non-local Default is not derivable
 impl Default for ModelConfig {
     fn default() -> Self {
-        let entry = model::local::registry::default_text();
         Self {
             default: DefaultModels::default(),
-            providers: [(
-                CompactString::from(entry.model_id),
-                ProviderConfig {
-                    model: CompactString::from(entry.model_id),
-                    api_key: None,
-                    base_url: None,
-                    quantization: None,
-                    chat_template: None,
-                },
-            )]
-            .into(),
+            providers: BTreeMap::new(),
         }
     }
 }

@@ -66,9 +66,29 @@ impl Daemon {
     }
 
     /// Construct the provider manager from config.
+    ///
+    /// Local models come from the built-in registry. Remote providers come
+    /// from `config.model.providers`.
     async fn build_providers(config: &DaemonConfig) -> Result<ProviderManager> {
-        let models = config.model.providers.values().cloned().collect::<Vec<_>>();
-        let manager = ProviderManager::from_configs(&models).await?;
+        let manager = ProviderManager::new(config.model.default.text.clone());
+
+        // Add local models from the registry.
+        #[cfg(feature = "local")]
+        {
+            let text = model::local::registry::default_text();
+            let local = model::local::registry::build_local(text);
+            manager.add_provider(text.model_id, model::Provider::Local(local));
+            if let Some(vision) = model::local::registry::default_vision() {
+                let local = model::local::registry::build_local(vision);
+                manager.add_provider(vision.model_id, model::Provider::Local(local));
+            }
+        }
+
+        // Add remote providers from config.
+        for config in config.model.providers.values() {
+            manager.add_config(config).await?;
+        }
+
         tracing::info!(
             "provider manager initialized — active model: {}",
             manager.active_model()

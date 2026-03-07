@@ -1,21 +1,21 @@
 //! Provider configuration.
 //!
-//! Flat `ProviderConfig` with optional fields for both remote and local
-//! providers. Provider kind inferred from model name prefix via `kind()`.
+//! `ProviderConfig` for remote providers — kind inferred from model name
+//! prefix via `kind()`. Local models use the built-in registry instead.
 //! `Loader` selects which mistralrs builder to use for local models.
 
 use anyhow::{Result, bail};
 use compact_str::CompactString;
 use serde::{Deserialize, Serialize};
 
-/// Flat provider configuration. All fields except `model` are optional.
-/// Provider kind is inferred from the model name — no explicit `provider` tag.
-/// The loader is derived from the registry (not user-configurable).
+/// Remote provider configuration.
+///
+/// Provider kind is inferred from the model name prefix — no explicit tag.
+/// Local models are handled by the built-in registry, not by this config.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ProviderConfig {
-    /// Model identifier. Remote models use known prefixes (`deepseek-*`,
-    /// `gpt-*`, `claude-*`, etc.). Local models use HuggingFace repo IDs
-    /// containing `/` (e.g. `microsoft/Phi-3.5-mini-instruct`).
+    /// Model identifier. Uses known prefixes (`deepseek-*`, `gpt-*`,
+    /// `claude-*`, etc.) to detect the provider kind.
     pub model: CompactString,
     /// API key for remote providers. Supports `${ENV_VAR}` expansion at the
     /// daemon layer.
@@ -24,12 +24,6 @@ pub struct ProviderConfig {
     /// Base URL override for remote providers.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base_url: Option<String>,
-    /// In-situ quantization for local models.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub quantization: Option<QuantizationType>,
-    /// Chat template override for local models (path or inline Jinja).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub chat_template: Option<String>,
 }
 
 impl ProviderConfig {
@@ -45,46 +39,22 @@ impl ProviderConfig {
         if self.model.is_empty() {
             bail!("model is required");
         }
-
-        let kind = self.kind()?;
-
-        match kind {
-            ProviderKind::Local => {
-                if self.api_key.is_some() {
-                    bail!("local provider '{}' must not have api_key", self.model);
-                }
-            }
-            _ => {
-                // Remote providers: api_key is required unless base_url is set
-                // (e.g. Ollama which is keyless with a local base_url).
-                if self.api_key.is_none() && self.base_url.is_none() {
-                    bail!(
-                        "remote provider '{}' requires api_key or base_url",
-                        self.model
-                    );
-                }
-                if self.quantization.is_some() {
-                    bail!(
-                        "remote provider '{}' must not have quantization field",
-                        self.model
-                    );
-                }
-                if self.chat_template.is_some() {
-                    bail!(
-                        "remote provider '{}' must not have chat_template field",
-                        self.model
-                    );
-                }
-            }
+        self.kind()?;
+        // Remote providers: api_key is required unless base_url is set
+        // (e.g. Ollama which is keyless with a local base_url).
+        if self.api_key.is_none() && self.base_url.is_none() {
+            bail!(
+                "remote provider '{}' requires api_key or base_url",
+                self.model
+            );
         }
-
         Ok(())
     }
 }
 
-/// Provider kind, inferred from the model name at runtime.
+/// Remote provider kind, inferred from the model name at runtime.
 ///
-/// Not serialized — purely a dispatch enum.
+/// Not serialized — purely a dispatch enum for remote providers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProviderKind {
     DeepSeek,
@@ -93,19 +63,18 @@ pub enum ProviderKind {
     Grok,
     Qwen,
     Kimi,
-    Local,
 }
 
 impl ProviderKind {
     /// Detect provider kind from a model name string.
     ///
-    /// Rules:
-    /// 1. If model contains `/` → Local (HuggingFace repo ID).
-    /// 2. Otherwise, match known remote prefixes.
-    /// 3. No match → error.
+    /// Matches known remote prefixes. Returns an error for unknown prefixes
+    /// or HuggingFace repo IDs (local models use the built-in registry).
     pub fn from_model(model: &str) -> Result<Self> {
         if model.contains('/') {
-            return Ok(Self::Local);
+            bail!(
+                "'{model}' looks like a HuggingFace repo ID — use the model registry for local models"
+            );
         }
 
         let prefixes: &[(&[&str], ProviderKind)] = &[
@@ -137,7 +106,6 @@ impl ProviderKind {
             Self::Grok => "grok",
             Self::Qwen => "qwen",
             Self::Kimi => "kimi",
-            Self::Local => "local",
         }
     }
 }

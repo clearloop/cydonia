@@ -47,44 +47,20 @@ impl Provider {
     }
 }
 
-/// Construct a `Provider` from config and a shared HTTP client.
+/// Construct a remote `Provider` from config and a shared HTTP client.
 ///
 /// OpenAI-compatible kinds use a URL lookup table — no repeated arms.
-/// The `model` string from config is stored in the provider for accurate
-/// `active_model()` reporting.
+/// Local models are not handled here — they use the built-in registry.
 pub async fn build_provider(config: &ProviderConfig, client: reqwest::Client) -> Result<Provider> {
     let kind = config.kind()?;
     let api_key = config.api_key.as_deref().unwrap_or("");
     let model = config.model.as_str();
 
-    match kind {
-        ProviderKind::Claude => {
-            let url = config.base_url.as_deref().unwrap_or(claude::ENDPOINT);
-            return Ok(Provider::Claude(Claude::custom(
-                client, api_key, url, model,
-            )?));
-        }
-        #[cfg(feature = "local")]
-        ProviderKind::Local => {
-            let local = if let Some(entry) = crate::local::registry::find(&config.model) {
-                crate::local::registry::build_local(entry)
-            } else {
-                tracing::warn!("model '{}' is not in the registry", config.model);
-                let isq = config.quantization.as_ref().map(|q| q.to_isq());
-                crate::local::Local::lazy(
-                    &config.model,
-                    crate::config::Loader::default(),
-                    isq,
-                    config.chat_template.clone(),
-                )
-            };
-            return Ok(Provider::Local(local));
-        }
-        #[cfg(not(feature = "local"))]
-        ProviderKind::Local => {
-            anyhow::bail!("local provider requires the 'local' feature");
-        }
-        _ => {}
+    if kind == ProviderKind::Claude {
+        let url = config.base_url.as_deref().unwrap_or(claude::ENDPOINT);
+        return Ok(Provider::Claude(Claude::custom(
+            client, api_key, url, model,
+        )?));
     }
 
     // All remaining kinds are OpenAI-compatible. Look up the default endpoint URL.
@@ -94,7 +70,7 @@ pub async fn build_provider(config: &ProviderConfig, client: reqwest::Client) ->
         ProviderKind::Grok => openai::endpoint::GROK,
         ProviderKind::Qwen => openai::endpoint::QWEN,
         ProviderKind::Kimi => openai::endpoint::KIMI,
-        // Claude and Local are handled above; this arm is unreachable.
+        // Claude is handled above; this arm is unreachable.
         _ => unreachable!(),
     };
     let url = config.base_url.as_deref().unwrap_or(default_url);
