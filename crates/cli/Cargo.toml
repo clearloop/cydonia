@@ -1,6 +1,6 @@
 [package]
 name = "openwalrus"
-description = "Command-line interface for OpenWalrus"
+description = "Run autonomous agents with built-in LLM inference"
 documentation = "https://docs.rs/walrus-cli"
 readme = "README.md"
 version.workspace = true

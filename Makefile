@@ -11,7 +11,7 @@
 # make macos-amd64
 # make linux-arm64
 # make linux-amd64
-VERSION = 0.0.4
+VERSION = v0.0.4
 CARGO = cargo b --profile prod
 
 # Cross-compilation: set CC/AR so aws-lc-sys cmake uses the right
@@ -28,10 +28,10 @@ tar-all: tar-walrus
 # make tarballs for walrus
 tar-walrus:
 	mkdir -p target/bundle
-	tar -czf target/bundle/walrus-v$(VERSION)-macos-arm64.tar.gz -C target/aarch64-apple-darwin/prod walrus
-	tar -czf target/bundle/walrus-v$(VERSION)-macos-amd64.tar.gz -C target/x86_64-apple-darwin/prod walrus
-	tar -czf target/bundle/walrus-v$(VERSION)-linux-amd64.tar.gz -C target/x86_64-unknown-linux-gnu/prod walrus
-	tar -czf target/bundle/walrus-v$(VERSION)-linux-arm64.tar.gz -C target/aarch64-unknown-linux-gnu/prod walrus
+	tar -czf target/bundle/walrus-$(VERSION)-macos-arm64.tar.gz -C target/aarch64-apple-darwin/prod walrus
+	tar -czf target/bundle/walrus-$(VERSION)-macos-amd64.tar.gz -C target/x86_64-apple-darwin/prod walrus
+	tar -czf target/bundle/walrus-$(VERSION)-linux-amd64.tar.gz -C target/x86_64-unknown-linux-gnu/prod walrus
+	tar -czf target/bundle/walrus-$(VERSION)-linux-arm64.tar.gz -C target/aarch64-unknown-linux-gnu/prod walrus
 
 # build macos-arm64 (Metal acceleration)
 macos-arm64:
