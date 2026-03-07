@@ -12,7 +12,6 @@ pub struct PlatformFile {
 
 /// Default model keys and quantization for a platform.
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)]
 pub struct PlatformDefaults {
     pub text: String,
     pub vision: Option<String>,
@@ -26,7 +25,7 @@ pub type ModelsFile = BTreeMap<String, ModelDef>;
 #[derive(Debug, Deserialize)]
 pub struct ModelDef {
     pub name: String,
-    pub memory: Option<String>,
+    pub memory: String,
     pub metal: Option<PlatformVariant>,
     pub cuda: Option<PlatformVariant>,
     pub cpu: Option<PlatformVariant>,
@@ -37,7 +36,6 @@ pub struct ModelDef {
 pub struct PlatformVariant {
     pub model_id: String,
     pub loader: String,
-    pub quantization: Option<String>,
 }
 
 /// Load and parse a platform TOML file.

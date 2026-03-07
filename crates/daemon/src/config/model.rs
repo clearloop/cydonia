@@ -39,7 +39,17 @@ impl Default for ModelConfig {
         let entry = model::local::registry::default_text();
         Self {
             default: DefaultModels::default(),
-            providers: [("local".into(), entry.to_provider_config())].into(),
+            providers: [(
+                CompactString::from(entry.model_id),
+                ProviderConfig {
+                    model: CompactString::from(entry.model_id),
+                    api_key: None,
+                    base_url: None,
+                    quantization: None,
+                    chat_template: None,
+                },
+            )]
+            .into(),
         }
     }
 }

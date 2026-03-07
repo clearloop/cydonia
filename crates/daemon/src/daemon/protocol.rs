@@ -67,7 +67,7 @@ impl Server for Daemon {
                 // Check memory threshold from registry before downloading.
                 if let Some(entry) = model::local::registry::find(&req.model) {
                     if !entry.fits() {
-                        let required = entry.memory_requirement().unwrap_or_default();
+                        let required = entry.memory_requirement();
                         let actual = model::local::system_memory() / (1024 * 1024 * 1024);
                         Err(anyhow::anyhow!(
                             "model '{}' requires at least {} RAM, your system has {}GB",

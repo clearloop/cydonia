@@ -146,6 +146,7 @@ pub fn write_registry(
 
     let text_default = &platform.defaults.text;
     let vision_default = option_str_tokens(platform.defaults.vision.as_deref());
+    let quant_default = option_str_tokens(platform.defaults.quantization.as_deref());
 
     let tokens = quote! {
         #[doc = "A curated model entry from the registry."]
@@ -161,10 +162,8 @@ pub fn write_registry(
             pub model_id: &'static str,
             #[doc = "Loader to use."]
             pub loader: crate::config::Loader,
-            #[doc = "Recommended quantization serde key."]
-            pub quantization: Option<&'static str>,
             #[doc = "Minimum system RAM."]
-            pub memory: Option<crate::config::MemoryThreshold>,
+            pub memory: crate::config::MemoryThreshold,
         }
 
         #[doc = "All curated models for the current platform."]
@@ -179,12 +178,15 @@ pub fn write_registry(
             pub text: &'static str,
             #[doc = "Default vision model registry key."]
             pub vision: Option<&'static str>,
+            #[doc = "Default quantization serde key for ISQ."]
+            pub default_quantization: Option<&'static str>,
         }
 
         #[doc = "Platform defaults for the current build."]
         pub const DEFAULTS: PlatformDefaults = PlatformDefaults {
             text: #text_default,
             vision: #vision_default,
+            default_quantization: #quant_default,
         };
     };
 
@@ -226,13 +228,6 @@ fn memory_tokens(memory: &str) -> TokenStream {
     quote!(crate::config::MemoryThreshold::#ident)
 }
 
-fn option_tokens(inner: Option<TokenStream>) -> TokenStream {
-    match inner {
-        Some(ts) => quote!(Some(#ts)),
-        None => quote!(None),
-    }
-}
-
 fn option_str_tokens(s: Option<&str>) -> TokenStream {
     match s {
         Some(v) => quote!(Some(#v)),
@@ -240,15 +235,9 @@ fn option_str_tokens(s: Option<&str>) -> TokenStream {
     }
 }
 
-fn model_entry_tokens(
-    key: &str,
-    name: &str,
-    pv: &PlatformVariant,
-    memory: &Option<String>,
-) -> TokenStream {
+fn model_entry_tokens(key: &str, name: &str, pv: &PlatformVariant, memory: &str) -> TokenStream {
     let loader = loader_tokens(&pv.loader);
-    let quant = option_str_tokens(pv.quantization.as_deref());
-    let mem = option_tokens(memory.as_ref().map(|m| memory_tokens(m)));
+    let mem = memory_tokens(memory);
     let model_id = &pv.model_id;
 
     quote! {
@@ -257,7 +246,6 @@ fn model_entry_tokens(
             name: #name,
             model_id: #model_id,
             loader: #loader,
-            quantization: #quant,
             memory: #mem,
         }
     }
