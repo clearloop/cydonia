@@ -13,6 +13,7 @@ keywords.workspace = true
 [dependencies]
 # crates.io
 anyhow.workspace = true
+dirs.workspace = true
 async-stream.workspace = true
 compact_str.workspace = true
 futures-core.workspace = true

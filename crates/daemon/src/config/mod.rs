@@ -2,13 +2,13 @@
 
 pub use ::model::{ProviderConfig, ProviderManager};
 use anyhow::Result;
-pub use default::{
-    AGENTS_DIR, DATA_DIR, GLOBAL_CONFIG_DIR, SKILLS_DIR, SOCKET_PATH, WORK_DIR,
-    scaffold_config_dir, scaffold_work_dir,
-};
+pub use default::{scaffold_config_dir, scaffold_work_dir};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+pub use wcore::paths::{
+    AGENTS_DIR, CONFIG_DIR, DATA_DIR, MEMORY_DB, SKILLS_DIR, SOCKET_PATH, WORK_DIR,
+};
 pub use {channel::ChannelConfig, mcp::McpServerConfig};
 pub use {loader::load_agents_dir, model::ModelConfig};
 
@@ -29,9 +29,9 @@ pub struct DaemonConfig {
     /// MCP server configurations.
     #[serde(default)]
     pub mcp_servers: BTreeMap<String, mcp::McpServerConfig>,
-    /// Optional symlink path for the workspace sandbox root (`~/.walrus/work/`).
+    /// Optional symlink path for the workspace sandbox root (`~/.openwalrus/work/`).
     ///
-    /// When set, a symlink is created at this path pointing to `~/.walrus/work/`.
+    /// When set, a symlink is created at this path pointing to `~/.openwalrus/work/`.
     #[serde(default)]
     pub work_dir: Option<PathBuf>,
 }

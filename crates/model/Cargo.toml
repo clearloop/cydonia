@@ -12,7 +12,7 @@ keywords.workspace = true
 
 [features]
 default = []
-local = ["dep:mistralrs", "dep:dirs", "dep:hf-hub"]
+local = ["dep:mistralrs", "dep:dirs", "dep:hf-hub", "dep:sysinfo"]
 metal = ["local", "mistralrs/metal"]
 cuda = ["local", "mistralrs/cuda"]
 
@@ -35,3 +35,10 @@ tracing.workspace = true
 dirs = { workspace = true, optional = true }
 hf-hub = { workspace = true, optional = true }
 mistralrs = { workspace = true, optional = true }
+sysinfo = { workspace = true, optional = true }
+
+[build-dependencies]
+toml = { workspace = true }
+serde = { workspace = true }
+proc-macro2 = { workspace = true }
+quote = { workspace = true }

@@ -48,6 +48,7 @@ serenity = { version = "0.12", default-features = false, features = [
     "rustls_backend",
 ] }
 serde = { version = "1", features = ["derive"] }
+sysinfo = "0.33"
 serde_json = "1"
 serde_yaml = "0.9"
 smallvec = { version = "1", features = ["serde"] }
@@ -62,6 +63,8 @@ tokio = { version = "1", features = [
 ] }
 teloxide = { version = "0.17", default-features = false, features = ["rustls"] }
 toml = "0.8"
+proc-macro2 = "1"
+quote = "1"
 toml_edit = "0.22"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

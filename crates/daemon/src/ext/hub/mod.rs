@@ -1,15 +1,15 @@
 //! walrus hub — install and uninstall hub packages.
 //!
-//! All paths are derived from [`crate::config::GLOBAL_CONFIG_DIR`] on demand.
+//! All paths are derived from [`wcore::paths::CONFIG_DIR`] on demand.
 //! No persistent state; all operations are free functions.
 
-use crate::config::GLOBAL_CONFIG_DIR;
 use anyhow::{Context, Result};
 use async_stream::try_stream;
 use compact_str::CompactString;
 pub use manifest::{Manifest, Package, SkillResource};
 use std::path::Path;
 use tokio::process::Command;
+use wcore::paths::CONFIG_DIR;
 use wcore::protocol::message::HubEvent;
 
 mod manifest;
@@ -20,13 +20,13 @@ pub const WALRUS_HUB: &str = "https://github.com/openwalrus/hub";
 /// Install a hub package identified by `scope/name`.
 ///
 /// Syncs the hub repo, reads the manifest, merges MCP servers into
-/// `walrus.toml`, and copies skill directories into `~/.walrus/skills/`.
+/// `walrus.toml`, and copies skill directories into `~/.openwalrus/skills/`.
 pub fn install(package: CompactString) -> impl futures_core::Stream<Item = Result<HubEvent>> {
     try_stream! {
         yield HubEvent::Start { package: package.clone() };
 
         // Sync hub repo (clone or update).
-        let hub_dir = GLOBAL_CONFIG_DIR.join("hub");
+        let hub_dir = CONFIG_DIR.join("hub");
         git_sync(WALRUS_HUB, &hub_dir).await.context("failed to sync hub repo")?;
 
         let (scope, name) = parse_package(&package)?;
@@ -41,8 +41,8 @@ pub fn install(package: CompactString) -> impl futures_core::Stream<Item = Resul
         // Install skills.
         if !manifest.skills.is_empty() {
             yield HubEvent::Step { message: "installing skills…".into() };
-            let cache_dir = GLOBAL_CONFIG_DIR.join(".cache").join("skills");
-            let skills_dir = GLOBAL_CONFIG_DIR.join("skills");
+            let cache_dir = CONFIG_DIR.join(".cache").join("skills");
+            let skills_dir = CONFIG_DIR.join("skills");
             std::fs::create_dir_all(&cache_dir).context("failed to create skill cache dir")?;
             std::fs::create_dir_all(&skills_dir).context("failed to create skills dir")?;
 
@@ -86,7 +86,7 @@ pub fn uninstall(package: CompactString) -> impl futures_core::Stream<Item = Res
 
         if !manifest.skills.is_empty() {
             yield HubEvent::Step { message: "removing skills…".into() };
-            let skills_dir = GLOBAL_CONFIG_DIR.join("skills");
+            let skills_dir = CONFIG_DIR.join("skills");
             for key in manifest.skills.keys() {
                 let dst = skills_dir.join(key.as_str());
                 if dst.exists() {
@@ -152,7 +152,7 @@ fn parse_package(package: &str) -> Result<(&str, &str)> {
 
 /// Read and deserialize the manifest for a package from the local hub repo.
 fn read_manifest(scope: &str, name: &str) -> Result<manifest::Manifest> {
-    let hub_dir = GLOBAL_CONFIG_DIR.join("hub");
+    let hub_dir = CONFIG_DIR.join("hub");
     let path = hub_dir.join(scope).join(format!("{name}.toml"));
     let content = std::fs::read_to_string(&path)
         .with_context(|| format!("cannot read manifest at {}", path.display()))?;
@@ -163,7 +163,7 @@ fn read_manifest(scope: &str, name: &str) -> Result<manifest::Manifest> {
 fn merge_mcp_servers(manifest: &manifest::Manifest) -> Result<()> {
     use toml_edit::DocumentMut;
 
-    let config_path = GLOBAL_CONFIG_DIR.join("walrus.toml");
+    let config_path = CONFIG_DIR.join("walrus.toml");
     let content = std::fs::read_to_string(&config_path)
         .with_context(|| format!("cannot read {}", config_path.display()))?;
     let mut doc: DocumentMut = content
@@ -192,7 +192,7 @@ fn merge_mcp_servers(manifest: &manifest::Manifest) -> Result<()> {
 fn remove_mcp_servers(manifest: &manifest::Manifest) -> Result<()> {
     use toml_edit::DocumentMut;
 
-    let config_path = GLOBAL_CONFIG_DIR.join("walrus.toml");
+    let config_path = CONFIG_DIR.join("walrus.toml");
     let content = std::fs::read_to_string(&config_path)
         .with_context(|| format!("cannot read {}", config_path.display()))?;
     let mut doc: DocumentMut = content

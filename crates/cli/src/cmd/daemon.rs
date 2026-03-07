@@ -3,6 +3,7 @@
 use anyhow::Result;
 use clap::Args;
 use daemon::{Daemon as WalrusDaemon, config};
+use wcore::paths::CONFIG_DIR;
 
 /// Start the walrus daemon in the foreground.
 #[derive(Args, Debug)]
@@ -11,15 +12,12 @@ pub struct Daemon;
 impl Daemon {
     /// Run the daemon, blocking until Ctrl-C.
     pub async fn run(self) -> Result<()> {
-        if !config::GLOBAL_CONFIG_DIR.exists() {
-            config::scaffold_config_dir(&config::GLOBAL_CONFIG_DIR)?;
-            tracing::info!(
-                "created config directory at {}",
-                config::GLOBAL_CONFIG_DIR.display()
-            );
+        if !CONFIG_DIR.exists() {
+            config::scaffold_config_dir(&CONFIG_DIR)?;
+            tracing::info!("created config directory at {}", CONFIG_DIR.display());
         }
 
-        let handle = WalrusDaemon::start(&config::GLOBAL_CONFIG_DIR).await?;
+        let handle = WalrusDaemon::start(&CONFIG_DIR).await?;
 
         // Spawn transports using the daemon's event sender.
         let (socket_path, socket_join) =

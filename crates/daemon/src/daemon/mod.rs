@@ -6,7 +6,7 @@
 
 use crate::{
     DaemonConfig,
-    config::{GLOBAL_CONFIG_DIR, scaffold_work_dir},
+    config::scaffold_work_dir,
     daemon::event::{DaemonEvent, DaemonEventSender},
     hook::DaemonHook,
 };
@@ -54,7 +54,7 @@ impl Daemon {
         let config = DaemonConfig::load(&config_path)?;
         tracing::info!("loaded configuration from {}", config_path.display());
 
-        scaffold_work_dir(&GLOBAL_CONFIG_DIR, config.work_dir.as_deref())?;
+        scaffold_work_dir(&wcore::paths::CONFIG_DIR, config.work_dir.as_deref())?;
         let (event_tx, event_rx) = mpsc::unbounded_channel::<DaemonEvent>();
         let daemon = Daemon::build(&config, config_dir, event_tx.clone()).await?;
 
@@ -117,7 +117,7 @@ pub fn setup_socket(
     shutdown_tx: &broadcast::Sender<()>,
     event_tx: &DaemonEventSender,
 ) -> Result<(&'static Path, tokio::task::JoinHandle<()>)> {
-    let resolved_path: &'static Path = &crate::config::SOCKET_PATH;
+    let resolved_path: &'static Path = &wcore::paths::SOCKET_PATH;
     if let Some(parent) = resolved_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -157,7 +157,7 @@ pub async fn setup_channels(config: &DaemonConfig, event_tx: &DaemonEventSender)
     });
 
     // Use the first configured agent name as the default, falling back to "assistant".
-    let agents_dir = crate::config::GLOBAL_CONFIG_DIR.join(crate::config::AGENTS_DIR);
+    let agents_dir = wcore::paths::CONFIG_DIR.join(wcore::paths::AGENTS_DIR);
     let default_agent = crate::config::load_agents_dir(&agents_dir)
         .ok()
         .and_then(|agents| agents.into_iter().next())

@@ -46,14 +46,11 @@ pub trait Client: Send {
         req: StreamRequest,
     ) -> impl Stream<Item = Result<StreamEvent>> + Send + '_ {
         self.request_stream(req.into())
-            .scan(false, |done, r| {
-                if *done {
-                    return std::future::ready(None);
-                }
-                if matches!(&r, Ok(ServerMessage::Stream(StreamEvent::End { .. }))) {
-                    *done = true;
-                }
-                std::future::ready(Some(r))
+            .take_while(|r| {
+                std::future::ready(!matches!(
+                    r,
+                    Ok(ServerMessage::Stream(StreamEvent::End { .. }))
+                ))
             })
             .map(|r| r.and_then(StreamEvent::try_from))
     }
@@ -64,14 +61,11 @@ pub trait Client: Send {
         req: DownloadRequest,
     ) -> impl Stream<Item = Result<DownloadEvent>> + Send + '_ {
         self.request_stream(req.into())
-            .scan(false, |done, r| {
-                if *done {
-                    return std::future::ready(None);
-                }
-                if matches!(&r, Ok(ServerMessage::Download(DownloadEvent::End { .. }))) {
-                    *done = true;
-                }
-                std::future::ready(Some(r))
+            .take_while(|r| {
+                std::future::ready(!matches!(
+                    r,
+                    Ok(ServerMessage::Download(DownloadEvent::End { .. }))
+                ))
             })
             .map(|r| r.and_then(DownloadEvent::try_from))
     }
@@ -79,14 +73,8 @@ pub trait Client: Send {
     /// Install or uninstall a hub package, streaming progress events.
     fn hub(&mut self, req: HubRequest) -> impl Stream<Item = Result<HubEvent>> + Send + '_ {
         self.request_stream(req.into())
-            .scan(false, |done, r| {
-                if *done {
-                    return std::future::ready(None);
-                }
-                if matches!(&r, Ok(ServerMessage::Hub(HubEvent::End { .. }))) {
-                    *done = true;
-                }
-                std::future::ready(Some(r))
+            .take_while(|r| {
+                std::future::ready(!matches!(r, Ok(ServerMessage::Hub(HubEvent::End { .. }))))
             })
             .map(|r| r.and_then(HubEvent::try_from))
     }

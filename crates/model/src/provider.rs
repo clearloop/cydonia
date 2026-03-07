@@ -5,7 +5,7 @@
 //! eliminating repeated match arms for each variant.
 
 use crate::{
-    config::{ProviderConfig, ProviderKind},
+    config::{ApiStandard, ProviderConfig},
     remote::{
         claude::{self, Claude},
         openai::{self, OpenAI},
@@ -20,8 +20,8 @@ use wcore::model::{Model, Response, StreamChunk};
 
 /// Unified LLM provider enum.
 ///
-/// The gateway constructs the appropriate variant based on `ProviderKind`
-/// detected from the model name. The runtime is monomorphized on `Provider`.
+/// The gateway constructs the appropriate variant based on `ApiStandard`
+/// from the provider config. The runtime is monomorphized on `Provider`.
 #[derive(Clone)]
 pub enum Provider {
     /// OpenAI-compatible API (covers OpenAI, DeepSeek, Grok, Qwen, Kimi, Ollama).
@@ -47,78 +47,34 @@ impl Provider {
     }
 }
 
-/// Construct a `Provider` from config and a shared HTTP client.
+/// Construct a remote `Provider` from config and a shared HTTP client.
 ///
-/// OpenAI-compatible kinds use a URL lookup table — no repeated arms.
-/// The `model` string from config is stored in the provider for accurate
-/// `active_model()` reporting.
+/// Uses `effective_standard()` to pick the API protocol (OpenAI or Anthropic).
+/// Local models are not handled here — they use the built-in registry.
 pub async fn build_provider(config: &ProviderConfig, client: reqwest::Client) -> Result<Provider> {
-    let kind = config.kind()?;
     let api_key = config.api_key.as_deref().unwrap_or("");
     let model = config.model.as_str();
 
-    match kind {
-        ProviderKind::Claude => {
+    match config.effective_standard() {
+        ApiStandard::Anthropic => {
             let url = config.base_url.as_deref().unwrap_or(claude::ENDPOINT);
-            return Ok(Provider::Claude(Claude::custom(
+            Ok(Provider::Claude(Claude::custom(
                 client, api_key, url, model,
-            )?));
+            )?))
         }
-        #[cfg(feature = "local")]
-        ProviderKind::Local => {
-            use crate::config::Loader;
-
-            // Auto-switch HF registry so mistralrs uses the fastest endpoint.
-            let endpoint = crate::local::download::probe_endpoint().await;
-            tracing::info!("using hf endpoint: {endpoint}");
-            unsafe { std::env::set_var("HF_ENDPOINT", &endpoint) };
-
-            let loader = config.loader.unwrap_or_default();
-            let isq = config.quantization.map(|q| q.to_isq());
-            let chat_template = config.chat_template.as_deref();
-            let local = match loader {
-                Loader::Text => {
-                    crate::local::Local::from_text(&config.model, isq, chat_template).await?
-                }
-                Loader::Gguf => {
-                    crate::local::Local::from_gguf(&config.model, chat_template).await?
-                }
-                Loader::Vision => {
-                    crate::local::Local::from_vision(&config.model, isq, chat_template).await?
-                }
-                Loader::Lora | Loader::XLora | Loader::GgufLora | Loader::GgufXLora => {
-                    anyhow::bail!(
-                        "loader {:?} requires adapter configuration (not yet supported)",
-                        loader
-                    );
-                }
+        ApiStandard::OpenAI => {
+            let url = config
+                .base_url
+                .as_deref()
+                .unwrap_or(openai::endpoint::OPENAI);
+            let provider = if api_key.is_empty() {
+                OpenAI::no_auth(client, url, model)
+            } else {
+                OpenAI::custom(client, api_key, url, model)?
             };
-            return Ok(Provider::Local(local));
+            Ok(Provider::OpenAI(provider))
         }
-        #[cfg(not(feature = "local"))]
-        ProviderKind::Local => {
-            anyhow::bail!("local provider requires the 'local' feature");
-        }
-        _ => {}
     }
-
-    // All remaining kinds are OpenAI-compatible. Look up the default endpoint URL.
-    let default_url: &str = match kind {
-        ProviderKind::OpenAI => openai::endpoint::OPENAI,
-        ProviderKind::DeepSeek => openai::endpoint::DEEPSEEK,
-        ProviderKind::Grok => openai::endpoint::GROK,
-        ProviderKind::Qwen => openai::endpoint::QWEN,
-        ProviderKind::Kimi => openai::endpoint::KIMI,
-        // Claude and Local are handled above; this arm is unreachable.
-        _ => unreachable!(),
-    };
-    let url = config.base_url.as_deref().unwrap_or(default_url);
-    let provider = if api_key.is_empty() {
-        OpenAI::no_auth(client, url, model)
-    } else {
-        OpenAI::custom(client, api_key, url, model)?
-    };
-    Ok(Provider::OpenAI(provider))
 }
 
 impl Model for Provider {

@@ -25,6 +25,7 @@ pub use runtime::{Runtime, hook::Hook};
 mod agent;
 pub mod memory;
 pub mod model;
+pub mod paths;
 pub mod protocol;
 mod runtime;
 pub mod utils;

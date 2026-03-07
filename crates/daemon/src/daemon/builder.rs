@@ -6,7 +6,7 @@
 //! in-place from disk without restarting transports.
 
 use crate::{
-    DaemonConfig, config,
+    DaemonConfig,
     daemon::event::{DaemonEvent, DaemonEventSender},
     hook::{self, DaemonHook},
 };
@@ -66,9 +66,30 @@ impl Daemon {
     }
 
     /// Construct the provider manager from config.
+    ///
+    /// Loads a single local model from the registry (if local feature enabled)
+    /// and any remote providers from config. Only one local model is active
+    /// at a time to avoid memory pressure.
     async fn build_providers(config: &DaemonConfig) -> Result<ProviderManager> {
-        let models = config.model.providers.values().cloned().collect::<Vec<_>>();
-        let manager = ProviderManager::from_configs(&models).await?;
+        let manager = ProviderManager::new(config.model.default.clone());
+
+        // Add the single default local model from the registry.
+        #[cfg(feature = "local")]
+        {
+            if let Some(entry) = model::local::registry::find(&config.model.default) {
+                let local = model::local::registry::build_local(entry);
+                manager.add_provider(entry.model_id, model::Provider::Local(local));
+            } else if let Some(entry) = model::local::registry::find_by_key(&config.model.default) {
+                let local = model::local::registry::build_local(entry);
+                manager.add_provider(entry.model_id, model::Provider::Local(local));
+            }
+        }
+
+        // Add remote providers from config.
+        for config in config.model.providers.values() {
+            manager.add_config(config).await?;
+        }
+
         tracing::info!(
             "provider manager initialized — active model: {}",
             manager.active_model()
@@ -81,7 +102,7 @@ impl Daemon {
         let memory = memory::InMemory::new();
         tracing::info!("using in-memory backend");
 
-        let skills_dir = config_dir.join(config::SKILLS_DIR);
+        let skills_dir = config_dir.join(wcore::paths::SKILLS_DIR);
         let skills = hook::skill::SkillHandler::load(skills_dir).unwrap_or_else(|e| {
             tracing::warn!("failed to load skills: {e}");
             hook::skill::SkillHandler::load(PathBuf::new()).expect("empty skill handler")
@@ -116,7 +137,7 @@ impl Daemon {
         runtime: &mut Runtime<ProviderManager, DaemonHook>,
         config_dir: &Path,
     ) -> Result<()> {
-        let agents = crate::config::load_agents_dir(&config_dir.join(config::AGENTS_DIR))?;
+        let agents = crate::config::load_agents_dir(&config_dir.join(wcore::paths::AGENTS_DIR))?;
         runtime.add_agent(wcore::parse_agent_md(SYSTEM_AGENT)?);
         for agent in agents {
             tracing::info!("registered agent '{}'", agent.name);

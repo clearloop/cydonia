@@ -79,9 +79,9 @@ impl ChatRepl {
     }
 }
 
-/// Resolve the history file path at `~/.walrus/history`.
+/// Resolve the history file path at `~/.openwalrus/history`.
 fn history_file_path() -> Option<PathBuf> {
-    dirs::home_dir().map(|d| d.join(".walrus").join("history"))
+    Some(wcore::paths::CONFIG_DIR.join("history"))
 }
 
 /// Consume a stream of content chunks and print them to stdout in real time.

@@ -6,11 +6,15 @@
 //! [`Agent::run_stream`]. `run_stream()` is the canonical step loop —
 //! `run()` collects its events and returns the final response.
 
-use crate::model::{Message, Model, Request, Tool};
+use crate::model::{
+    Choice, CompletionMeta, Delta, Message, MessageBuilder, Model, Request, Response, Role, Tool,
+    Usage,
+};
 use anyhow::Result;
 use async_stream::stream;
 use event::{AgentEvent, AgentResponse, AgentStep, AgentStopReason};
 use futures_core::Stream;
+use futures_util::StreamExt;
 use tokio::sync::{mpsc, oneshot};
 use tool::{ToolRequest, ToolSender};
 
@@ -146,8 +150,6 @@ impl<M: Model> Agent<M> {
     /// Wraps [`Agent::run_stream`] — collects all events, sends each through
     /// `events`, and extracts the `Done` response.
     pub async fn run(&mut self, events: mpsc::UnboundedSender<AgentEvent>) -> AgentResponse {
-        use futures_util::StreamExt;
-
         let mut stream = std::pin::pin!(self.run_stream());
         let mut response = None;
         while let Some(event) = stream.next().await {
@@ -167,59 +169,155 @@ impl<M: Model> Agent<M> {
 
     /// Run the agent loop as a stream of [`AgentEvent`]s.
     ///
-    /// The canonical step loop. Calls [`Agent::step`] up to `max_iterations`
-    /// times, yielding events as they are produced. Always finishes with a
-    /// `Done` event containing the [`AgentResponse`].
+    /// Uses the model's streaming API so text deltas are yielded token-by-token.
+    /// Tool call responses are dispatched after the stream completes (arguments
+    /// arrive incrementally and must be fully accumulated first).
     pub fn run_stream(&mut self) -> impl Stream<Item = AgentEvent> + '_ {
         stream! {
             let mut steps = Vec::new();
             let max = self.config.max_iterations;
 
             for _ in 0..max {
-                match self.step().await {
-                    Ok(step) => {
-                        let has_tool_calls = !step.tool_calls.is_empty();
-                        let text = step.response.content().cloned();
+                // Build the request (same logic as step()).
+                let model_name = self
+                    .config
+                    .model
+                    .clone()
+                    .unwrap_or_else(|| self.model.active_model());
 
-                        if let Some(ref t) = text {
-                            yield AgentEvent::TextDelta(t.clone());
-                        }
+                let mut messages = Vec::with_capacity(1 + self.history.len());
+                if !self.config.system_prompt.is_empty() {
+                    messages.push(Message::system(&self.config.system_prompt));
+                }
+                messages.extend(self.history.iter().cloned());
 
-                        if has_tool_calls {
-                            yield AgentEvent::ToolCallsStart(step.tool_calls.clone());
-                            for (tc, result) in step.tool_calls.iter().zip(&step.tool_results) {
-                                yield AgentEvent::ToolResult {
-                                    call_id: tc.id.clone(),
-                                    output: result.content.clone(),
-                                };
+                let mut request = Request::new(model_name)
+                    .with_messages(messages)
+                    .with_tool_choice(self.config.tool_choice.clone());
+                if !self.tools.is_empty() {
+                    request = request.with_tools(self.tools.clone());
+                }
+
+                // Stream from the model, yielding text deltas as they arrive.
+                let mut builder = MessageBuilder::new(Role::Assistant);
+                let mut finish_reason = None;
+                let mut last_meta = CompletionMeta::default();
+                let mut last_usage = None;
+                let mut stream_error = None;
+
+                let mut chunk_stream = std::pin::pin!(self.model.stream(request));
+                while let Some(result) = chunk_stream.next().await {
+                    match result {
+                        Ok(chunk) => {
+                            if let Some(text) = chunk.content() {
+                                yield AgentEvent::TextDelta(text.to_owned());
                             }
-                            yield AgentEvent::ToolCallsComplete;
+                            if let Some(r) = chunk.reason() {
+                                finish_reason = Some(*r);
+                            }
+                            last_meta = chunk.meta.clone();
+                            if chunk.usage.is_some() {
+                                last_usage = chunk.usage.clone();
+                            }
+                            builder.accept(&chunk);
                         }
-
-                        if !has_tool_calls {
-                            let stop_reason = Self::stop_reason(&step);
-                            steps.push(step);
-                            yield AgentEvent::Done(AgentResponse {
-                                final_response: text,
-                                iterations: steps.len(),
-                                stop_reason,
-                                steps,
-                            });
-                            return;
+                        Err(e) => {
+                            stream_error = Some(e.to_string());
+                            break;
                         }
-
-                        steps.push(step);
-                    }
-                    Err(e) => {
-                        yield AgentEvent::Done(AgentResponse {
-                            final_response: None,
-                            iterations: steps.len(),
-                            stop_reason: AgentStopReason::Error(e.to_string()),
-                            steps,
-                        });
-                        return;
                     }
                 }
+                if let Some(e) = stream_error {
+                    yield AgentEvent::Done(AgentResponse {
+                        final_response: None,
+                        iterations: steps.len(),
+                        stop_reason: AgentStopReason::Error(e),
+                        steps,
+                    });
+                    return;
+                }
+
+                // Build the accumulated message and response.
+                let msg = builder.build();
+                let tool_calls = msg.tool_calls.to_vec();
+                let content = if msg.content.is_empty() {
+                    None
+                } else {
+                    Some(msg.content.clone())
+                };
+
+                let response = Response {
+                    meta: last_meta,
+                    choices: vec![Choice {
+                        index: 0,
+                        delta: Delta {
+                            role: Some(Role::Assistant),
+                            content: content.clone(),
+                            reasoning_content: if msg.reasoning_content.is_empty() {
+                                None
+                            } else {
+                                Some(msg.reasoning_content.clone())
+                            },
+                            tool_calls: if tool_calls.is_empty() {
+                                None
+                            } else {
+                                Some(tool_calls.clone())
+                            },
+                        },
+                        finish_reason,
+                        logprobs: None,
+                    }],
+                    usage: last_usage.unwrap_or(Usage {
+                        prompt_tokens: 0,
+                        completion_tokens: 0,
+                        total_tokens: 0,
+                        prompt_cache_hit_tokens: None,
+                        prompt_cache_miss_tokens: None,
+                        completion_tokens_details: None,
+                    }),
+                };
+
+                self.history.push(msg);
+                let has_tool_calls = !tool_calls.is_empty();
+
+                // Dispatch tool calls if any.
+                let mut tool_results = Vec::new();
+                if has_tool_calls {
+                    yield AgentEvent::ToolCallsStart(tool_calls.clone());
+                    for tc in &tool_calls {
+                        let result = self
+                            .dispatch_tool(&tc.function.name, &tc.function.arguments)
+                            .await;
+                        let msg = Message::tool(&result, tc.id.clone());
+                        self.history.push(msg.clone());
+                        tool_results.push(msg);
+                        yield AgentEvent::ToolResult {
+                            call_id: tc.id.clone(),
+                            output: result,
+                        };
+                    }
+                    yield AgentEvent::ToolCallsComplete;
+                }
+
+                let step = AgentStep {
+                    response,
+                    tool_calls,
+                    tool_results,
+                };
+
+                if !has_tool_calls {
+                    let stop_reason = Self::stop_reason(&step);
+                    steps.push(step);
+                    yield AgentEvent::Done(AgentResponse {
+                        final_response: content,
+                        iterations: steps.len(),
+                        stop_reason,
+                        steps,
+                    });
+                    return;
+                }
+
+                steps.push(step);
             }
 
             let final_response = steps.last().and_then(|s| s.response.content().cloned());

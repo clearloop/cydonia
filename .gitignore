@@ -1,4 +1,5 @@
 .cargo
 .env
+.mcp.json
 target
 spec

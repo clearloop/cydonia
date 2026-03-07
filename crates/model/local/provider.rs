@@ -1,6 +1,6 @@
 //! Model trait implementation for the Local provider.
 
-use super::Local;
+use crate::local::Local;
 use anyhow::Result;
 use async_stream::try_stream;
 use compact_str::CompactString;
@@ -13,8 +13,9 @@ use wcore::model::{
 
 impl Model for Local {
     async fn send(&self, request: &wcore::model::Request) -> Result<Response> {
+        let model = self.ready_model()?;
         let mr_request = build_request(request);
-        let resp = self.model.send_chat_request(mr_request).await?;
+        let resp = model.send_chat_request(mr_request).await?;
         Ok(to_response(resp))
     }
 
@@ -22,16 +23,25 @@ impl Model for Local {
         &self,
         request: wcore::model::Request,
     ) -> impl Stream<Item = Result<StreamChunk>> + Send {
-        let model = self.model.clone();
+        let model_result = self.ready_model();
         try_stream! {
+            let model = model_result?;
             let mr_request = build_request(&request);
             let mut stream = model.stream_chat_request(mr_request).await?;
+            let mut filter = ToolCallFilter::new();
             while let Some(resp) = stream.next().await {
                 match resp {
                     mistralrs::Response::Chunk(chunk) => {
-                        yield to_stream_chunk(chunk);
+                        for sc in filter.accept(chunk) {
+                            yield sc;
+                        }
                     }
-                    mistralrs::Response::Done(_) => break,
+                    mistralrs::Response::Done(done) => {
+                        for sc in filter.finish(done) {
+                            yield sc;
+                        }
+                        break;
+                    }
                     mistralrs::Response::InternalError(e)
                     | mistralrs::Response::ValidationError(e) => {
                         Err(anyhow::anyhow!("{e}"))?;
@@ -51,8 +61,160 @@ impl Model for Local {
     }
 
     fn active_model(&self) -> CompactString {
-        CompactString::from("local")
+        self.model_id.clone()
     }
+}
+
+/// Known tool call tag prefixes emitted by local models as raw text.
+///
+/// During streaming, mistralrs cannot parse incomplete tags, so they leak
+/// into the content field. We detect these prefixes and suppress content
+/// once a tool call tag is detected, relying on the final `Response::Done`
+/// for structured tool calls.
+const TOOL_CALL_PREFIXES: &[&str] = &[
+    "<tool_call>",
+    "<｜tool\u{2581}call\u{2581}begin｜>",
+    "[TOOL_CALLS]",
+    "<|python_tag|>",
+];
+
+/// Filters tool call tags from streaming content chunks.
+///
+/// Local LLMs (Qwen, DeepSeek, etc.) emit tool calls as XML-like tags in
+/// text content during streaming. mistralrs parses them in the final
+/// `Response::Done` but not in incremental chunks. This filter suppresses
+/// raw tag text and emits a final `StreamChunk` with structured tool calls
+/// from the Done response.
+struct ToolCallFilter {
+    /// Accumulated content text for prefix detection.
+    buffer: String,
+    /// Whether we've detected a tool call prefix and are suppressing content.
+    suppressing: bool,
+}
+
+impl ToolCallFilter {
+    fn new() -> Self {
+        Self {
+            buffer: String::new(),
+            suppressing: false,
+        }
+    }
+
+    /// Flush buffered content as a content-only `StreamChunk`, clearing the
+    /// buffer. Returns `None` if the buffer is empty.
+    fn flush(&mut self) -> Option<StreamChunk> {
+        if self.buffer.is_empty() {
+            return None;
+        }
+        let content = std::mem::take(&mut self.buffer);
+        Some(StreamChunk::text(content))
+    }
+
+    /// Process a streaming chunk. Returns chunks to yield (0, 1, or 2).
+    fn accept(&mut self, chunk: mistralrs::ChatCompletionChunkResponse) -> Vec<StreamChunk> {
+        let mut out = Vec::new();
+
+        // If already suppressing, drop all chunks.
+        if self.suppressing {
+            return out;
+        }
+
+        // Check if this chunk has text content.
+        let has_content = chunk
+            .choices
+            .first()
+            .and_then(|c| c.delta.content.as_deref())
+            .is_some_and(|s| !s.is_empty());
+
+        if has_content {
+            let text = chunk.choices[0].delta.content.as_deref().unwrap();
+            self.buffer.push_str(text);
+            tracing::trace!(buffer = %self.buffer, "tool_call_filter: buffered content");
+
+            // Full match — enter suppression, discard buffered tag text.
+            if TOOL_CALL_PREFIXES.iter().any(|p| self.buffer.contains(p)) {
+                tracing::debug!(buffer = %self.buffer, "tool_call_filter: suppressing tool call tags");
+                self.suppressing = true;
+                self.buffer.clear();
+                return out;
+            }
+
+            // Partial match — hold the buffer, don't yield yet.
+            if TOOL_CALL_PREFIXES
+                .iter()
+                .any(|p| is_partial_prefix(&self.buffer, p))
+            {
+                tracing::trace!(buffer = %self.buffer, "tool_call_filter: partial prefix match, holding");
+                return out;
+            }
+
+            // No match possible — flush the buffer.
+            if let Some(sc) = self.flush() {
+                out.push(sc);
+            }
+        } else {
+            // Non-content chunk (reasoning, finish_reason, structured tool_calls).
+            // Flush any buffered text first, then pass through.
+            if let Some(sc) = self.flush() {
+                out.push(sc);
+            }
+            out.push(to_stream_chunk(chunk));
+        }
+
+        out
+    }
+
+    /// Process the final `Response::Done`. Returns chunks to yield — either
+    /// structured tool calls from the Done response, or remaining buffered
+    /// content if no tool calls were found.
+    fn finish(mut self, done: mistralrs::ChatCompletionResponse) -> Vec<StreamChunk> {
+        let mut out = Vec::new();
+        let has_tool_calls = done
+            .choices
+            .first()
+            .and_then(|c| c.message.tool_calls.as_ref())
+            .is_some_and(|tc| !tc.is_empty());
+        tracing::debug!(
+            suppressing = self.suppressing,
+            has_tool_calls,
+            buffer_len = self.buffer.len(),
+            "tool_call_filter: finish"
+        );
+
+        // If we were suppressing, emit tool calls from Done.
+        if self.suppressing {
+            if let Some(tc_chunk) = done
+                .choices
+                .first()
+                .and_then(|c| c.message.tool_calls.as_ref())
+                .filter(|tc| !tc.is_empty())
+                .map(|tcs| {
+                    let calls: Vec<ToolCall> = tcs.iter().cloned().map(convert_tool_call).collect();
+                    StreamChunk::tool(&calls)
+                })
+            {
+                out.push(tc_chunk);
+            }
+            return out;
+        }
+
+        // Not suppressing — flush any remaining buffered text.
+        if let Some(sc) = self.flush() {
+            out.push(sc);
+        }
+        out
+    }
+}
+
+/// Check if `text` ends with a string that is a prefix of `pattern`.
+///
+/// For example, `text="Hello <tool"` is a partial prefix of `"<tool_call>"`.
+/// Iterates over char boundaries to avoid panics on multibyte patterns.
+fn is_partial_prefix(text: &str, pattern: &str) -> bool {
+    pattern
+        .char_indices()
+        .skip(1)
+        .any(|(i, _)| text.ends_with(&pattern[..i]))
 }
 
 /// Build a mistralrs `RequestBuilder` from a walrus `Request`.
