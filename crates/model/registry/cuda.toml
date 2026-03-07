@@ -6,13 +6,13 @@ text = "qwen3-4b"
 [models.qwen3-06b]
 name = "Qwen3 0.6B"
 memory = "4gb"
-model_id = "Qwen/Qwen3-0.6B-Instruct-2507"
+model_id = "Qwen/Qwen3-0.6B"
 loader = "text"
 
 [models.qwen3-17b]
 name = "Qwen3 1.7B"
 memory = "4gb"
-model_id = "Qwen/Qwen3-1.7B-Instruct-2507"
+model_id = "Qwen/Qwen3-1.7B"
 loader = "text"
 
 [models.smollm2-17b]
@@ -64,7 +64,7 @@ loader = "text"
 [models.qwen3-8b]
 name = "Qwen3 8B"
 memory = "16gb"
-model_id = "Qwen/Qwen3-8B-Instruct-2507"
+model_id = "Qwen/Qwen3-8B"
 loader = "text"
 
 [models.llama31-8b]
@@ -84,7 +84,7 @@ loader = "text"
 [models.qwen3-14b]
 name = "Qwen3 14B"
 memory = "32gb"
-model_id = "Qwen/Qwen3-14B-Instruct-2507"
+model_id = "Qwen/Qwen3-14B"
 loader = "text"
 
 [models.qwen25-coder-14b]
@@ -104,7 +104,7 @@ loader = "text"
 [models.qwen3-32b]
 name = "Qwen3 32B"
 memory = "64gb"
-model_id = "Qwen/Qwen3-32B-Instruct-2507"
+model_id = "Qwen/Qwen3-32B"
 loader = "text"
 
 [models.qwen25-coder-32b]
@@ -145,8 +145,3 @@ memory = "32gb"
 model_id = "Qwen/Qwen3-VL-32B-Instruct"
 loader = "vision"
 
-[models.qwen3-vl-72b]
-name = "Qwen3 VL 72B"
-memory = "64gb"
-model_id = "Qwen/Qwen3-VL-72B-Instruct"
-loader = "vision"
