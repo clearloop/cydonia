@@ -1,123 +1,77 @@
-//! Channel runner — connects platform channels and routes messages to agents.
+//! Channel configuration and spawn logic.
 //!
-//! Owns the lifecycle of all channel connections: building the routing table,
-//! connecting to platforms (Telegram, etc.), and running message loops. The
-//! daemon passes a callback for agent dispatch, keeping this crate decoupled
-//! from the runtime.
+//! Connects the Telegram bot and routes messages to agents via the daemon
+//! event loop. Bot commands (`/hub`, `/model`) are dispatched directly to
+//! walrusd over the Unix domain socket.
 
-use crate::channel::Channel;
-use crate::message::{ChannelMessage, Platform};
-use crate::router::{ChannelRouter, RoutingRule, parse_platform};
-use crate::telegram::TelegramChannel;
+use crate::message::ChannelMessage;
 use crate::telegram::command::{dispatch_command, parse_command};
+use crate::telegram::poll_loop;
 use compact_str::CompactString;
 use serde::{Deserialize, Serialize};
 use std::{future::Future, path::PathBuf, sync::Arc};
+use teloxide::prelude::*;
 use tokio::sync::mpsc;
 
-/// Channel configuration entry.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Top-level channel configuration.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ChannelConfig {
-    /// Platform name (e.g. "telegram").
-    pub platform: CompactString,
-    /// Bot token for the platform.
-    pub bot_token: String,
-    /// Default agent for this channel.
-    pub agent: CompactString,
-    /// Optional specific channel ID for exact routing.
-    pub channel_id: Option<CompactString>,
+    /// Telegram bot configuration.
+    pub telegram: Option<TelegramConfig>,
 }
 
-/// Build a [`ChannelRouter`] from channel config entries.
-pub fn build_router(configs: &[ChannelConfig]) -> ChannelRouter {
-    let mut rules = Vec::new();
-    let mut default_agent = None;
-
-    for ch in configs {
-        let Ok(platform) = parse_platform(&ch.platform) else {
-            tracing::warn!("unknown platform '{}', skipping", ch.platform);
-            continue;
-        };
-        rules.push(RoutingRule {
-            platform,
-            channel_id: ch.channel_id.clone(),
-            agent: ch.agent.clone(),
-        });
-        if default_agent.is_none() {
-            default_agent = Some(ch.agent.clone());
-        }
-    }
-
-    ChannelRouter::new(rules, default_agent)
+/// Configuration for the Telegram bot.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TelegramConfig {
+    /// Bot API token.
+    pub bot: String,
+    /// Agent to route messages to. Falls back to `default_agent` if absent.
+    pub agent: Option<String>,
 }
 
-/// Connect all configured channels and spawn message loops.
+/// Connect configured channels and spawn message loops.
 ///
-/// For each channel config, connects to the platform and spawns a task that:
-/// 1. Receives messages from the platform
-/// 2. Routes to the correct agent via the router
-/// 3. If the message starts with `/`, attempts to parse and dispatch a bot command
-/// 4. Otherwise calls `on_message(agent, content)` to get a reply
-/// 5. Sends the reply back through the channel
-///
-/// `on_message` is a callback that decouples from the daemon's Runtime type.
-/// `socket_path` is required for bot command dispatch; if `None`, `/` commands are dropped.
+/// If `config.telegram` is `None`, this is a no-op.
+/// `default_agent` is used when `TelegramConfig::agent` is not set.
+/// `socket_path` enables bot command dispatch; if `None`, `/` commands are dropped.
 pub async fn spawn_channels<F, Fut>(
-    configs: &[ChannelConfig],
-    router: Arc<ChannelRouter>,
+    config: &ChannelConfig,
+    default_agent: CompactString,
     on_message: Arc<F>,
     socket_path: Option<PathBuf>,
 ) where
     F: Fn(CompactString, String) -> Fut + Send + Sync + 'static,
     Fut: Future<Output = Result<String, String>> + Send + 'static,
 {
+    let Some(tg) = &config.telegram else {
+        return;
+    };
+
+    let agent = tg
+        .agent
+        .as_deref()
+        .map(CompactString::from)
+        .unwrap_or(default_agent);
+
+    let bot = Bot::new(&tg.bot);
+    let (tx, rx) = mpsc::unbounded_channel::<ChannelMessage>();
+
+    let poll_bot = bot.clone();
+    tokio::spawn(async move {
+        poll_loop(poll_bot, tx).await;
+    });
+
     let socket_path = Arc::new(socket_path);
+    tokio::spawn(channel_loop(rx, bot, agent, on_message, socket_path));
 
-    for ch in configs {
-        let Ok(platform) = parse_platform(&ch.platform) else {
-            continue;
-        };
-
-        match platform {
-            Platform::Telegram => {
-                let tg = TelegramChannel::new(ch.bot_token.clone());
-                match Channel::connect(tg).await {
-                    Ok(mut handle) => {
-                        let (tx, rx) = mpsc::unbounded_channel();
-                        let sender = handle.sender();
-                        let rr = Arc::clone(&router);
-                        let cb = Arc::clone(&on_message);
-                        let sp = Arc::clone(&socket_path);
-
-                        tokio::spawn(async move {
-                            while let Some(msg) = handle.recv().await {
-                                if tx.send(msg).is_err() {
-                                    break;
-                                }
-                            }
-                        });
-
-                        tokio::spawn(channel_loop(rx, sender, rr, cb, sp));
-
-                        tracing::info!(platform = "telegram", "channel transport started");
-                    }
-                    Err(e) => {
-                        tracing::error!(platform = "telegram", "failed to connect channel: {e}");
-                    }
-                }
-            }
-        }
-    }
+    tracing::info!(platform = "telegram", "channel transport started");
 }
 
-/// Message loop for a single channel connection.
-///
-/// Receives messages, routes to agents, dispatches bot commands or the
-/// agent callback, and sends replies.
+/// Message loop: routes incoming messages to agents or bot commands.
 async fn channel_loop<F, Fut>(
     mut rx: mpsc::UnboundedReceiver<ChannelMessage>,
-    sender: crate::channel::ChannelSender,
-    router: Arc<ChannelRouter>,
+    bot: Bot,
+    agent: CompactString,
     on_message: Arc<F>,
     socket_path: Arc<Option<PathBuf>>,
 ) where
@@ -125,53 +79,26 @@ async fn channel_loop<F, Fut>(
     Fut: Future<Output = Result<String, String>> + Send + 'static,
 {
     while let Some(msg) = rx.recv().await {
-        let platform = msg.platform;
-        let channel_id = msg.channel_id.clone();
-        let sender_id = msg.sender_id.clone();
+        let chat_id = msg.chat_id;
         let content = msg.content.clone();
 
-        let Some(agent) = router.route(platform, &channel_id) else {
-            tracing::warn!(
-                ?platform,
-                %channel_id,
-                "no agent route found, dropping message"
-            );
-            continue;
-        };
+        tracing::info!(%agent, chat_id, "channel dispatch");
 
-        let agent = agent.clone();
-
-        tracing::info!(%agent, %channel_id, %sender_id, "channel dispatch");
-
-        // Bot command path: `/cmd ...` messages bypass the agent.
+        // Bot command path.
         if content.starts_with('/') {
             match parse_command(&content) {
                 Some(cmd) => {
                     if let Some(sp) = socket_path.as_ref().as_ref() {
-                        tokio::spawn(dispatch_command(
-                            cmd,
-                            sp.clone(),
-                            sender.clone(),
-                            platform,
-                            channel_id,
-                        ));
+                        tokio::spawn(dispatch_command(cmd, sp.clone(), bot.clone(), chat_id));
                     } else {
-                        tracing::warn!(%channel_id, "bot command ignored: no socket_path configured");
+                        tracing::warn!(chat_id, "bot command ignored: no socket_path configured");
                     }
                 }
                 None => {
-                    tracing::warn!(%channel_id, content, "unrecognised bot command");
-                    let hint = ChannelMessage {
-                        platform,
-                        channel_id: channel_id.clone(),
-                        sender_id: CompactString::default(),
-                        content: "Unknown command. Available: /hub install <pkg>, /hub uninstall <pkg>, /model download <model>".to_owned(),
-                        attachments: Vec::new(),
-                        reply_to: None,
-                        timestamp: 0,
-                    };
-                    if let Err(e) = sender.send(hint).await {
-                        tracing::warn!(%agent, "failed to send command hint: {e}");
+                    tracing::warn!(chat_id, content, "unrecognised bot command");
+                    let hint = "Unknown command. Available: /hub install <pkg>, /hub uninstall <pkg>, /model download <model>";
+                    if let Err(e) = bot.send_message(ChatId(chat_id), hint).await {
+                        tracing::warn!("failed to send command hint: {e}");
                     }
                 }
             }
@@ -181,16 +108,7 @@ async fn channel_loop<F, Fut>(
         // Normal agent chat path.
         match on_message(agent.clone(), content).await {
             Ok(reply) => {
-                let reply_msg = ChannelMessage {
-                    platform,
-                    channel_id,
-                    sender_id: Default::default(),
-                    content: reply,
-                    attachments: Vec::new(),
-                    reply_to: Some(sender_id),
-                    timestamp: 0,
-                };
-                if let Err(e) = sender.send(reply_msg).await {
+                if let Err(e) = bot.send_message(ChatId(chat_id), reply).await {
                     tracing::warn!(%agent, "failed to send channel reply: {e}");
                 }
             }
@@ -200,5 +118,5 @@ async fn channel_loop<F, Fut>(
         }
     }
 
-    tracing::info!(platform = ?sender.platform(), "channel loop ended");
+    tracing::info!(platform = "telegram", "channel loop ended");
 }

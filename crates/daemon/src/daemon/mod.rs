@@ -146,11 +146,8 @@ fn setup_socket(
     Ok((resolved_path, join))
 }
 
-/// Build the channel router and spawn channel transports.
+/// Spawn channel transports.
 async fn setup_channels(config: &DaemonConfig, event_tx: &DaemonEventSender) {
-    let channels = config.channels.values().cloned().collect::<Vec<_>>();
-    let router = channel::build_router(&channels);
-    let router = Arc::new(router);
     let channel_tx = event_tx.clone();
     let on_message = Arc::new(move |agent: CompactString, content: String| {
         let tx = channel_tx.clone();
@@ -169,9 +166,16 @@ async fn setup_channels(config: &DaemonConfig, event_tx: &DaemonEventSender) {
                 .unwrap_or(Err("event loop dropped".to_owned()))
         }
     });
+    // Use the first configured agent name as the default, falling back to "assistant".
+    let agents_dir = crate::config::GLOBAL_CONFIG_DIR.join(crate::config::AGENTS_DIR);
+    let default_agent = crate::config::load_agents_dir(&agents_dir)
+        .ok()
+        .and_then(|agents| agents.into_iter().next())
+        .map(|a| a.name)
+        .unwrap_or_else(|| CompactString::from("assistant"));
     channel::spawn_channels(
-        &channels,
-        router,
+        &config.channel,
+        default_agent,
         on_message,
         Some((*crate::config::SOCKET_PATH).to_path_buf()),
     )
