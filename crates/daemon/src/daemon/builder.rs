@@ -6,7 +6,7 @@
 //! in-place from disk without restarting transports.
 
 use crate::{
-    DaemonConfig, config,
+    DaemonConfig,
     daemon::event::{DaemonEvent, DaemonEventSender},
     hook::{self, DaemonHook},
 };
@@ -81,7 +81,7 @@ impl Daemon {
         let memory = memory::InMemory::new();
         tracing::info!("using in-memory backend");
 
-        let skills_dir = config_dir.join(config::SKILLS_DIR);
+        let skills_dir = config_dir.join(wcore::paths::SKILLS_DIR);
         let skills = hook::skill::SkillHandler::load(skills_dir).unwrap_or_else(|e| {
             tracing::warn!("failed to load skills: {e}");
             hook::skill::SkillHandler::load(PathBuf::new()).expect("empty skill handler")
@@ -116,7 +116,7 @@ impl Daemon {
         runtime: &mut Runtime<ProviderManager, DaemonHook>,
         config_dir: &Path,
     ) -> Result<()> {
-        let agents = crate::config::load_agents_dir(&config_dir.join(config::AGENTS_DIR))?;
+        let agents = crate::config::load_agents_dir(&config_dir.join(wcore::paths::AGENTS_DIR))?;
         runtime.add_agent(wcore::parse_agent_md(SYSTEM_AGENT)?);
         for agent in agents {
             tracing::info!("registered agent '{}'", agent.name);

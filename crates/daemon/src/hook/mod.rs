@@ -5,13 +5,10 @@
 //! delegates to all sub-hooks in sequence. `dispatch_tool` routes every
 //! agent tool call by name — the single entry point from `event.rs`.
 
-use crate::{
-    config::{GLOBAL_CONFIG_DIR, WORK_DIR},
-    hook::{
-        mcp::{CallMcpToolInput, McpHandler, SearchMcpInput},
-        os::OsHook,
-        skill::{LoadSkillInput, SearchSkillInput, SkillHandler, loader},
-    },
+use crate::hook::{
+    mcp::{CallMcpToolInput, McpHandler, SearchMcpInput},
+    os::OsHook,
+    skill::{LoadSkillInput, SearchSkillInput, SkillHandler, loader},
 };
 use memory::InMemory;
 use wcore::{
@@ -42,7 +39,7 @@ impl DaemonHook {
             memory,
             skills,
             mcp,
-            os: OsHook::new(GLOBAL_CONFIG_DIR.join(WORK_DIR)),
+            os: OsHook::new(wcore::paths::CONFIG_DIR.join(wcore::paths::WORK_DIR)),
         }
     }
 

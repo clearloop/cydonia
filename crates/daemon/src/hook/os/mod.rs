@@ -2,7 +2,7 @@
 //!
 //! [`OsHook`] registers `read`, `write`, and `bash` tool schemas and provides
 //! async dispatch methods. All operations are confined to a sandbox root
-//! (`~/.walrus/work/`). Paths that exist as real absolute paths on the host
+//! (`~/.openwalrus/work/`). Paths that exist as real absolute paths on the host
 //! filesystem are rejected with an "operation out of sandbox" error.
 
 use schemars::JsonSchema;
@@ -138,7 +138,7 @@ fn validate_path(input: &str, work_dir: &Path) -> Result<PathBuf, String> {
 
 #[derive(Deserialize, JsonSchema)]
 struct ReadInput {
-    /// Sandbox-relative path to the file to read (e.g. `/notes.txt` reads `~/.walrus/work/notes.txt`)
+    /// Sandbox-relative path to the file to read (e.g. `/notes.txt` reads `~/.openwalrus/work/notes.txt`)
     path: String,
 }
 
@@ -165,8 +165,9 @@ struct BashInput {
 fn read_schema() -> Tool {
     Tool {
         name: "read".into(),
-        description: "Read a file at a sandbox-relative path. Paths resolve under ~/.walrus/work/."
-            .into(),
+        description:
+            "Read a file at a sandbox-relative path. Paths resolve under ~/.openwalrus/work/."
+                .into(),
         parameters: schemars::schema_for!(ReadInput),
         strict: false,
     }
@@ -175,7 +176,7 @@ fn read_schema() -> Tool {
 fn write_schema() -> Tool {
     Tool {
         name: "write".into(),
-        description: "Write content to a file at a sandbox-relative path under ~/.walrus/work/. Creates or overwrites the file.".into(),
+        description: "Write content to a file at a sandbox-relative path under ~/.openwalrus/work/. Creates or overwrites the file.".into(),
         parameters: schemars::schema_for!(WriteInput),
         strict: false,
     }
@@ -184,7 +185,7 @@ fn write_schema() -> Tool {
 fn bash_schema() -> Tool {
     Tool {
         name: "bash".into(),
-        description: "Run a command inside the workspace sandbox (~/.walrus/work/). The working directory is always the sandbox root. Arguments that are real absolute paths on the host are rejected.".into(),
+        description: "Run a command inside the workspace sandbox (~/.openwalrus/work/). The working directory is always the sandbox root. Arguments that are real absolute paths on the host are rejected.".into(),
         parameters: schemars::schema_for!(BashInput),
         strict: false,
     }
