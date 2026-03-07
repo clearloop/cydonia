@@ -97,10 +97,10 @@ impl Local {
     }
 }
 
-/// Walrus HF cache directory: `~/.walrus/hf`.
+/// Walrus HF cache directory: `~/.openwalrus/hf`.
 pub(crate) fn cache_dir() -> PathBuf {
     dirs::home_dir()
         .expect("no home directory")
-        .join(".walrus")
+        .join(".openwalrus")
         .join("hf")
 }

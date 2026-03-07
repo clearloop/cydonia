@@ -116,7 +116,7 @@ pub async fn probe_endpoint() -> String {
 /// Download all files for a model repo, sending progress events to `tx`.
 ///
 /// Uses hf-hub's async API with `download_with_progress()`. Files are
-/// cached in `cache_dir()` (`~/.walrus/hf`), matching the path
+/// cached in `cache_dir()` (`~/.openwalrus/hf`), matching the path
 /// mistralrs reads from.
 pub async fn download_model(
     model_id: &str,

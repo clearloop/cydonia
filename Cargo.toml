@@ -31,6 +31,7 @@ futures-core = "0.3"
 futures-util = "0.3"
 hf-hub = { version = "0.5.0", features = ["tokio"] }
 mistralrs = { version = "0.7", default-features = false }
+openssl-sys = { version = "0.9", features = ["vendored"] }
 reqwest = { version = "0.12", default-features = false, features = [
     "json",
     "stream",
@@ -54,7 +55,7 @@ tokio = { version = "1", features = [
     "sync",
     "time",
 ] }
-teloxide = { version = "0.17", default-features = false, features = ["native-tls"] }
+teloxide = { version = "0.17", default-features = false, features = ["rustls"] }
 toml = "0.8"
 toml_edit = "0.22"
 tracing = "0.1"
