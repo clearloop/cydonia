@@ -8,11 +8,24 @@
 //! directory is controlled by env vars (`HF_HOME`, `HF_ENDPOINT`).
 
 use compact_str::CompactString;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use tokio::sync::watch;
 
 pub mod download;
 mod provider;
+pub mod registry;
+
+/// Total system RAM in bytes, captured once on first access.
+static SYSTEM_MEMORY: LazyLock<u64> = LazyLock::new(|| {
+    use sysinfo::System;
+    let sys = System::new_all();
+    sys.total_memory()
+});
+
+/// Return total system RAM in bytes.
+pub fn system_memory() -> u64 {
+    *SYSTEM_MEMORY
+}
 
 /// Internal state of a lazy-loaded local model.
 #[derive(Clone)]
@@ -62,14 +75,23 @@ impl Local {
         let mid = CompactString::from(model_id);
         let id = mid.clone();
 
-        let handle = tokio::runtime::Handle::current();
-        tokio::task::spawn_blocking(move || {
-            handle.block_on(async move {
+        // Dedicated OS thread with its own tokio runtime for model loading.
+        // Everything (endpoint probe + model build) runs off the main runtime
+        // so the daemon socket is never blocked.
+        std::thread::spawn(move || {
+            let rt = match tokio::runtime::Runtime::new() {
+                Ok(rt) => rt,
+                Err(e) => {
+                    let _ = tx.send(LocalState::Failed(e.to_string()));
+                    return;
+                }
+            };
+            let result = rt.block_on(async {
                 let endpoint = crate::local::download::probe_endpoint().await;
                 tracing::info!("lazy load: using hf endpoint: {endpoint}");
                 unsafe { std::env::set_var("HF_ENDPOINT", &endpoint) };
 
-                let result = match loader {
+                match loader {
                     crate::config::Loader::Text => {
                         Self::build_text(&id, isq, chat_template.as_deref()).await
                     }
@@ -82,19 +104,19 @@ impl Local {
                     other => Err(anyhow::anyhow!(
                         "loader {other:?} requires adapter configuration (not yet supported)"
                     )),
-                };
-
-                match result {
-                    Ok(model) => {
-                        tracing::info!("local model '{id}' loaded successfully");
-                        let _ = tx.send(LocalState::Ready(Arc::new(model)));
-                    }
-                    Err(e) => {
-                        tracing::error!("local model '{id}' failed to load: {e}");
-                        let _ = tx.send(LocalState::Failed(e.to_string()));
-                    }
                 }
             });
+
+            match result {
+                Ok(model) => {
+                    tracing::info!("local model '{id}' loaded successfully");
+                    let _ = tx.send(LocalState::Ready(Arc::new(model)));
+                }
+                Err(e) => {
+                    tracing::error!("local model '{id}' failed to load: {e}");
+                    let _ = tx.send(LocalState::Failed(e.to_string()));
+                }
+            }
         });
 
         Self {

@@ -1,0 +1,14 @@
+[defaults]
+text = "qwen3-4b"
+vision = "qwen3-vl-4b"
+quantization = "afq4"
+
+[quantizations]
+afq2 = "AFQ2"
+afq3 = "AFQ3"
+afq4 = "AFQ4"
+afq6 = "AFQ6"
+afq8 = "AFQ8"
+hqq4 = "HQQ4"
+hqq8 = "HQQ8"
+f8e4m3 = "F8E4M3"

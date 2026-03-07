@@ -24,7 +24,6 @@ impl Default for ModelConfig {
                     model: "deepseek-chat".into(),
                     api_key: None,
                     base_url: None,
-                    loader: None,
                     quantization: None,
                     chat_template: None,
                 },
@@ -37,20 +36,10 @@ impl Default for ModelConfig {
 #[cfg(feature = "local")]
 impl Default for ModelConfig {
     fn default() -> Self {
+        let entry = model::local::registry::default_text();
         Self {
             default: DefaultModels::default(),
-            providers: [(
-                "local".into(),
-                ProviderConfig {
-                    model: "Qwen/Qwen3-4B".into(),
-                    api_key: None,
-                    base_url: None,
-                    loader: None,
-                    quantization: None,
-                    chat_template: None,
-                },
-            )]
-            .into(),
+            providers: [("local".into(), entry.to_provider_config())].into(),
         }
     }
 }
@@ -82,9 +71,12 @@ impl Default for DefaultModels {
 #[cfg(feature = "local")]
 impl Default for DefaultModels {
     fn default() -> Self {
+        let text_entry = model::local::registry::default_text();
+        let vision =
+            model::local::registry::default_vision().map(|e| CompactString::from(e.model_id));
         Self {
-            text: "Qwen/Qwen3-4B".into(),
-            vision: None,
+            text: CompactString::from(text_entry.model_id),
+            vision,
             embedding: None,
         }
     }

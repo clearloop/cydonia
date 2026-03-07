@@ -64,6 +64,23 @@ impl Server for Daemon {
         {
             use tokio::sync::mpsc;
             async_stream::try_stream! {
+                // Check memory threshold from registry before downloading.
+                if let Some(entry) = model::local::registry::find(&req.model) {
+                    if !entry.fits() {
+                        let required = entry.memory_requirement().unwrap_or_default();
+                        let actual = model::local::system_memory() / (1024 * 1024 * 1024);
+                        Err(anyhow::anyhow!(
+                            "model '{}' requires at least {} RAM, your system has {}GB",
+                            entry.name, required, actual
+                        ))?;
+                    }
+                } else {
+                    tracing::warn!(
+                        "model '{}' is not in the registry — downloading anyway",
+                        req.model
+                    );
+                }
+
                 yield DownloadEvent::Start { model: req.model.clone() };
 
                 let (dtx, mut drx) = mpsc::unbounded_channel();

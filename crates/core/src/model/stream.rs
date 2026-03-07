@@ -36,6 +36,20 @@ impl StreamChunk {
         }
     }
 
+    /// Create a content-only chunk with the given text.
+    pub fn text(content: String) -> Self {
+        Self {
+            choices: vec![Choice {
+                delta: Delta {
+                    content: Some(content),
+                    ..Default::default()
+                },
+                ..Default::default()
+            }],
+            ..Default::default()
+        }
+    }
+
     /// Create a separator chunk (newline) emitted between tool-call rounds.
     pub fn separator() -> Self {
         Self {

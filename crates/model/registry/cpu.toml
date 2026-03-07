@@ -1,0 +1,16 @@
+[defaults]
+text = "qwen3-4b"
+
+[quantizations]
+q4_0 = "Q4_0"
+q4_1 = "Q4_1"
+q5_0 = "Q5_0"
+q5_1 = "Q5_1"
+q8_0 = "Q8_0"
+q8_1 = "Q8_1"
+q2k = "Q2K"
+q3k = "Q3K"
+q4k = "Q4K"
+q5k = "Q5K"
+q6k = "Q6K"
+q8k = "Q8K"

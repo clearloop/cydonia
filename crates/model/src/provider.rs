@@ -66,7 +66,11 @@ pub async fn build_provider(config: &ProviderConfig, client: reqwest::Client) ->
         }
         #[cfg(feature = "local")]
         ProviderKind::Local => {
-            let loader = config.loader.unwrap_or_default();
+            let entry = crate::local::registry::find(&config.model);
+            let loader = entry.map(|e| e.loader).unwrap_or_default();
+            if entry.is_none() {
+                tracing::warn!("model '{}' is not in the registry", config.model);
+            }
             let isq = config.quantization.map(|q| q.to_isq());
             let chat_template = config.chat_template.clone();
             let local = crate::local::Local::lazy(&config.model, loader, isq, chat_template);
