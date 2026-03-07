@@ -99,6 +99,12 @@ memory = "32gb"
 model_id = "mistralai/Devstral-Small-2507"
 loader = "text"
 
+[models.glm-47-flash]
+name = "GLM 4.7 Flash"
+memory = "32gb"
+model_id = "zai-org/GLM-4.7-Flash"
+loader = "text"
+
 # ── XLarge (64 GB) ───────────────────────────────────────────────
 
 [models.qwen3-32b]
