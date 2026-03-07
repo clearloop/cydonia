@@ -14,3 +14,77 @@ q4k = "Q4K"
 q5k = "Q5K"
 q6k = "Q6K"
 q8k = "Q8K"
+
+# ── Tiny (4 GB) ──────────────────────────────────────────────────
+
+[models.qwen3-06b]
+name = "Qwen3 0.6B"
+memory = "4gb"
+model_id = "Qwen/Qwen3-0.6B-Instruct-2507-GGUF"
+loader = "gguf"
+
+[models.qwen3-17b]
+name = "Qwen3 1.7B"
+memory = "4gb"
+model_id = "Qwen/Qwen3-1.7B-Instruct-2507-GGUF"
+loader = "gguf"
+
+[models.smollm2-17b]
+name = "SmolLM2 1.7B"
+memory = "4gb"
+model_id = "HuggingFaceTB/SmolLM2-1.7B-Instruct-GGUF"
+loader = "gguf"
+
+# ── Small (8 GB) ─────────────────────────────────────────────────
+
+[models.qwen3-4b]
+name = "Qwen3 4B"
+memory = "8gb"
+model_id = "Qwen/Qwen3-4B-Instruct-2507-GGUF"
+loader = "gguf"
+
+[models.phi-4-mini]
+name = "Phi-4 Mini"
+memory = "8gb"
+model_id = "microsoft/Phi-4-mini-instruct-gguf"
+loader = "gguf"
+
+[models.gemma-3-4b]
+name = "Gemma 3 4B"
+memory = "8gb"
+model_id = "google/gemma-3-4b-it-GGUF"
+loader = "gguf"
+
+# ── Medium (16 GB) ───────────────────────────────────────────────
+
+[models.qwen3-8b]
+name = "Qwen3 8B"
+memory = "16gb"
+model_id = "Qwen/Qwen3-8B-Instruct-2507-GGUF"
+loader = "gguf"
+
+[models.llama31-8b]
+name = "Llama 3.1 8B"
+memory = "16gb"
+model_id = "meta-llama/Llama-3.1-8B-Instruct-GGUF"
+loader = "gguf"
+
+[models.mistral-7b]
+name = "Mistral 7B"
+memory = "16gb"
+model_id = "mistralai/Mistral-7B-Instruct-v0.3-GGUF"
+loader = "gguf"
+
+# ── Large (32 GB) ────────────────────────────────────────────────
+
+[models.qwen3-14b]
+name = "Qwen3 14B"
+memory = "32gb"
+model_id = "Qwen/Qwen3-14B-Instruct-2507-GGUF"
+loader = "gguf"
+
+[models.qwen25-coder-14b]
+name = "Qwen2.5 Coder 14B"
+memory = "32gb"
+model_id = "Qwen/Qwen2.5-Coder-14B-Instruct-GGUF"
+loader = "gguf"

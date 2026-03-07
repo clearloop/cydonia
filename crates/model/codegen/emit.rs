@@ -1,6 +1,6 @@
 //! Rust code generation from parsed registry data.
 
-use super::parse::{ModelsFile, PlatformFile, PlatformVariant};
+use super::parse::{ModelEntry as ParsedModel, PlatformFile};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use std::path::Path;
@@ -120,28 +120,11 @@ pub fn write_quantization(platform: &PlatformFile, out_dir: &Path) {
 }
 
 /// Generate `registry.rs` containing `ModelEntry`, `MODELS`, `PlatformDefaults`, `DEFAULTS`.
-pub fn write_registry(
-    platform: &PlatformFile,
-    models: &ModelsFile,
-    platform_name: &str,
-    out_dir: &Path,
-) {
-    let entries: Vec<TokenStream> = models
+pub fn write_registry(platform: &PlatformFile, out_dir: &Path) {
+    let entries: Vec<TokenStream> = platform
+        .models
         .iter()
-        .filter_map(|(key, model_def)| {
-            let pv = match platform_name {
-                "metal" => model_def.metal.as_ref(),
-                "cuda" => model_def.cuda.as_ref(),
-                "cpu" => model_def.cpu.as_ref(),
-                _ => None,
-            }?;
-            Some(model_entry_tokens(
-                key,
-                &model_def.name,
-                pv,
-                &model_def.memory,
-            ))
-        })
+        .map(|(key, entry)| model_entry_tokens(key, entry))
         .collect();
 
     let text_default = &platform.defaults.text;
@@ -235,10 +218,11 @@ fn option_str_tokens(s: Option<&str>) -> TokenStream {
     }
 }
 
-fn model_entry_tokens(key: &str, name: &str, pv: &PlatformVariant, memory: &str) -> TokenStream {
-    let loader = loader_tokens(&pv.loader);
-    let mem = memory_tokens(memory);
-    let model_id = &pv.model_id;
+fn model_entry_tokens(key: &str, entry: &ParsedModel) -> TokenStream {
+    let name = &entry.name;
+    let model_id = &entry.model_id;
+    let loader = loader_tokens(&entry.loader);
+    let mem = memory_tokens(&entry.memory);
 
     quote! {
         ModelEntry {

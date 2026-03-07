@@ -1,7 +1,7 @@
 //! Model registry code generation.
 //!
-//! Reads TOML files from `registry/` and generates Rust source files into
-//! `OUT_DIR`. Called from `build.rs`.
+//! Reads a single platform TOML from `registry/` and generates Rust source
+//! files into `OUT_DIR`. Called from `build.rs`.
 
 mod emit;
 mod parse;
@@ -24,17 +24,10 @@ pub fn run() {
     };
 
     let platform_path = registry_dir.join(format!("{platform_name}.toml"));
-    let models_path = registry_dir.join("models.toml");
-
     let platform = parse::load_platform(&platform_path);
-    let models = parse::load_models(&models_path);
 
     emit::write_quantization(&platform, &out_dir);
-    emit::write_registry(&platform, &models, platform_name, &out_dir);
+    emit::write_registry(&platform, &out_dir);
 
-    // Rerun if any registry file changes.
-    println!("cargo::rerun-if-changed=registry/metal.toml");
-    println!("cargo::rerun-if-changed=registry/cuda.toml");
-    println!("cargo::rerun-if-changed=registry/cpu.toml");
-    println!("cargo::rerun-if-changed=registry/models.toml");
+    println!("cargo::rerun-if-changed={}", platform_path.display());
 }
