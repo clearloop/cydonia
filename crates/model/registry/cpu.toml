@@ -1,20 +1,6 @@
 [defaults]
 text = "qwen3-4b"
 
-[quantizations]
-q4_0 = "Q4_0"
-q4_1 = "Q4_1"
-q5_0 = "Q5_0"
-q5_1 = "Q5_1"
-q8_0 = "Q8_0"
-q8_1 = "Q8_1"
-q2k = "Q2K"
-q3k = "Q3K"
-q4k = "Q4K"
-q5k = "Q5K"
-q6k = "Q6K"
-q8k = "Q8K"
-
 # ── Tiny (4 GB) ──────────────────────────────────────────────────
 
 [models.qwen3-06b]
@@ -33,6 +19,12 @@ loader = "gguf"
 name = "SmolLM2 1.7B"
 memory = "4gb"
 model_id = "HuggingFaceTB/SmolLM2-1.7B-Instruct-GGUF"
+loader = "gguf"
+
+[models.gemma-3-1b]
+name = "Gemma 3 1B"
+memory = "4gb"
+model_id = "google/gemma-3-1b-it-GGUF"
 loader = "gguf"
 
 # ── Small (8 GB) ─────────────────────────────────────────────────

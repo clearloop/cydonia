@@ -1,24 +1,5 @@
 [defaults]
 text = "qwen3-4b"
-vision = "qwen3-vl-4b"
-quantization = "q4k"
-
-[quantizations]
-q4_0 = "Q4_0"
-q4_1 = "Q4_1"
-q5_0 = "Q5_0"
-q5_1 = "Q5_1"
-q8_0 = "Q8_0"
-q8_1 = "Q8_1"
-q2k = "Q2K"
-q3k = "Q3K"
-q4k = "Q4K"
-q5k = "Q5K"
-q6k = "Q6K"
-q8k = "Q8K"
-hqq4 = "HQQ4"
-hqq8 = "HQQ8"
-f8e4m3 = "F8E4M3"
 
 # ── Tiny (4 GB) ──────────────────────────────────────────────────
 
@@ -40,6 +21,18 @@ memory = "4gb"
 model_id = "HuggingFaceTB/SmolLM2-1.7B-Instruct"
 loader = "text"
 
+[models.gemma-3-1b]
+name = "Gemma 3 1B"
+memory = "4gb"
+model_id = "google/gemma-3-1b-it"
+loader = "text"
+
+[models.phi-4-mini-flash]
+name = "Phi-4 Mini Flash"
+memory = "4gb"
+model_id = "microsoft/Phi-4-mini-flash-reasoning"
+loader = "text"
+
 # ── Small (8 GB) ─────────────────────────────────────────────────
 
 [models.qwen3-4b]
@@ -58,6 +51,12 @@ loader = "text"
 name = "Gemma 3 4B"
 memory = "8gb"
 model_id = "google/gemma-3-4b-it"
+loader = "text"
+
+[models.gemma-3n-e4b]
+name = "Gemma 3n E4B"
+memory = "8gb"
+model_id = "google/gemma-3n-E4B-it"
 loader = "text"
 
 # ── Medium (16 GB) ───────────────────────────────────────────────
@@ -138,4 +137,16 @@ loader = "vision"
 name = "Qwen2.5 VL 7B"
 memory = "16gb"
 model_id = "Qwen/Qwen2.5-VL-7B-Instruct"
+loader = "vision"
+
+[models.qwen3-vl-32b]
+name = "Qwen3 VL 32B"
+memory = "32gb"
+model_id = "Qwen/Qwen3-VL-32B-Instruct"
+loader = "vision"
+
+[models.qwen3-vl-72b]
+name = "Qwen3 VL 72B"
+memory = "64gb"
+model_id = "Qwen/Qwen3-VL-72B-Instruct"
 loader = "vision"

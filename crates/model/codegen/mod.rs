@@ -9,7 +9,7 @@ mod parse;
 /// Run the code generation.
 ///
 /// Reads `CARGO_FEATURE_METAL` / `CARGO_FEATURE_CUDA` to select the
-/// platform, then generates `quantization.rs` and `registry.rs`.
+/// platform, then generates `MemoryThreshold` and `registry.rs`.
 pub fn run() {
     let out_dir = std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap());
     let registry_dir = std::path::Path::new("registry");
@@ -26,7 +26,7 @@ pub fn run() {
     let platform_path = registry_dir.join(format!("{platform_name}.toml"));
     let platform = parse::load_platform(&platform_path);
 
-    emit::write_quantization(&platform, &out_dir);
+    emit::write_memory_threshold(&out_dir);
     emit::write_registry(&platform, &out_dir);
 
     println!("cargo::rerun-if-changed={}", platform_path.display());

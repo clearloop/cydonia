@@ -67,20 +67,21 @@ impl Daemon {
 
     /// Construct the provider manager from config.
     ///
-    /// Local models come from the built-in registry. Remote providers come
-    /// from `config.model.providers`.
+    /// Loads a single local model from the registry (if local feature enabled)
+    /// and any remote providers from config. Only one local model is active
+    /// at a time to avoid memory pressure.
     async fn build_providers(config: &DaemonConfig) -> Result<ProviderManager> {
-        let manager = ProviderManager::new(config.model.default.text.clone());
+        let manager = ProviderManager::new(config.model.default.clone());
 
-        // Add local models from the registry.
+        // Add the single default local model from the registry.
         #[cfg(feature = "local")]
         {
-            let text = model::local::registry::default_text();
-            let local = model::local::registry::build_local(text);
-            manager.add_provider(text.model_id, model::Provider::Local(local));
-            if let Some(vision) = model::local::registry::default_vision() {
-                let local = model::local::registry::build_local(vision);
-                manager.add_provider(vision.model_id, model::Provider::Local(local));
+            if let Some(entry) = model::local::registry::find(&config.model.default) {
+                let local = model::local::registry::build_local(entry);
+                manager.add_provider(entry.model_id, model::Provider::Local(local));
+            } else if let Some(entry) = model::local::registry::find_by_key(&config.model.default) {
+                let local = model::local::registry::build_local(entry);
+                manager.add_provider(entry.model_id, model::Provider::Local(local));
             }
         }
 

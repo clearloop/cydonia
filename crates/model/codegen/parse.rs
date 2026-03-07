@@ -5,21 +5,18 @@ use std::{collections::BTreeMap, fs, path::Path};
 
 /// Platform configuration parsed from `{platform}.toml`.
 ///
-/// Each platform TOML is self-contained: defaults, quantizations,
-/// and the full model list for that platform.
+/// Each platform TOML is self-contained: defaults and the full model
+/// list for that platform.
 #[derive(Debug, Deserialize)]
 pub struct PlatformFile {
     pub defaults: PlatformDefaults,
-    pub quantizations: BTreeMap<String, String>,
     pub models: BTreeMap<String, ModelEntry>,
 }
 
-/// Default model keys and quantization for a platform.
+/// Default model key for a platform.
 #[derive(Debug, Deserialize)]
 pub struct PlatformDefaults {
     pub text: String,
-    pub vision: Option<String>,
-    pub quantization: Option<String>,
 }
 
 /// A single model entry within a platform TOML.
