@@ -42,7 +42,12 @@ impl Server for Daemon {
                     AgentEvent::TextDelta(text) => {
                         yield StreamEvent::Chunk { content: text };
                     }
-                    AgentEvent::Done(_) => break,
+                    AgentEvent::Done(resp) => {
+                        if let wcore::AgentStopReason::Error(e) = &resp.stop_reason {
+                            Err(anyhow::anyhow!("{e}"))?;
+                        }
+                        break;
+                    }
                     _ => {}
                 }
             }

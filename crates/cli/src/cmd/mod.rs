@@ -32,7 +32,7 @@ pub struct Cli {
 impl Cli {
     /// Resolve the agent name from CLI flags or fall back to "assistant".
     pub fn resolve_agent(&self) -> CompactString {
-        self.agent.clone().unwrap_or_else(|| "assistant".into())
+        self.agent.clone().unwrap_or_else(|| "System".into())
     }
 
     /// Resolve the socket path from CLI flag or default.

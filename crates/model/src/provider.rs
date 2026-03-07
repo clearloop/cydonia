@@ -66,33 +66,10 @@ pub async fn build_provider(config: &ProviderConfig, client: reqwest::Client) ->
         }
         #[cfg(feature = "local")]
         ProviderKind::Local => {
-            use crate::config::Loader;
-
-            // Auto-switch HF registry so mistralrs uses the fastest endpoint.
-            let endpoint = crate::local::download::probe_endpoint().await;
-            tracing::info!("using hf endpoint: {endpoint}");
-            unsafe { std::env::set_var("HF_ENDPOINT", &endpoint) };
-
             let loader = config.loader.unwrap_or_default();
             let isq = config.quantization.map(|q| q.to_isq());
-            let chat_template = config.chat_template.as_deref();
-            let local = match loader {
-                Loader::Text => {
-                    crate::local::Local::from_text(&config.model, isq, chat_template).await?
-                }
-                Loader::Gguf => {
-                    crate::local::Local::from_gguf(&config.model, chat_template).await?
-                }
-                Loader::Vision => {
-                    crate::local::Local::from_vision(&config.model, isq, chat_template).await?
-                }
-                Loader::Lora | Loader::XLora | Loader::GgufLora | Loader::GgufXLora => {
-                    anyhow::bail!(
-                        "loader {:?} requires adapter configuration (not yet supported)",
-                        loader
-                    );
-                }
-            };
+            let chat_template = config.chat_template.clone();
+            let local = crate::local::Local::lazy(&config.model, loader, isq, chat_template);
             return Ok(Provider::Local(local));
         }
         #[cfg(not(feature = "local"))]

@@ -1,6 +1,6 @@
 //! Model trait implementation for the Local provider.
 
-use super::Local;
+use crate::local::Local;
 use anyhow::Result;
 use async_stream::try_stream;
 use compact_str::CompactString;
@@ -13,8 +13,9 @@ use wcore::model::{
 
 impl Model for Local {
     async fn send(&self, request: &wcore::model::Request) -> Result<Response> {
+        let model = self.ready_model()?;
         let mr_request = build_request(request);
-        let resp = self.model.send_chat_request(mr_request).await?;
+        let resp = model.send_chat_request(mr_request).await?;
         Ok(to_response(resp))
     }
 
@@ -22,8 +23,9 @@ impl Model for Local {
         &self,
         request: wcore::model::Request,
     ) -> impl Stream<Item = Result<StreamChunk>> + Send {
-        let model = self.model.clone();
+        let model_result = self.ready_model();
         try_stream! {
+            let model = model_result?;
             let mr_request = build_request(&request);
             let mut stream = model.stream_chat_request(mr_request).await?;
             while let Some(resp) = stream.next().await {
@@ -51,7 +53,7 @@ impl Model for Local {
     }
 
     fn active_model(&self) -> CompactString {
-        CompactString::from("local")
+        self.model_id.clone()
     }
 }
 
