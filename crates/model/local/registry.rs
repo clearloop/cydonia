@@ -79,7 +79,7 @@ fn recommend_gguf_file(entry: &ModelEntry, headroom: u64) -> Option<String> {
 
 /// Pick ISQ type based on available memory headroom.
 ///
-/// Platform-specific: Metal uses AFQ variants, CUDA uses Q/K variants.
+/// Platform-specific: Metal uses AFQ variants, CUDA and CPU use Q/K variants.
 /// More headroom → higher-bit quantization → better quality.
 #[cfg(feature = "metal")]
 fn recommend_isq(headroom: u64) -> Option<mistralrs::IsqType> {
@@ -104,9 +104,14 @@ fn recommend_isq(headroom: u64) -> Option<mistralrs::IsqType> {
 }
 
 #[cfg(not(any(feature = "metal", feature = "cuda")))]
-fn recommend_isq(_headroom: u64) -> Option<mistralrs::IsqType> {
-    // CPU platform uses GGUF models only (pre-quantized).
-    None
+fn recommend_isq(headroom: u64) -> Option<mistralrs::IsqType> {
+    Some(if headroom >= 16 * GB {
+        mistralrs::IsqType::Q8K
+    } else if headroom >= 8 * GB {
+        mistralrs::IsqType::Q6K
+    } else {
+        mistralrs::IsqType::Q4K
+    })
 }
 
 impl ModelEntry {
