@@ -5,14 +5,15 @@
 //! delegates to all sub-hooks in sequence. `dispatch_tool` routes every
 //! agent tool call by name — the single entry point from `event.rs`.
 
-use crate::hook::{
-    os::OsHook,
-    skill::{SkillHandler, loader},
+use crate::{
+    config::{GLOBAL_CONFIG_DIR, WORK_DIR},
+    hook::{
+        mcp::{CallMcpToolInput, McpHandler, SearchMcpInput},
+        os::OsHook,
+        skill::{LoadSkillInput, SearchSkillInput, SkillHandler, loader},
+    },
 };
-use mcp::McpHandler;
 use memory::InMemory;
-use schemars::JsonSchema;
-use serde::Deserialize;
 use wcore::{
     AgentConfig, AgentEvent, Hook, Memory, RecallInput, RecallOptions, RememberInput, ToolRegistry,
     model::Tool,
@@ -41,7 +42,7 @@ impl DaemonHook {
             memory,
             skills,
             mcp,
-            os: OsHook,
+            os: OsHook::new(GLOBAL_CONFIG_DIR.join(WORK_DIR)),
         }
     }
 
@@ -60,6 +61,7 @@ impl DaemonHook {
             "load_skill" => self.dispatch_load_skill(args).await,
             "read" => self.os.dispatch_read(args).await,
             "write" => self.os.dispatch_write(args).await,
+            "bash" => self.os.dispatch_bash(args).await,
             name => {
                 tracing::debug!(tool = name, "forwarding tool to MCP bridge");
                 let bridge = self.mcp.bridge().await;
@@ -229,32 +231,6 @@ impl Hook for DaemonHook {
             }
         }
     }
-}
-
-#[derive(Deserialize, JsonSchema)]
-struct SearchMcpInput {
-    /// Keyword to match tool names and descriptions
-    query: String,
-}
-
-#[derive(Deserialize, JsonSchema)]
-struct CallMcpToolInput {
-    /// Tool name
-    name: String,
-    /// JSON-encoded arguments string
-    args: Option<String>,
-}
-
-#[derive(Deserialize, JsonSchema)]
-struct SearchSkillInput {
-    /// Keyword to match skill names and descriptions
-    query: String,
-}
-
-#[derive(Deserialize, JsonSchema)]
-struct LoadSkillInput {
-    /// Skill name
-    name: String,
 }
 
 impl DaemonHook {

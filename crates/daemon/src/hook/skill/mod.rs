@@ -4,6 +4,7 @@
 //! YAML frontmatter (agentskills.io format). The [`SkillRegistry`] indexes
 //! skills by tags for dynamic discovery via `search_skill` and `load_skill`.
 
+pub(crate) use handler::{LoadSkillInput, SearchSkillInput};
 pub use {
     handler::SkillHandler,
     registry::{Skill, SkillRegistry},

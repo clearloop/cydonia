@@ -6,10 +6,26 @@
 //! `on_register_tools` registers only tool schemas — dispatch is handled
 //! statically by the daemon event loop via [`McpBridge::call`].
 
+use schemars::JsonSchema;
+use serde::Deserialize;
 pub use {bridge::McpBridge, handler::McpHandler};
 
 mod bridge;
 mod handler;
+
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct SearchMcpInput {
+    /// Keyword to match tool names and descriptions
+    pub query: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct CallMcpToolInput {
+    /// Tool name
+    pub name: String,
+    /// JSON-encoded arguments string
+    pub args: Option<String>,
+}
 
 impl wcore::Hook for McpHandler {
     fn on_register_tools(
