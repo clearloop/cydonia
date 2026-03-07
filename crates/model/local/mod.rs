@@ -101,9 +101,6 @@ impl Local {
                     crate::config::Loader::Vision => {
                         Self::build_vision(&id, isq, chat_template.as_deref()).await
                     }
-                    other => Err(anyhow::anyhow!(
-                        "loader {other:?} requires adapter configuration (not yet supported)"
-                    )),
                 }
             });
 

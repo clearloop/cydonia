@@ -151,19 +151,8 @@ pub enum Loader {
     /// `TextModelBuilder` — standard text models.
     #[default]
     Text,
-    /// `LoraModelBuilder` — LoRA adapter models.
-    Lora,
-    /// `XLoraModelBuilder` — X-LoRA adapter models.
-    #[serde(rename = "xlora")]
-    XLora,
     /// `GgufModelBuilder` — GGUF quantized models.
     Gguf,
-    /// `GgufLoraModelBuilder` — GGUF + LoRA.
-    #[serde(rename = "gguf_lora")]
-    GgufLora,
-    /// `GgufXLoraModelBuilder` — GGUF + X-LoRA.
-    #[serde(rename = "gguf_xlora")]
-    GgufXLora,
     /// `VisionModelBuilder` — vision-language models.
     Vision,
 }

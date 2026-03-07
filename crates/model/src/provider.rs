@@ -71,7 +71,7 @@ pub async fn build_provider(config: &ProviderConfig, client: reqwest::Client) ->
             if entry.is_none() {
                 tracing::warn!("model '{}' is not in the registry", config.model);
             }
-            let isq = config.quantization.map(|q| q.to_isq());
+            let isq = config.quantization.as_ref().map(|q| q.to_isq());
             let chat_template = config.chat_template.clone();
             let local = crate::local::Local::lazy(&config.model, loader, isq, chat_template);
             return Ok(Provider::Local(local));
