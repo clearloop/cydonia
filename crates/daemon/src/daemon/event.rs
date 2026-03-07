@@ -19,7 +19,7 @@ use wcore::{
 };
 
 /// Inbound event from any source, processed by the central event loop.
-pub(crate) enum DaemonEvent {
+pub enum DaemonEvent {
     /// A client message from any source (socket, telegram, discord).
     /// Reply channel streams `ServerMessage`s back to the caller.
     Message {
@@ -35,7 +35,7 @@ pub(crate) enum DaemonEvent {
 }
 
 /// Shorthand for the event sender half of the daemon event channel.
-pub(crate) type DaemonEventSender = mpsc::UnboundedSender<DaemonEvent>;
+pub type DaemonEventSender = mpsc::UnboundedSender<DaemonEvent>;
 
 // ── Event dispatch ───────────────────────────────────────────────────
 
