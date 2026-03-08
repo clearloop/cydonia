@@ -34,7 +34,7 @@ futures-core = "0.3"
 futures-util = "0.3"
 hf-hub = { version = "0.5.0", features = ["tokio"] }
 lancedb = "0.26"
-mistralrs = { version = "0.7", default-features = false }
+mistralrs = { version = "0.7.1-alpha.1", default-features = false, git = "https://github.com/EricLBuehler/mistral.rs.git" }
 openssl-sys = { version = "0.9", features = ["vendored"] }
 reqwest = { version = "0.12", default-features = false, features = [
     "json",
@@ -86,3 +86,6 @@ strip = true
 
 [workspace.metadata.conta]
 packages = ["wcore", "socket", "channel", "memory", "model", "daemon", "cli"]
+
+# [patch.crates-io]
+# mistralrs = { git = "https://github.com/EricLBuehler/mistral.rs.git", branch = "master" }

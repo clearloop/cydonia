@@ -1,5 +1,5 @@
 [defaults]
-text = "qwen3-vl-4b"
+text = "qwen3-4b"
 
 # ── Tiny (4 GB) ──────────────────────────────────────────────────
 
@@ -38,7 +38,7 @@ loader = "text"
 [models.qwen3-4b]
 name = "Qwen3 4B"
 memory = "8gb"
-model_id = "Qwen/Qwen3-4B-Instruct-2507"
+model_id = "Qwen/Qwen3-4B"
 loader = "text"
 
 [models.phi-4-mini]
@@ -150,4 +150,3 @@ name = "Qwen3 VL 32B"
 memory = "32gb"
 model_id = "Qwen/Qwen3-VL-32B-Instruct"
 loader = "vision"
-
