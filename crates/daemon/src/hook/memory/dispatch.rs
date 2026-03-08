@@ -1,6 +1,9 @@
-//! Tool dispatch handlers for remember, recall, and compact.
+//! Tool dispatch handlers for remember, recall, relate, connections, and compact.
 
-use crate::hook::memory::{MemoryHook, MemoryTarget, RecallInput, RememberInput, lance::EntryRow};
+use crate::hook::memory::{
+    ConnectionsInput, MemoryHook, RecallInput, RelateInput, RememberInput,
+    lance::{Direction, EntityRow, RelationRow},
+};
 
 impl MemoryHook {
     /// Dispatch the `remember` tool call.
@@ -12,14 +15,28 @@ impl MemoryHook {
         if input.key.is_empty() {
             return "missing required field: key".to_owned();
         }
+        if !self.is_valid_type(&input.entity_type) {
+            return format!(
+                "unknown entity_type: '{}'. allowed: {}",
+                input.entity_type,
+                self.allowed_types.join(", ")
+            );
+        }
 
-        match input.target {
-            MemoryTarget::Soul => self.write_soul(&input.key, &input.value, agent).await,
-            MemoryTarget::User => self.write_user(&input.key, &input.value).await,
-            MemoryTarget::Store => {
-                self.store_lance(&input.key, &input.value, agent, "fact")
-                    .await
-            }
+        let id = format!("{}:{}:{}", agent, input.entity_type, input.key);
+        let row = EntityRow {
+            id: &id,
+            entity_type: &input.entity_type,
+            key: &input.key,
+            value: &input.value,
+            agent,
+        };
+        match self.lance.upsert_entity(&row).await {
+            Ok(()) => format!(
+                "remembered ({}/{}): {}",
+                input.entity_type, agent, input.key
+            ),
+            Err(e) => format!("failed to store entity: {e}"),
         }
     }
 
@@ -34,82 +51,116 @@ impl MemoryHook {
         }
         let limit = input.limit.unwrap_or(10) as usize;
 
-        match self.lance.search_by_agent(&input.query, agent, limit).await {
-            Ok(entries) if entries.is_empty() => "no memories found".to_owned(),
-            Ok(entries) => entries
+        match self
+            .lance
+            .search_entities(&input.query, agent, input.entity_type.as_deref(), limit)
+            .await
+        {
+            Ok(entities) if entities.is_empty() => "no entities found".to_owned(),
+            Ok(entities) => entities
                 .iter()
-                .map(|e| format!("{}: {}", e.key, e.value))
+                .map(|e| format!("[{}] {}: {}", e.entity_type, e.key, e.value))
                 .collect::<Vec<_>>()
                 .join("\n"),
             Err(e) => format!("recall failed: {e}"),
         }
     }
 
+    /// Dispatch the `relate` tool call.
+    pub(crate) async fn dispatch_relate(&self, args: &str, agent: &str) -> String {
+        let input: RelateInput = match serde_json::from_str(args) {
+            Ok(v) => v,
+            Err(e) => return format!("invalid arguments: {e}"),
+        };
+        if input.source_key.is_empty() || input.target_key.is_empty() {
+            return "missing required field: source_key or target_key".to_owned();
+        }
+        if input.relation.is_empty() {
+            return "missing required field: relation".to_owned();
+        }
+
+        // Look up source entity.
+        let source = match self
+            .lance
+            .find_entity_by_key(&input.source_key, agent)
+            .await
+        {
+            Ok(Some(e)) => e,
+            Ok(None) => return format!("source entity not found: '{}'", input.source_key),
+            Err(e) => return format!("failed to look up source: {e}"),
+        };
+
+        // Look up target entity.
+        let target = match self
+            .lance
+            .find_entity_by_key(&input.target_key, agent)
+            .await
+        {
+            Ok(Some(e)) => e,
+            Ok(None) => return format!("target entity not found: '{}'", input.target_key),
+            Err(e) => return format!("failed to look up target: {e}"),
+        };
+
+        let row = RelationRow {
+            source: &source.id,
+            relation: &input.relation,
+            target: &target.id,
+            agent,
+        };
+        match self.lance.upsert_relation(&row).await {
+            Ok(()) => format!(
+                "related: {} -[{}]-> {}",
+                input.source_key, input.relation, input.target_key
+            ),
+            Err(e) => format!("failed to create relation: {e}"),
+        }
+    }
+
+    /// Dispatch the `connections` tool call.
+    pub(crate) async fn dispatch_connections(&self, args: &str, agent: &str) -> String {
+        let input: ConnectionsInput = match serde_json::from_str(args) {
+            Ok(v) => v,
+            Err(e) => return format!("invalid arguments: {e}"),
+        };
+        if input.key.is_empty() {
+            return "missing required field: key".to_owned();
+        }
+
+        // Look up the entity to get its ID.
+        let entity = match self.lance.find_entity_by_key(&input.key, agent).await {
+            Ok(Some(e)) => e,
+            Ok(None) => return format!("entity not found: '{}'", input.key),
+            Err(e) => return format!("failed to look up entity: {e}"),
+        };
+
+        let direction = match input.direction.as_deref() {
+            Some("incoming") => Direction::Incoming,
+            Some("both") => Direction::Both,
+            _ => Direction::Outgoing,
+        };
+
+        let relations = match self
+            .lance
+            .find_connections(&entity.id, agent, input.relation.as_deref(), direction)
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => return format!("connections query failed: {e}"),
+        };
+
+        if relations.is_empty() {
+            return "no connections found".to_owned();
+        }
+
+        relations
+            .iter()
+            .map(|r| format!("{} -[{}]-> {}", r.source, r.relation, r.target))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
     /// Dispatch the `compact` tool call.
-    ///
-    /// Returns an acknowledgement. Actual compaction is driven by the runtime
-    /// which calls `Hook::on_compact` separately after this tool returns.
     pub(crate) fn dispatch_compact(&self) -> String {
         "compact acknowledged — context compaction will be triggered by the runtime".to_owned()
-    }
-
-    /// Write a key-value pair to SOUL.md for the given agent.
-    async fn write_soul(&self, key: &str, value: &str, agent: &str) -> String {
-        let dir = self.memory_dir.join(agent);
-        if let Err(e) = tokio::fs::create_dir_all(&dir).await {
-            return format!("failed to create agent dir: {e}");
-        }
-        let path = dir.join("SOUL.md");
-        let content: String = tokio::fs::read_to_string(&path).await.unwrap_or_default();
-
-        // Append or update the key in markdown format.
-        let entry = format!("- **{key}**: {value}");
-        let marker = format!("- **{key}**:");
-        let new_content = if let Some(pos) = content.find(&marker) {
-            let end = content[pos..]
-                .find('\n')
-                .map(|i| pos + i + 1)
-                .unwrap_or(content.len());
-            format!("{}{entry}\n{}", &content[..pos], &content[end..])
-        } else if content.is_empty() {
-            format!("# Soul\n\n{entry}\n")
-        } else {
-            format!("{content}{entry}\n")
-        };
-
-        match tokio::fs::write(&path, &new_content).await {
-            Ok(()) => format!("remembered (soul): {key}"),
-            Err(e) => format!("failed to write SOUL.md: {e}"),
-        }
-    }
-
-    /// Write a key-value pair to the global User.toml.
-    async fn write_user(&self, key: &str, value: &str) -> String {
-        let path = self.memory_dir.join("User.toml");
-        let content: String = tokio::fs::read_to_string(&path).await.unwrap_or_default();
-
-        let mut doc = content
-            .parse::<toml_edit::DocumentMut>()
-            .unwrap_or_default();
-        doc[key] = toml_edit::value(value);
-
-        match tokio::fs::write(&path, doc.to_string()).await {
-            Ok(()) => format!("remembered (user): {key}"),
-            Err(e) => format!("failed to write User.toml: {e}"),
-        }
-    }
-
-    /// Store a key-value pair in LanceDB.
-    async fn store_lance(&self, key: &str, value: &str, agent: &str, entry_type: &str) -> String {
-        let row = EntryRow {
-            key,
-            value,
-            agent,
-            entry_type,
-        };
-        match self.lance.upsert(&row).await {
-            Ok(()) => format!("remembered (store): {key}"),
-            Err(e) => format!("failed to store: {e}"),
-        }
     }
 }

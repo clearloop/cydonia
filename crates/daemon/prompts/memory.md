@@ -1,24 +1,42 @@
 ## Memory
 
-You have `remember`, `recall`, and `compact` tools.
+You have graph-based memory with `remember`, `recall`, `relate`, `connections`,
+and `compact` tools.
 
 ### remember
 
-Store durable facts about the user, yourself, or searchable context.
+Store a typed entity in memory.
 
-**target** — where to store:
-- `soul` — your identity, values, and relationship notes (SOUL.md)
-- `user` — user profile: name, timezone, preferences (User.toml)
-- `store` — searchable fact storage in the database
+**entity_type** — the kind of entity:
+- `identity` — your values, personality traits, relationship notes
+- `profile` — user profile: name, timezone, preferences
+- `fact` — durable facts about the world, project context, decisions
+- `preference` — user or agent preferences
+- `person` — people the user mentions
+- `event` — notable events or milestones
+- `concept` — ideas, topics, technical concepts
 
-Use `soul` for things that shape how you engage. Use `user` for user-specific
-facts. Use `store` for project context, decisions, and anything you may need
-to search later.
+**key** — a human-readable name for the entity (e.g. "user_name", "rust style")
+**value** — the content to store
 
 ### recall
 
-Search the database for previously stored facts. Returns the most relevant
-entries by full-text search.
+Search memory entities by query. Optionally filter by `entity_type`. Returns
+the most relevant entities by full-text search.
+
+### relate
+
+Create a directed relation between two entities by key. For example:
+- `relate("Alice", "knows", "Bob")` — Alice knows Bob
+- `relate("user", "prefers", "dark mode")` — user prefers dark mode
+- `relate("bug #42", "caused_by", "race condition")` — causal link
+
+Both entities must already exist (created via `remember`).
+
+### connections
+
+Find entities connected to a given entity (1-hop graph traversal). Optionally
+filter by relation type and direction (`outgoing`, `incoming`, `both`).
 
 ### compact
 
@@ -28,6 +46,6 @@ will summarize the conversation and replace the history with a compact summary.
 ### Guidelines
 
 - **At conversation start**: call `recall` with a brief query to surface context.
-- **When you learn something durable**: call `remember` immediately with the
-  appropriate target.
+- **When you learn something durable**: call `remember` with the right entity type.
+- **When you discover relationships**: call `relate` to build the knowledge graph.
 - **Do not remember** transient details or one-off questions.

@@ -1,11 +1,11 @@
-//! LanceDB operations for the memory hook.
+//! LanceDB graph storage for the memory hook.
 //!
-//! Manages table creation, schema, indexing, upsert via `merge_insert`,
-//! and full-text search via BM25. Adapted from `crates/memory/src/lance/`.
+//! Two tables: `entities` (typed nodes with FTS) and `relations` (directed
+//! edges between entities). All operations scoped by agent name.
 
 use anyhow::Result;
 use arrow_array::{
-    Array, RecordBatch, RecordBatchIterator, StringArray, UInt32Array, UInt64Array, cast::AsArray,
+    Array, RecordBatch, RecordBatchIterator, StringArray, UInt64Array, cast::AsArray,
 };
 use arrow_schema::{DataType, Field, Schema};
 use futures::TryStreamExt;
@@ -16,101 +16,80 @@ use lancedb::{
 };
 use std::{path::Path, sync::Arc};
 
-const TABLE_NAME: &str = "memories";
+const ENTITIES_TABLE: &str = "entities";
+const RELATIONS_TABLE: &str = "relations";
 
-/// Row data for building an Arrow RecordBatch.
-pub(crate) struct EntryRow<'a> {
+/// Row data for an entity.
+pub(crate) struct EntityRow<'a> {
+    pub id: &'a str,
+    pub entity_type: &'a str,
     pub key: &'a str,
     pub value: &'a str,
     pub agent: &'a str,
-    pub entry_type: &'a str,
 }
 
-/// A recalled memory entry from LanceDB.
-pub(crate) struct RecalledEntry {
+/// Row data for a relation.
+pub(crate) struct RelationRow<'a> {
+    pub source: &'a str,
+    pub relation: &'a str,
+    pub target: &'a str,
+    pub agent: &'a str,
+}
+
+/// An entity returned from queries.
+pub(crate) struct EntityResult {
+    pub id: String,
+    pub entity_type: String,
     pub key: String,
     pub value: String,
 }
 
-/// LanceDB handle for the memory table.
+/// A relation returned from queries.
+pub(crate) struct RelationResult {
+    pub source: String,
+    pub relation: String,
+    pub target: String,
+}
+
+/// LanceDB graph store with entities and relations tables.
 pub(crate) struct LanceStore {
     _db: Connection,
-    table: LanceTable,
+    entities: LanceTable,
+    relations: LanceTable,
 }
 
 impl LanceStore {
-    /// Open or create the LanceDB database and memories table.
+    /// Open or create the LanceDB database with entities and relations tables.
     pub async fn open(path: impl AsRef<Path>) -> Result<Self> {
         let db = connect(path.as_ref().to_str().unwrap_or("."))
             .execute()
             .await?;
 
-        let table = match db.open_table(TABLE_NAME).execute().await {
-            Ok(t) => t,
-            Err(_) => {
-                let schema = memory_schema();
-                let batches = RecordBatchIterator::new(std::iter::empty(), Arc::clone(&schema));
-                db.create_table(TABLE_NAME, Box::new(batches))
-                    .execute()
-                    .await?
-            }
-        };
+        let entities = open_or_create(&db, ENTITIES_TABLE, entity_schema()).await?;
+        let relations = open_or_create(&db, RELATIONS_TABLE, relation_schema()).await?;
 
-        let store = Self { _db: db, table };
-        store.ensure_indices().await;
+        let store = Self {
+            _db: db,
+            entities,
+            relations,
+        };
+        store.ensure_entity_indices().await;
+        store.ensure_relation_indices().await;
         Ok(store)
     }
 
-    /// Create indices if they don't already exist. Errors are logged but not fatal.
-    async fn ensure_indices(&self) {
-        // FTS on key+value for BM25 search.
-        if let Err(e) = self
-            .table
-            .create_index(&["key", "value"], Index::FTS(Default::default()))
-            .execute()
-            .await
-        {
-            tracing::warn!("FTS index creation skipped (may already exist): {e}");
-        }
-
-        // BTree on key for exact lookups.
-        if let Err(e) = self
-            .table
-            .create_index(&["key"], Index::BTree(Default::default()))
-            .execute()
-            .await
-        {
-            tracing::warn!("BTree index creation skipped: {e}");
-        }
-
-        // Bitmap on agent for low-cardinality filtering.
-        if let Err(e) = self
-            .table
-            .create_index(&["agent"], Index::Bitmap(Default::default()))
-            .execute()
-            .await
-        {
-            tracing::warn!("Bitmap agent index creation skipped: {e}");
-        }
-
-        // Bitmap on entry_type for low-cardinality filtering.
-        if let Err(e) = self
-            .table
-            .create_index(&["entry_type"], Index::Bitmap(Default::default()))
-            .execute()
-            .await
-        {
-            tracing::warn!("Bitmap entry_type index creation skipped: {e}");
-        }
-    }
-
-    /// Upsert a row via `merge_insert` on the `key` column.
-    pub async fn upsert(&self, row: &EntryRow<'_>) -> Result<()> {
-        let batch = make_batch(row)?;
+    /// Upsert an entity by its id.
+    ///
+    /// Note: `when_matched_update_all` resets `created_at` on update.
+    /// LanceDB merge_insert does not support column exclusion, and a
+    /// read-before-write adds a round-trip per upsert. `updated_at`
+    /// tracks the last modification time; `created_at` is best-effort.
+    pub async fn upsert_entity(&self, row: &EntityRow<'_>) -> Result<()> {
+        let batch = make_entity_batch(row)?;
         let schema = batch.schema();
         let batches = RecordBatchIterator::new(std::iter::once(Ok(batch)), schema);
 
-        let mut merge = self.table.merge_insert(&["key", "agent"]);
+        let mut merge = self.entities.merge_insert(&["id"]);
         merge
             .when_matched_update_all(None)
             .when_not_matched_insert_all();
@@ -118,16 +97,20 @@ impl LanceStore {
         Ok(())
     }
 
-    /// Full-text search scoped by agent name.
-    pub async fn search_by_agent(
+    /// Full-text search on entities, scoped by agent and optional type filter.
+    pub async fn search_entities(
         &self,
         query: &str,
         agent: &str,
+        entity_type: Option<&str>,
         limit: usize,
-    ) -> Result<Vec<RecalledEntry>> {
-        let filter = format!("agent = '{}'", escape_sql(agent));
+    ) -> Result<Vec<EntityResult>> {
+        let mut filter = format!("agent = '{}'", escape_sql(agent));
+        if let Some(et) = entity_type {
+            filter.push_str(&format!(" AND entity_type = '{}'", escape_sql(et)));
+        }
         let batches: Vec<RecordBatch> = self
-            .table
+            .entities
             .query()
             .full_text_search(FullTextSearchQuery::new(query.to_owned()))
             .only_if(filter)
@@ -137,61 +120,297 @@ impl LanceStore {
             .try_collect()
             .await?;
 
-        Ok(batches_to_entries(&batches))
+        Ok(batches_to_entities(&batches))
+    }
+
+    /// Query entities by type and agent (no FTS, returns all matching).
+    pub async fn query_by_type(
+        &self,
+        agent: &str,
+        entity_type: &str,
+        limit: usize,
+    ) -> Result<Vec<EntityResult>> {
+        let filter = format!(
+            "agent = '{}' AND entity_type = '{}'",
+            escape_sql(agent),
+            escape_sql(entity_type)
+        );
+        let batches: Vec<RecordBatch> = self
+            .entities
+            .query()
+            .only_if(filter)
+            .limit(limit)
+            .execute()
+            .await?
+            .try_collect()
+            .await?;
+
+        Ok(batches_to_entities(&batches))
+    }
+
+    /// Look up an entity by key within an agent's scope.
+    pub async fn find_entity_by_key(&self, key: &str, agent: &str) -> Result<Option<EntityResult>> {
+        let filter = format!(
+            "agent = '{}' AND key = '{}'",
+            escape_sql(agent),
+            escape_sql(key)
+        );
+        let batches: Vec<RecordBatch> = self
+            .entities
+            .query()
+            .only_if(filter)
+            .limit(1)
+            .execute()
+            .await?
+            .try_collect()
+            .await?;
+
+        Ok(batches_to_entities(&batches).into_iter().next())
+    }
+
+    /// Upsert a relation (deduplicated by source+relation+target+agent).
+    pub async fn upsert_relation(&self, row: &RelationRow<'_>) -> Result<()> {
+        let batch = make_relation_batch(row)?;
+        let schema = batch.schema();
+        let batches = RecordBatchIterator::new(std::iter::once(Ok(batch)), schema);
+
+        let mut merge = self
+            .relations
+            .merge_insert(&["source", "relation", "target", "agent"]);
+        merge
+            .when_matched_update_all(None)
+            .when_not_matched_insert_all();
+        merge.execute(Box::new(batches)).await?;
+        Ok(())
+    }
+
+    /// Find 1-hop connections from/to an entity.
+    pub async fn find_connections(
+        &self,
+        entity_id: &str,
+        agent: &str,
+        relation: Option<&str>,
+        direction: Direction,
+    ) -> Result<Vec<RelationResult>> {
+        let agent_filter = format!("agent = '{}'", escape_sql(agent));
+        let rel_filter = relation
+            .map(|r| format!(" AND relation = '{}'", escape_sql(r)))
+            .unwrap_or_default();
+
+        let filter = match direction {
+            Direction::Outgoing => {
+                format!(
+                    "source = '{}' AND {agent_filter}{rel_filter}",
+                    escape_sql(entity_id)
+                )
+            }
+            Direction::Incoming => {
+                format!(
+                    "target = '{}' AND {agent_filter}{rel_filter}",
+                    escape_sql(entity_id)
+                )
+            }
+            Direction::Both => {
+                format!(
+                    "(source = '{id}' OR target = '{id}') AND {agent_filter}{rel_filter}",
+                    id = escape_sql(entity_id)
+                )
+            }
+        };
+
+        let batches: Vec<RecordBatch> = self
+            .relations
+            .query()
+            .only_if(filter)
+            .limit(100)
+            .execute()
+            .await?
+            .try_collect()
+            .await?;
+
+        Ok(batches_to_relations(&batches))
+    }
+
+    /// Create indices on the entities table. Errors are non-fatal.
+    async fn ensure_entity_indices(&self) {
+        let idx = [
+            (
+                vec!["key", "value"],
+                Index::FTS(Default::default()),
+                "entities FTS",
+            ),
+            (vec!["id"], Index::BTree(Default::default()), "entities id"),
+            (
+                vec!["key"],
+                Index::BTree(Default::default()),
+                "entities key",
+            ),
+            (
+                vec!["entity_type"],
+                Index::Bitmap(Default::default()),
+                "entities entity_type",
+            ),
+            (
+                vec!["agent"],
+                Index::Bitmap(Default::default()),
+                "entities agent",
+            ),
+        ];
+        for (cols, index, name) in idx {
+            if let Err(e) = self.entities.create_index(&cols, index).execute().await {
+                tracing::warn!("{name} index creation skipped: {e}");
+            }
+        }
+    }
+
+    /// Create indices on the relations table. Errors are non-fatal.
+    async fn ensure_relation_indices(&self) {
+        let idx = [
+            (
+                vec!["source"],
+                Index::BTree(Default::default()),
+                "relations source",
+            ),
+            (
+                vec!["target"],
+                Index::BTree(Default::default()),
+                "relations target",
+            ),
+            (
+                vec!["relation"],
+                Index::Bitmap(Default::default()),
+                "relations relation",
+            ),
+            (
+                vec!["agent"],
+                Index::Bitmap(Default::default()),
+                "relations agent",
+            ),
+        ];
+        for (cols, index, name) in idx {
+            if let Err(e) = self.relations.create_index(&cols, index).execute().await {
+                tracing::warn!("{name} index creation skipped: {e}");
+            }
+        }
     }
 }
 
-/// Build the Arrow schema for the memories table.
-fn memory_schema() -> Arc<Schema> {
+/// Direction for connection queries.
+pub(crate) enum Direction {
+    Outgoing,
+    Incoming,
+    Both,
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────
+
+async fn open_or_create(db: &Connection, name: &str, schema: Arc<Schema>) -> Result<LanceTable> {
+    match db.open_table(name).execute().await {
+        Ok(t) => Ok(t),
+        Err(_) => {
+            let batches = RecordBatchIterator::new(std::iter::empty(), Arc::clone(&schema));
+            Ok(db.create_table(name, Box::new(batches)).execute().await?)
+        }
+    }
+}
+
+fn entity_schema() -> Arc<Schema> {
     Arc::new(Schema::new(vec![
+        Field::new("id", DataType::Utf8, false),
+        Field::new("entity_type", DataType::Utf8, false),
         Field::new("key", DataType::Utf8, false),
         Field::new("value", DataType::Utf8, false),
         Field::new("agent", DataType::Utf8, false),
-        Field::new("entry_type", DataType::Utf8, false),
         Field::new("created_at", DataType::UInt64, false),
-        Field::new("access_count", DataType::UInt32, false),
+        Field::new("updated_at", DataType::UInt64, false),
     ]))
 }
 
-/// Build an Arrow RecordBatch from a single row.
-fn make_batch(row: &EntryRow<'_>) -> Result<RecordBatch> {
-    let schema = memory_schema();
+fn relation_schema() -> Arc<Schema> {
+    Arc::new(Schema::new(vec![
+        Field::new("source", DataType::Utf8, false),
+        Field::new("relation", DataType::Utf8, false),
+        Field::new("target", DataType::Utf8, false),
+        Field::new("agent", DataType::Utf8, false),
+        Field::new("created_at", DataType::UInt64, false),
+    ]))
+}
+
+fn make_entity_batch(row: &EntityRow<'_>) -> Result<RecordBatch> {
+    let schema = entity_schema();
     let now = now_unix();
     Ok(RecordBatch::try_new(
         schema,
         vec![
+            Arc::new(StringArray::from(vec![row.id])) as Arc<dyn Array>,
+            Arc::new(StringArray::from(vec![row.entity_type])) as Arc<dyn Array>,
             Arc::new(StringArray::from(vec![row.key])) as Arc<dyn Array>,
             Arc::new(StringArray::from(vec![row.value])) as Arc<dyn Array>,
             Arc::new(StringArray::from(vec![row.agent])) as Arc<dyn Array>,
-            Arc::new(StringArray::from(vec![row.entry_type])) as Arc<dyn Array>,
             Arc::new(UInt64Array::from(vec![now])) as Arc<dyn Array>,
-            Arc::new(UInt32Array::from(vec![0u32])) as Arc<dyn Array>,
+            Arc::new(UInt64Array::from(vec![now])) as Arc<dyn Array>,
         ],
     )?)
 }
 
-/// Convert Arrow RecordBatches to recalled entries.
-fn batches_to_entries(batches: &[RecordBatch]) -> Vec<RecalledEntry> {
-    let mut entries = Vec::new();
+fn make_relation_batch(row: &RelationRow<'_>) -> Result<RecordBatch> {
+    let schema = relation_schema();
+    let now = now_unix();
+    Ok(RecordBatch::try_new(
+        schema,
+        vec![
+            Arc::new(StringArray::from(vec![row.source])) as Arc<dyn Array>,
+            Arc::new(StringArray::from(vec![row.relation])) as Arc<dyn Array>,
+            Arc::new(StringArray::from(vec![row.target])) as Arc<dyn Array>,
+            Arc::new(StringArray::from(vec![row.agent])) as Arc<dyn Array>,
+            Arc::new(UInt64Array::from(vec![now])) as Arc<dyn Array>,
+        ],
+    )?)
+}
+
+fn batches_to_entities(batches: &[RecordBatch]) -> Vec<EntityResult> {
+    let mut results = Vec::new();
     for batch in batches {
+        let ids = batch.column_by_name("id").unwrap().as_string::<i32>();
+        let types = batch
+            .column_by_name("entity_type")
+            .unwrap()
+            .as_string::<i32>();
         let keys = batch.column_by_name("key").unwrap().as_string::<i32>();
         let values = batch.column_by_name("value").unwrap().as_string::<i32>();
         for i in 0..batch.num_rows() {
-            entries.push(RecalledEntry {
+            results.push(EntityResult {
+                id: ids.value(i).to_string(),
+                entity_type: types.value(i).to_string(),
                 key: keys.value(i).to_string(),
                 value: values.value(i).to_string(),
             });
         }
     }
-    entries
+    results
 }
 
-/// Escape single quotes in SQL filter strings.
+fn batches_to_relations(batches: &[RecordBatch]) -> Vec<RelationResult> {
+    let mut results = Vec::new();
+    for batch in batches {
+        let sources = batch.column_by_name("source").unwrap().as_string::<i32>();
+        let relations = batch.column_by_name("relation").unwrap().as_string::<i32>();
+        let targets = batch.column_by_name("target").unwrap().as_string::<i32>();
+        for i in 0..batch.num_rows() {
+            results.push(RelationResult {
+                source: sources.value(i).to_string(),
+                relation: relations.value(i).to_string(),
+                target: targets.value(i).to_string(),
+            });
+        }
+    }
+    results
+}
+
 fn escape_sql(s: &str) -> String {
     s.replace('\'', "''")
 }
 
-/// Current unix timestamp in seconds.
 fn now_unix() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

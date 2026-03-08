@@ -50,6 +50,8 @@ impl DaemonHook {
         match name {
             "remember" => self.memory.dispatch_remember(args, agent).await,
             "recall" => self.memory.dispatch_recall(args, agent).await,
+            "relate" => self.memory.dispatch_relate(args, agent).await,
+            "connections" => self.memory.dispatch_connections(args, agent).await,
             "compact" => self.memory.dispatch_compact(),
             "search_mcp" => self.dispatch_search_mcp(args).await,
             "call_mcp_tool" => self.dispatch_call_mcp_tool(args).await,

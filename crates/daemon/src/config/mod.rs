@@ -29,11 +29,22 @@ pub struct DaemonConfig {
     /// MCP server configurations.
     #[serde(default)]
     pub mcp_servers: BTreeMap<String, mcp::McpServerConfig>,
+    /// Memory configuration.
+    #[serde(default)]
+    pub memory: MemoryConfig,
     /// Optional symlink path for the workspace sandbox root (`~/.openwalrus/work/`).
     ///
     /// When set, a symlink is created at this path pointing to `~/.openwalrus/work/`.
     #[serde(default)]
     pub work_dir: Option<PathBuf>,
+}
+
+/// Memory subsystem configuration.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct MemoryConfig {
+    /// Additional entity types beyond the framework defaults.
+    #[serde(default)]
+    pub entity_types: Vec<String>,
 }
 
 impl DaemonConfig {
