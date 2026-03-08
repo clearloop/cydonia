@@ -76,6 +76,7 @@ impl Daemon {
             config,
             event_tx,
             shutdown_tx,
+            daemon,
             event_loop_join: Some(event_loop_join),
         })
     }
@@ -94,10 +95,20 @@ pub struct DaemonHandle {
     /// Broadcast shutdown — call `.subscribe()` for transport shutdown,
     /// or use [`DaemonHandle::shutdown`] to trigger.
     pub shutdown_tx: broadcast::Sender<()>,
+    daemon: Daemon,
     event_loop_join: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl DaemonHandle {
+    /// Wait until the active model provider is ready.
+    ///
+    /// Call this after socket setup so transports are available while the
+    /// model loads. No-op for remote providers.
+    pub async fn wait_until_ready(&self) -> Result<()> {
+        let rt = self.daemon.runtime.read().await;
+        rt.model.wait_until_ready().await
+    }
+
     /// Trigger graceful shutdown and wait for the event loop to stop.
     ///
     /// Transport tasks (socket, channels) are the caller's responsibility.

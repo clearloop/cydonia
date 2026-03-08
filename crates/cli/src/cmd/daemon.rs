@@ -24,6 +24,7 @@ impl Daemon {
             daemon::setup_socket(&handle.shutdown_tx, &handle.event_tx)?;
         tracing::info!("walrusd listening on {}", socket_path.display());
         daemon::setup_channels(&handle.config, &handle.event_tx).await;
+        handle.wait_until_ready().await?;
 
         tokio::signal::ctrl_c().await?;
         tracing::info!("received ctrl-c, shutting down");

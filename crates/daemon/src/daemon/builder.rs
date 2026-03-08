@@ -78,10 +78,10 @@ impl Daemon {
         {
             if let Some(entry) = model::local::registry::find(&config.model.default) {
                 let local = model::local::registry::build_local(entry);
-                manager.add_provider(entry.model_id, model::Provider::Local(local));
+                manager.add_provider(config.model.default.clone(), model::Provider::Local(local));
             } else if let Some(entry) = model::local::registry::find_by_key(&config.model.default) {
                 let local = model::local::registry::build_local(entry);
-                manager.add_provider(entry.model_id, model::Provider::Local(local));
+                manager.add_provider(config.model.default.clone(), model::Provider::Local(local));
             }
         }
 

@@ -147,6 +147,15 @@ impl ProviderManager {
             .ok_or_else(|| anyhow::anyhow!("model '{}' not found in registry", model))
     }
 
+    /// Wait until the active provider is ready.
+    ///
+    /// No-op for remote providers. For local providers, blocks until the
+    /// model finishes loading.
+    pub async fn wait_until_ready(&self) -> Result<()> {
+        let mut provider = self.active();
+        provider.wait_until_ready().await
+    }
+
     /// Resolve the context limit for a model.
     ///
     /// Resolution chain: provider reports limit → static map → 8192 default.
