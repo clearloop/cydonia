@@ -9,7 +9,7 @@ use tokio::sync::Mutex;
 
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct SearchSkillInput {
-    /// Keyword to match skill names and descriptions
+    /// Keyword to match skill names and descriptions. Leave empty to list all.
     pub query: String,
 }
 
