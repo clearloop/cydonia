@@ -15,6 +15,8 @@ pub struct ToolRequest {
     pub name: String,
     /// JSON-encoded arguments string.
     pub args: String,
+    /// Name of the agent that made this call.
+    pub agent: String,
     /// Reply channel — the handler sends the result string here.
     pub reply: oneshot::Sender<String>,
 }

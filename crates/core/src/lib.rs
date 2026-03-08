@@ -16,14 +16,9 @@ pub use agent::{
     parse_agent_md,
     tool::{ToolRegistry, ToolRequest, ToolSender},
 };
-pub use memory::{
-    Embedder, Memory, MemoryEntry, RecallOptions,
-    tools::{RecallInput, RememberInput},
-};
 pub use runtime::{Runtime, hook::Hook};
 
 mod agent;
-pub mod memory;
 pub mod model;
 pub mod paths;
 pub mod protocol;

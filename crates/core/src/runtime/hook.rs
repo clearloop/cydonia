@@ -5,7 +5,7 @@
 //! methods at the appropriate lifecycle points. `DaemonHook` composes
 //! multiple Hook implementations by delegating to each.
 
-use crate::{AgentConfig, AgentEvent, Memory, agent::tool::ToolRegistry};
+use crate::{AgentConfig, AgentEvent, agent::tool::ToolRegistry};
 use std::future::Future;
 
 /// Lifecycle backend for agent building, event observation, and tool registration.
@@ -39,25 +39,15 @@ pub trait Hook: Send + Sync {
     fn on_register_tools(&self, _tools: &mut ToolRegistry) -> impl Future<Output = ()> + Send {
         async {}
     }
+
+    /// Called during context compaction to enrich the compaction prompt.
+    ///
+    /// Hooks append memory context (profile facts, recent entries) to the
+    /// prompt before the LLM summarizes the conversation. The runtime passes
+    /// the base prompt from `compact.md`; hooks mutate it in place.
+    ///
+    /// Default: no-op.
+    fn on_compact(&self, _prompt: &mut String) {}
 }
 
 impl Hook for () {}
-
-/// Blanket Hook impl for all Memory types that are Clone + 'static.
-///
-/// Injects compiled memory into the system prompt via `on_build_agent`
-/// and registers `remember`/`recall` tool schemas via `on_register_tools`.
-impl<M: Memory + Clone + 'static> Hook for M {
-    fn on_build_agent(&self, mut config: AgentConfig) -> AgentConfig {
-        let compiled = self.compile();
-        config.system_prompt = format!("{}\n\n{compiled}", config.system_prompt);
-        config
-    }
-
-    fn on_register_tools(&self, registry: &mut ToolRegistry) -> impl Future<Output = ()> + Send {
-        use crate::memory::tools;
-        registry.insert(tools::remember_schema());
-        registry.insert(tools::recall_schema());
-        async {}
-    }
-}

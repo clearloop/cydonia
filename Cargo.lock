@@ -2832,18 +2832,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "af9673d8203fcb076b19dfd17e38b3d4ae9f44959416ea532ce72415a6020365"
 
 [[package]]
-name = "fallible-iterator"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2acce4a10f12dc2fb14a218589d4f1f62ef011b2d0cc4b3cb1bba8e94da14649"
-
-[[package]]
-name = "fallible-streaming-iterator"
-version = "0.1.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7360491ce676a36bf9bb3c56c1aa791658183a54d2744120f27285738d90465a"
-
-[[package]]
 name = "fancy-regex"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3747,15 +3735,6 @@ dependencies = [
  "foldhash 0.2.0",
  "serde",
  "serde_core",
-]
-
-[[package]]
-name = "hashlink"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7382cf6263419f2d8df38c55d7da83da5c18aef87fc7a7fc1fb1e344edfe14c1"
-dependencies = [
- "hashbrown 0.15.5",
 ]
 
 [[package]]
@@ -5200,17 +5179,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1744e39d1d6a9948f4f388969627434e31128196de472883b39f148769bfe30a"
 dependencies = [
  "libc",
-]
-
-[[package]]
-name = "libsqlite3-sys"
-version = "0.32.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fbb8270bb4060bd76c6e96f20c52d80620f1d82a3470885694e41e0f81ef6fe7"
-dependencies = [
- "cc",
- "pkg-config",
- "vcpkg",
 ]
 
 [[package]]
@@ -7486,20 +7454,6 @@ dependencies = [
  "num-integer",
  "num-traits",
  "realfft",
-]
-
-[[package]]
-name = "rusqlite"
-version = "0.34.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37e34486da88d8e051c7c0e23c3f15fd806ea8546260aa2fec247e97242ec143"
-dependencies = [
- "bitflags 2.11.0",
- "fallible-iterator",
- "fallible-streaming-iterator",
- "hashlink",
- "libsqlite3-sys",
- "smallvec 1.15.1",
 ]
 
 [[package]]
@@ -10033,11 +9987,15 @@ name = "walrus-daemon"
 version = "0.0.4"
 dependencies = [
  "anyhow",
+ "arrow-array",
+ "arrow-schema",
  "async-stream",
  "compact_str 0.8.1",
  "dirs",
+ "futures",
  "futures-core",
  "futures-util",
+ "lancedb",
  "rmcp",
  "schemars 1.2.1",
  "serde",
@@ -10050,27 +10008,8 @@ dependencies = [
  "tracing-subscriber",
  "walrus-channel",
  "walrus-core",
- "walrus-memory",
  "walrus-model",
  "walrus-socket",
-]
-
-[[package]]
-name = "walrus-memory"
-version = "0.0.4"
-dependencies = [
- "anyhow",
- "arrow-array",
- "arrow-schema",
- "compact_str 0.8.1",
- "futures",
- "lancedb",
- "rusqlite",
- "serde",
- "serde_json",
- "tokio",
- "toml_edit 0.22.27",
- "walrus-core",
 ]
 
 [[package]]

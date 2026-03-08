@@ -126,6 +126,7 @@ impl<M: Model> Agent<M> {
         let req = ToolRequest {
             name: name.to_owned(),
             args: args.to_owned(),
+            agent: self.config.name.to_string(),
             reply: reply_tx,
         };
         if tx.send(req).is_err() {

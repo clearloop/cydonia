@@ -58,7 +58,7 @@ impl Daemon {
         event_tx: &DaemonEventSender,
     ) -> Result<Runtime<ProviderManager, DaemonHook>> {
         let manager = Self::build_providers(config).await?;
-        let hook = Self::build_hook(config, config_dir).await;
+        let hook = Self::build_hook(config, config_dir).await?;
         let tool_tx = Self::build_tool_sender(event_tx);
         let mut runtime = Runtime::new(manager, hook, Some(tool_tx)).await;
         Self::load_agents(&mut runtime, config_dir)?;
@@ -98,9 +98,10 @@ impl Daemon {
     }
 
     /// Build the daemon hook with all backends (memory, skills, MCP).
-    async fn build_hook(config: &DaemonConfig, config_dir: &Path) -> DaemonHook {
-        let memory = memory::InMemory::new();
-        tracing::info!("using in-memory backend");
+    async fn build_hook(config: &DaemonConfig, config_dir: &Path) -> Result<DaemonHook> {
+        let memory_dir = config_dir.join("memory");
+        let memory = hook::memory::MemoryHook::open(memory_dir).await?;
+        tracing::info!("memory hook initialized (LanceDB)");
 
         let skills_dir = config_dir.join(wcore::paths::SKILLS_DIR);
         let skills = hook::skill::SkillHandler::load(skills_dir).unwrap_or_else(|e| {
@@ -111,7 +112,7 @@ impl Daemon {
         let mcp_servers = config.mcp_servers.values().cloned().collect::<Vec<_>>();
         let mcp_handler = hook::mcp::McpHandler::load(&mcp_servers).await;
 
-        DaemonHook::new(memory, skills, mcp_handler)
+        Ok(DaemonHook::new(memory, skills, mcp_handler))
     }
 
     /// Build a [`ToolSender`] that forwards [`ToolRequest`]s into the daemon
