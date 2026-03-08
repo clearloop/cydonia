@@ -1,9 +1,10 @@
-//! Tool dispatch handlers for remember, recall, relate, connections, and compact.
+//! Tool dispatch handlers for memory tools.
 
 use crate::hook::memory::{
-    ConnectionsInput, MemoryHook, RecallInput, RelateInput, RememberInput,
+    ConnectionsInput, DistillInput, MemoryHook, RecallInput, RelateInput, RememberInput,
     lance::{Direction, EntityRow, RelationRow},
 };
+use wcore::COMPACT_SENTINEL;
 
 impl MemoryHook {
     /// Dispatch the `remember` tool call.
@@ -178,7 +179,76 @@ impl MemoryHook {
     }
 
     /// Dispatch the `compact` tool call.
-    pub(crate) fn dispatch_compact(&self) -> String {
-        "compact acknowledged — context compaction will be triggered by the runtime".to_owned()
+    ///
+    /// Returns the compact sentinel followed by recent journal context.
+    /// The agent loop detects the sentinel and triggers compaction.
+    pub(crate) async fn dispatch_compact(&self, agent: &str) -> String {
+        let mut result = COMPACT_SENTINEL.to_owned();
+
+        // Append recent journal entries for continuity context.
+        if let Ok(journals) = self.lance.recent_journals(agent, 3).await
+            && !journals.is_empty()
+        {
+            result.push_str("\n\nPrevious journal entries:\n");
+            for j in &journals {
+                let ts = chrono::DateTime::from_timestamp(j.created_at as i64, 0)
+                    .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
+                    .unwrap_or_else(|| j.created_at.to_string());
+                result.push_str(&format!("- [{ts}] {}\n", j.summary));
+            }
+        }
+
+        result
+    }
+
+    /// Internal dispatch for storing a journal entry.
+    ///
+    /// Called by the agent loop after compaction — `args` is the raw summary text.
+    pub(crate) async fn dispatch_journal(&self, args: &str, agent: &str) -> String {
+        if args.is_empty() {
+            return "empty journal entry".to_owned();
+        }
+
+        let vector = match self.embed(args).await {
+            Ok(v) => v,
+            Err(e) => return format!("failed to embed journal: {e}"),
+        };
+
+        match self.lance.insert_journal(agent, args, vector).await {
+            Ok(()) => "journal entry stored".to_owned(),
+            Err(e) => format!("failed to store journal: {e}"),
+        }
+    }
+
+    /// Dispatch the `distill` tool call — semantic search over journal entries.
+    pub(crate) async fn dispatch_distill(&self, args: &str, agent: &str) -> String {
+        let input: DistillInput = match serde_json::from_str(args) {
+            Ok(v) => v,
+            Err(e) => return format!("invalid arguments: {e}"),
+        };
+        if input.query.is_empty() {
+            return "missing required field: query".to_owned();
+        }
+        let limit = input.limit.unwrap_or(5) as usize;
+
+        let vector = match self.embed(&input.query).await {
+            Ok(v) => v,
+            Err(e) => return format!("failed to embed query: {e}"),
+        };
+
+        match self.lance.search_journals(&vector, agent, limit).await {
+            Ok(journals) if journals.is_empty() => "no journal entries found".to_owned(),
+            Ok(journals) => journals
+                .iter()
+                .map(|j| {
+                    let ts = chrono::DateTime::from_timestamp(j.created_at as i64, 0)
+                        .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
+                        .unwrap_or_else(|| j.created_at.to_string());
+                    format!("[{ts}] {}", j.summary)
+                })
+                .collect::<Vec<_>>()
+                .join("\n\n"),
+            Err(e) => format!("distill failed: {e}"),
+        }
     }
 }

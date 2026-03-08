@@ -1,14 +1,15 @@
-//! Graph-based memory hook — owns LanceDB with entities and relations tables.
-//!
-//! Registers `remember`, `recall`, `relate`, `connections`, and `compact`
-//! tool schemas. Entities are typed (identity, profile, fact, etc.) and
-//! relations are directed edges between entities.
+//! Graph-based memory hook — owns LanceDB with entities, relations, and
+//! journals tables. Registers `remember`, `recall`, `relate`, `connections`,
+//! `compact`, and `distill` tool schemas. Journals store compaction summaries
+//! with vector embeddings for semantic search via fastembed.
 
 use crate::config::MemoryConfig;
+use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 use lance::LanceStore;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use std::path::Path;
+use std::sync::Mutex;
 use wcore::{AgentConfig, Hook, ToolRegistry, model::Tool};
 
 pub(crate) mod dispatch;
@@ -38,9 +39,10 @@ const DEFAULT_RELATIONS: &[&str] = &[
     "tagged_with",
 ];
 
-/// Graph-based memory hook owning LanceDB entity and relation storage.
+/// Graph-based memory hook owning LanceDB entity, relation, and journal storage.
 pub struct MemoryHook {
     pub(crate) lance: LanceStore,
+    pub(crate) embedder: Mutex<TextEmbedding>,
     pub(crate) allowed_entities: Vec<String>,
     pub(crate) allowed_relations: Vec<String>,
     pub(crate) connection_limit: usize,
@@ -54,12 +56,18 @@ impl MemoryHook {
         let lance_dir = memory_dir.join("lance");
         let lance = LanceStore::open(&lance_dir).await?;
 
+        let embedder = tokio::task::spawn_blocking(|| {
+            TextEmbedding::try_new(InitOptions::new(EmbeddingModel::AllMiniLML6V2))
+        })
+        .await??;
+
         let allowed_entities = merge_defaults(DEFAULT_ENTITIES, &config.entities);
         let allowed_relations = merge_defaults(DEFAULT_RELATIONS, &config.relations);
         let connection_limit = config.connection_limit.clamp(1, 100);
 
         Ok(Self {
             lance,
+            embedder: Mutex::new(embedder),
             allowed_entities,
             allowed_relations,
             connection_limit,
@@ -74,6 +82,22 @@ impl MemoryHook {
     /// Check if a relation type is allowed.
     pub(crate) fn is_valid_relation(&self, relation: &str) -> bool {
         self.allowed_relations.iter().any(|r| r == relation)
+    }
+
+    /// Generate an embedding vector for text. Runs fastembed in a blocking task.
+    pub(crate) async fn embed(&self, text: &str) -> anyhow::Result<Vec<f32>> {
+        let text = text.to_owned();
+        let embedding = tokio::task::block_in_place(|| {
+            let mut embedder = self
+                .embedder
+                .lock()
+                .map_err(|e| anyhow::anyhow!("embedder lock poisoned: {e}"))?;
+            embedder.embed(vec![text], None)
+        })?;
+        embedding
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("embedding returned no results"))
     }
 }
 
@@ -119,6 +143,26 @@ impl Hook for MemoryHook {
                         buf.push_str(&format!("- **{}**: {}\n", e.key, e.value));
                     }
                     buf.push_str("</profile>");
+                }
+
+                // Inject recent journal entries.
+                if let Ok(journals) = lance.recent_journals(&agent_name, 3).await
+                    && !journals.is_empty()
+                {
+                    buf.push_str("\n\n<journal>\n");
+                    for j in &journals {
+                        let ts = chrono::DateTime::from_timestamp(j.created_at as i64, 0)
+                            .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
+                            .unwrap_or_else(|| j.created_at.to_string());
+                        // Truncate summary to avoid bloating the system prompt.
+                        let summary = if j.summary.len() > 500 {
+                            format!("{}...", &j.summary[..500])
+                        } else {
+                            j.summary.clone()
+                        };
+                        buf.push_str(&format!("- **{ts}**: {summary}\n"));
+                    }
+                    buf.push_str("</journal>");
                 }
 
                 buf
@@ -173,8 +217,18 @@ impl Hook for MemoryHook {
         });
         tools.insert(Tool {
             name: "compact".into(),
-            description: "Trigger context compaction of the current conversation.".into(),
+            description: "Trigger context compaction. Summarizes the conversation, stores a \
+                          journal entry, and replaces history with the summary."
+                .into(),
             parameters: schemars::schema_for!(CompactInput),
+            strict: false,
+        });
+        tools.insert(Tool {
+            name: "distill".into(),
+            description: "Search journal entries by semantic similarity. Returns past \
+                          conversation summaries. Use `remember`/`relate` to extract durable facts."
+                .into(),
+            parameters: schemars::schema_for!(DistillInput),
             strict: false,
         });
     }
@@ -229,3 +283,12 @@ pub(crate) struct ConnectionsInput {
 /// Input for the `compact` tool (no parameters).
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct CompactInput {}
+
+/// Input for the `distill` tool.
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct DistillInput {
+    /// Semantic search query over journal entries.
+    pub query: String,
+    /// Maximum number of results (default: 5).
+    pub limit: Option<u32>,
+}

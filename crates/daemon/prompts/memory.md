@@ -1,7 +1,7 @@
 ## Memory
 
 You have graph-based memory with `remember`, `recall`, `relate`, `connections`,
-and `compact` tools.
+`compact`, and `distill` tools.
 
 ### remember
 
@@ -47,8 +47,16 @@ filter by relation type and direction (`outgoing`, `incoming`, `both`).
 
 ### compact
 
-Trigger context compaction when the conversation is getting long. The runtime
-will summarize the conversation and replace the history with a compact summary.
+Trigger context compaction when the conversation is getting long. The conversation
+will be summarized, a journal entry stored with a vector embedding, and the history
+replaced with the compact summary. Recent journal entries are injected at session
+start for continuity.
+
+### distill
+
+Search past journal entries by semantic similarity. Returns conversation summaries
+from previous compactions. Use this to find past context, then call `remember` or
+`relate` to extract durable facts into the entity graph.
 
 ### Guidelines
 

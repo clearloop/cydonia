@@ -1,13 +1,15 @@
 //! LanceDB graph storage for the memory hook.
 //!
-//! Two tables: `entities` (typed nodes with FTS) and `relations` (directed
-//! edges between entities). Mutations use lancedb directly; graph traversal
-//! uses lance-graph Cypher queries via `DirNamespace`. All operations scoped
-//! by agent name.
+//! Three tables: `entities` (typed nodes with FTS), `relations` (directed
+//! edges between entities), and `journals` (compaction summaries with vector
+//! embeddings for semantic search). Mutations use lancedb directly; graph
+//! traversal uses lance-graph Cypher queries via `DirNamespace`. All
+//! operations scoped by agent name.
 
 use anyhow::Result;
 use arrow_array::{
-    Array, RecordBatch, RecordBatchIterator, StringArray, UInt64Array, cast::AsArray,
+    Array, FixedSizeListArray, Float32Array, RecordBatch, RecordBatchIterator, StringArray,
+    UInt64Array, cast::AsArray,
 };
 use arrow_schema::{DataType, Field, Schema};
 use futures::TryStreamExt;
@@ -21,7 +23,11 @@ use std::{path::Path, sync::Arc};
 
 const ENTITIES_TABLE: &str = "entities";
 const RELATIONS_TABLE: &str = "relations";
+const JOURNALS_TABLE: &str = "journals";
 const CONNECTIONS_MAX: usize = 100;
+
+/// Embedding vector dimension (all-MiniLM-L6-v2).
+pub(crate) const EMBED_DIM: i32 = 384;
 
 /// Row data for an entity.
 pub(crate) struct EntityRow<'a> {
@@ -55,6 +61,12 @@ pub(crate) struct RelationResult {
     pub target: String,
 }
 
+/// A journal entry returned from queries.
+pub(crate) struct JournalResult {
+    pub summary: String,
+    pub created_at: u64,
+}
+
 /// LanceDB graph store with entities and relations tables.
 ///
 /// Mutations use lancedb's merge_insert directly. Graph traversal
@@ -63,6 +75,7 @@ pub(crate) struct LanceStore {
     _db: Connection,
     entities: LanceTable,
     relations: LanceTable,
+    journals: LanceTable,
     namespace: Arc<DirNamespace>,
     graph_config: GraphConfig,
 }
@@ -75,6 +88,7 @@ impl LanceStore {
 
         let entities = open_or_create(&db, ENTITIES_TABLE, entity_schema()).await?;
         let relations = open_or_create(&db, RELATIONS_TABLE, relation_schema()).await?;
+        let journals = open_or_create(&db, JOURNALS_TABLE, journal_schema()).await?;
 
         let namespace = Arc::new(DirNamespace::new(path.to_str().unwrap_or(".")));
         let graph_config = GraphConfig::builder()
@@ -86,11 +100,13 @@ impl LanceStore {
             _db: db,
             entities,
             relations,
+            journals,
             namespace,
             graph_config,
         };
         store.ensure_entity_indices().await;
         store.ensure_relation_indices().await;
+        store.ensure_journal_indices().await;
         Ok(store)
     }
 
@@ -251,6 +267,70 @@ impl LanceStore {
         }
     }
 
+    /// Insert a journal entry with its embedding vector.
+    pub async fn insert_journal(&self, agent: &str, summary: &str, vector: Vec<f32>) -> Result<()> {
+        let batch = make_journal_batch(agent, summary, vector)?;
+        let schema = batch.schema();
+        let batches = RecordBatchIterator::new(std::iter::once(Ok(batch)), schema);
+        self.journals.add(Box::new(batches)).execute().await?;
+        Ok(())
+    }
+
+    /// Semantic search on journal entries by vector similarity.
+    pub async fn search_journals(
+        &self,
+        query_vector: &[f32],
+        agent: &str,
+        limit: usize,
+    ) -> Result<Vec<JournalResult>> {
+        let filter = format!("agent = '{}'", escape_sql(agent));
+        let batches: Vec<RecordBatch> = self
+            .journals
+            .query()
+            .nearest_to(query_vector)?
+            .only_if(filter)
+            .limit(limit)
+            .execute()
+            .await?
+            .try_collect()
+            .await?;
+        Ok(batches_to_journals(&batches))
+    }
+
+    /// Query most recent journal entries for an agent.
+    pub async fn recent_journals(&self, agent: &str, limit: usize) -> Result<Vec<JournalResult>> {
+        let filter = format!("agent = '{}'", escape_sql(agent));
+        let batches: Vec<RecordBatch> = self
+            .journals
+            .query()
+            .only_if(filter)
+            .limit(limit)
+            .execute()
+            .await?
+            .try_collect()
+            .await?;
+        let mut results = batches_to_journals(&batches);
+        results.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        Ok(results)
+    }
+
+    /// Create indices on the journals table. Errors are non-fatal.
+    async fn ensure_journal_indices(&self) {
+        let idx = [
+            (
+                vec!["agent"],
+                Index::Bitmap(Default::default()),
+                "journals agent",
+            ),
+            (vec!["id"], Index::BTree(Default::default()), "journals id"),
+        ];
+        for (cols, index, name) in idx {
+            if let Err(e) = self.journals.create_index(&cols, index).execute().await {
+                tracing::warn!("{name} index creation skipped: {e}");
+            }
+        }
+    }
+
     /// Create indices on the relations table. Errors are non-fatal.
     async fn ensure_relation_indices(&self) {
         let idx = [
@@ -322,6 +402,60 @@ fn relation_schema() -> Arc<Schema> {
         Field::new("agent", DataType::Utf8, false),
         Field::new("created_at", DataType::UInt64, false),
     ]))
+}
+
+fn journal_schema() -> Arc<Schema> {
+    Arc::new(Schema::new(vec![
+        Field::new("id", DataType::Utf8, false),
+        Field::new("agent", DataType::Utf8, false),
+        Field::new("summary", DataType::Utf8, false),
+        Field::new(
+            "vector",
+            DataType::FixedSizeList(
+                Arc::new(Field::new("item", DataType::Float32, true)),
+                EMBED_DIM,
+            ),
+            false,
+        ),
+        Field::new("created_at", DataType::UInt64, false),
+    ]))
+}
+
+fn make_journal_batch(agent: &str, summary: &str, vector: Vec<f32>) -> Result<RecordBatch> {
+    let schema = journal_schema();
+    let now = now_unix();
+    let id = format!("{agent}:{now}");
+    let values = Float32Array::from(vector);
+    let field = Arc::new(Field::new("item", DataType::Float32, true));
+    let vector_array = FixedSizeListArray::new(field, EMBED_DIM, Arc::new(values), None);
+    Ok(RecordBatch::try_new(
+        schema,
+        vec![
+            Arc::new(StringArray::from(vec![id.as_str()])) as Arc<dyn Array>,
+            Arc::new(StringArray::from(vec![agent])) as Arc<dyn Array>,
+            Arc::new(StringArray::from(vec![summary])) as Arc<dyn Array>,
+            Arc::new(vector_array) as Arc<dyn Array>,
+            Arc::new(UInt64Array::from(vec![now])) as Arc<dyn Array>,
+        ],
+    )?)
+}
+
+fn batches_to_journals(batches: &[RecordBatch]) -> Vec<JournalResult> {
+    let mut results = Vec::new();
+    for batch in batches {
+        let summaries = batch.column_by_name("summary").unwrap().as_string::<i32>();
+        let timestamps = batch
+            .column_by_name("created_at")
+            .unwrap()
+            .as_primitive::<arrow_array::types::UInt64Type>();
+        for i in 0..batch.num_rows() {
+            results.push(JournalResult {
+                summary: summaries.value(i).to_string(),
+                created_at: timestamps.value(i),
+            });
+        }
+    }
+    results
 }
 
 fn make_entity_batch(row: &EntityRow<'_>) -> Result<RecordBatch> {

@@ -11,7 +11,7 @@
 //! - Agent event types: [`AgentEvent`], [`AgentStep`], [`AgentResponse`], [`AgentStopReason`].
 
 pub use agent::{
-    Agent, AgentBuilder, AgentConfig,
+    Agent, AgentBuilder, AgentConfig, COMPACT_SENTINEL,
     event::{AgentEvent, AgentResponse, AgentStep, AgentStopReason},
     parse_agent_md,
     tool::{ToolRegistry, ToolRequest, ToolSender},
