@@ -1,7 +1,9 @@
 //! LanceDB graph storage for the memory hook.
 //!
 //! Two tables: `entities` (typed nodes with FTS) and `relations` (directed
-//! edges between entities). All operations scoped by agent name.
+//! edges between entities). Mutations use lancedb directly; graph traversal
+//! uses lance-graph Cypher queries via `DirNamespace`. All operations scoped
+//! by agent name.
 
 use anyhow::Result;
 use arrow_array::{
@@ -9,6 +11,7 @@ use arrow_array::{
 };
 use arrow_schema::{DataType, Field, Schema};
 use futures::TryStreamExt;
+use lance_graph::{CypherQuery, DirNamespace, GraphConfig};
 use lancedb::{
     Connection, Table as LanceTable, connect,
     index::{Index, scalar::FullTextSearchQuery},
@@ -18,6 +21,7 @@ use std::{path::Path, sync::Arc};
 
 const ENTITIES_TABLE: &str = "entities";
 const RELATIONS_TABLE: &str = "relations";
+const CONNECTIONS_LIMIT: usize = 100;
 
 /// Row data for an entity.
 pub(crate) struct EntityRow<'a> {
@@ -52,26 +56,38 @@ pub(crate) struct RelationResult {
 }
 
 /// LanceDB graph store with entities and relations tables.
+///
+/// Mutations use lancedb's merge_insert directly. Graph traversal
+/// (`find_connections`) uses lance-graph Cypher queries.
 pub(crate) struct LanceStore {
     _db: Connection,
     entities: LanceTable,
     relations: LanceTable,
+    namespace: Arc<DirNamespace>,
+    graph_config: GraphConfig,
 }
 
 impl LanceStore {
     /// Open or create the LanceDB database with entities and relations tables.
     pub async fn open(path: impl AsRef<Path>) -> Result<Self> {
-        let db = connect(path.as_ref().to_str().unwrap_or("."))
-            .execute()
-            .await?;
+        let path = path.as_ref();
+        let db = connect(path.to_str().unwrap_or(".")).execute().await?;
 
         let entities = open_or_create(&db, ENTITIES_TABLE, entity_schema()).await?;
         let relations = open_or_create(&db, RELATIONS_TABLE, relation_schema()).await?;
+
+        let namespace = Arc::new(DirNamespace::new(path.to_str().unwrap_or(".")));
+        let graph_config = GraphConfig::builder()
+            .with_node_label(ENTITIES_TABLE, "id")
+            .with_relationship(RELATIONS_TABLE, "source", "target")
+            .build()?;
 
         let store = Self {
             _db: db,
             entities,
             relations,
+            namespace,
+            graph_config,
         };
         store.ensure_entity_indices().await;
         store.ensure_relation_indices().await;
@@ -184,7 +200,7 @@ impl LanceStore {
         Ok(())
     }
 
-    /// Find 1-hop connections from/to an entity.
+    /// Find 1-hop connections from/to an entity using lance-graph Cypher.
     pub async fn find_connections(
         &self,
         entity_id: &str,
@@ -192,43 +208,13 @@ impl LanceStore {
         relation: Option<&str>,
         direction: Direction,
     ) -> Result<Vec<RelationResult>> {
-        let agent_filter = format!("agent = '{}'", escape_sql(agent));
-        let rel_filter = relation
-            .map(|r| format!(" AND relation = '{}'", escape_sql(r)))
-            .unwrap_or_default();
-
-        let filter = match direction {
-            Direction::Outgoing => {
-                format!(
-                    "source = '{}' AND {agent_filter}{rel_filter}",
-                    escape_sql(entity_id)
-                )
-            }
-            Direction::Incoming => {
-                format!(
-                    "target = '{}' AND {agent_filter}{rel_filter}",
-                    escape_sql(entity_id)
-                )
-            }
-            Direction::Both => {
-                format!(
-                    "(source = '{id}' OR target = '{id}') AND {agent_filter}{rel_filter}",
-                    id = escape_sql(entity_id)
-                )
-            }
-        };
-
-        let batches: Vec<RecordBatch> = self
-            .relations
-            .query()
-            .only_if(filter)
-            .limit(100)
-            .execute()
-            .await?
-            .try_collect()
+        let cypher = build_connections_cypher(entity_id, agent, relation, direction);
+        let query = CypherQuery::new(&cypher)?.with_config(self.graph_config.clone());
+        let batch = query
+            .execute_with_namespace_arc(Arc::clone(&self.namespace), None)
             .await?;
 
-        Ok(batches_to_relations(&batches))
+        Ok(batch_to_relations(&batch))
     }
 
     /// Create indices on the entities table. Errors are non-fatal.
@@ -390,25 +376,78 @@ fn batches_to_entities(batches: &[RecordBatch]) -> Vec<EntityResult> {
     results
 }
 
-fn batches_to_relations(batches: &[RecordBatch]) -> Vec<RelationResult> {
-    let mut results = Vec::new();
-    for batch in batches {
-        let sources = batch.column_by_name("source").unwrap().as_string::<i32>();
-        let relations = batch.column_by_name("relation").unwrap().as_string::<i32>();
-        let targets = batch.column_by_name("target").unwrap().as_string::<i32>();
-        for i in 0..batch.num_rows() {
-            results.push(RelationResult {
-                source: sources.value(i).to_string(),
-                relation: relations.value(i).to_string(),
-                target: targets.value(i).to_string(),
-            });
-        }
+fn batch_to_relations(batch: &RecordBatch) -> Vec<RelationResult> {
+    if batch.num_rows() == 0 {
+        return Vec::new();
     }
-    results
+    // lance-graph qualifies columns as {variable}__{field} (lowercase).
+    // The Cypher query binds the relationship to variable `r`.
+    let sources = batch
+        .column_by_name("r__source")
+        .unwrap()
+        .as_string::<i32>();
+    let relations = batch
+        .column_by_name("r__relation")
+        .unwrap()
+        .as_string::<i32>();
+    let targets = batch
+        .column_by_name("r__target")
+        .unwrap()
+        .as_string::<i32>();
+    (0..batch.num_rows())
+        .map(|i| RelationResult {
+            source: sources.value(i).to_string(),
+            relation: relations.value(i).to_string(),
+            target: targets.value(i).to_string(),
+        })
+        .collect()
+}
+
+/// Build a Cypher query for 1-hop connection traversal.
+fn build_connections_cypher(
+    entity_id: &str,
+    agent: &str,
+    relation: Option<&str>,
+    direction: Direction,
+) -> String {
+    let eid = escape_cypher(entity_id);
+    let ag = escape_cypher(agent);
+
+    let rel_type = relation
+        .map(|r| format!(":`{}`", escape_cypher_ident(r)))
+        .unwrap_or_default();
+
+    let (pattern, agent_filter) = match direction {
+        Direction::Outgoing => (
+            format!("(e:entities {{id: '{eid}'}})-[r:relations{rel_type}]->(t:entities)"),
+            format!("r.agent = '{ag}'"),
+        ),
+        Direction::Incoming => (
+            format!("(e:entities)<-[r:relations{rel_type}]-(s:entities {{id: '{eid}'}})"),
+            format!("r.agent = '{ag}'"),
+        ),
+        Direction::Both => (
+            format!("(e:entities)-[r:relations{rel_type}]-(o:entities {{id: '{eid}'}})"),
+            format!("r.agent = '{ag}'"),
+        ),
+    };
+
+    format!(
+        "MATCH {pattern} WHERE {agent_filter} RETURN r.source, r.relation, r.target LIMIT {CONNECTIONS_LIMIT}"
+    )
 }
 
 fn escape_sql(s: &str) -> String {
     s.replace('\'', "''")
+}
+
+fn escape_cypher(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('\'', "\\'")
+}
+
+/// Escape a Cypher identifier for backtick quoting.
+fn escape_cypher_ident(s: &str) -> String {
+    s.replace('`', "``")
 }
 
 fn now_unix() -> u64 {

@@ -20,8 +20,9 @@ wcore = { path = "crates/core", package = "walrus-core", version = "0.0.4" }
 
 # crates.io
 anyhow = "1"
-arrow-array = "57"
-arrow-schema = "57"
+arrow = "56"
+arrow-array = "56"
+arrow-schema = "56"
 async-stream = "0.3"
 chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
@@ -32,7 +33,8 @@ futures = "0.3"
 futures-core = "0.3"
 futures-util = "0.3"
 hf-hub = { version = "0.5.0", features = ["tokio"] }
-lancedb = "0.26"
+lance-graph = { version = "0.5", default-features = false }
+lancedb = "0.23"
 mistralrs = { version = "0.7.1-alpha.1", default-features = false, git = "https://github.com/EricLBuehler/mistral.rs.git" }
 openssl-sys = { version = "0.9", features = ["vendored"] }
 reqwest = { version = "0.12", default-features = false, features = [

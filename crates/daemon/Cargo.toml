@@ -32,6 +32,7 @@ dirs.workspace = true
 futures.workspace = true
 futures-core.workspace = true
 futures-util.workspace = true
+lance-graph.workspace = true
 lancedb.workspace = true
 rmcp.workspace = true
 schemars.workspace = true
