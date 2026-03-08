@@ -21,7 +21,7 @@ use std::{path::Path, sync::Arc};
 
 const ENTITIES_TABLE: &str = "entities";
 const RELATIONS_TABLE: &str = "relations";
-const CONNECTIONS_LIMIT: usize = 100;
+const CONNECTIONS_MAX: usize = 100;
 
 /// Row data for an entity.
 pub(crate) struct EntityRow<'a> {
@@ -207,8 +207,10 @@ impl LanceStore {
         agent: &str,
         relation: Option<&str>,
         direction: Direction,
+        limit: usize,
     ) -> Result<Vec<RelationResult>> {
-        let cypher = build_connections_cypher(entity_id, agent, relation, direction);
+        let limit = limit.min(CONNECTIONS_MAX);
+        let cypher = build_connections_cypher(entity_id, agent, relation, direction, limit);
         let query = CypherQuery::new(&cypher)?.with_config(self.graph_config.clone());
         let batch = query
             .execute_with_namespace_arc(Arc::clone(&self.namespace), None)
@@ -409,6 +411,7 @@ fn build_connections_cypher(
     agent: &str,
     relation: Option<&str>,
     direction: Direction,
+    limit: usize,
 ) -> String {
     let eid = escape_cypher(entity_id);
     let ag = escape_cypher(agent);
@@ -433,7 +436,7 @@ fn build_connections_cypher(
     };
 
     format!(
-        "MATCH {pattern} WHERE {agent_filter} RETURN r.source, r.relation, r.target LIMIT {CONNECTIONS_LIMIT}"
+        "MATCH {pattern} WHERE {agent_filter} RETURN r.source, r.relation, r.target LIMIT {limit}"
     )
 }
 

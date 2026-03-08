@@ -100,8 +100,7 @@ impl Daemon {
     /// Build the daemon hook with all backends (memory, skills, MCP).
     async fn build_hook(config: &DaemonConfig, config_dir: &Path) -> Result<DaemonHook> {
         let memory_dir = config_dir.join("memory");
-        let extra_types = config.memory.entity_types.clone();
-        let memory = hook::memory::MemoryHook::open(memory_dir, extra_types).await?;
+        let memory = hook::memory::MemoryHook::open(memory_dir, &config.memory).await?;
         tracing::info!("memory hook initialized (LanceDB graph)");
 
         let skills_dir = config_dir.join(wcore::paths::SKILLS_DIR);

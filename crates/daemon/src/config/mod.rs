@@ -44,7 +44,17 @@ pub struct DaemonConfig {
 pub struct MemoryConfig {
     /// Additional entity types beyond the framework defaults.
     #[serde(default)]
-    pub entity_types: Vec<String>,
+    pub entities: Vec<String>,
+    /// Additional relation types beyond the framework defaults.
+    #[serde(default)]
+    pub relations: Vec<String>,
+    /// Default limit for `connections` traversal results (default: 20, max: 100).
+    #[serde(default = "default_connection_limit")]
+    pub connection_limit: usize,
+}
+
+fn default_connection_limit() -> usize {
+    20
 }
 
 impl DaemonConfig {

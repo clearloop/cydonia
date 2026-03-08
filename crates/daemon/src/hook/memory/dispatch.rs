@@ -15,11 +15,11 @@ impl MemoryHook {
         if input.key.is_empty() {
             return "missing required field: key".to_owned();
         }
-        if !self.is_valid_type(&input.entity_type) {
+        if !self.is_valid_entity(&input.entity_type) {
             return format!(
                 "unknown entity_type: '{}'. allowed: {}",
                 input.entity_type,
-                self.allowed_types.join(", ")
+                self.allowed_entities.join(", ")
             );
         }
 
@@ -77,6 +77,13 @@ impl MemoryHook {
         }
         if input.relation.is_empty() {
             return "missing required field: relation".to_owned();
+        }
+        if !self.is_valid_relation(&input.relation) {
+            return format!(
+                "unknown relation: '{}'. allowed: {}",
+                input.relation,
+                self.allowed_relations.join(", ")
+            );
         }
 
         // Look up source entity.
@@ -139,9 +146,20 @@ impl MemoryHook {
             _ => Direction::Outgoing,
         };
 
+        let limit = input
+            .limit
+            .map(|l| (l as usize).min(100))
+            .unwrap_or(self.connection_limit);
+
         let relations = match self
             .lance
-            .find_connections(&entity.id, agent, input.relation.as_deref(), direction)
+            .find_connections(
+                &entity.id,
+                agent,
+                input.relation.as_deref(),
+                direction,
+                limit,
+            )
             .await
         {
             Ok(r) => r,

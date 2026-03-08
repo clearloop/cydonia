@@ -4,6 +4,7 @@
 //! tool schemas. Entities are typed (identity, profile, fact, etc.) and
 //! relations are directed edges between entities.
 
+use crate::config::MemoryConfig;
 use lance::LanceStore;
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -16,7 +17,7 @@ pub(crate) mod lance;
 const MEMORY_PROMPT: &str = include_str!("../../../prompts/memory.md");
 
 /// Default entity types provided by the framework.
-const DEFAULT_ENTITY_TYPES: &[&str] = &[
+const DEFAULT_ENTITIES: &[&str] = &[
     "fact",
     "preference",
     "person",
@@ -26,46 +27,64 @@ const DEFAULT_ENTITY_TYPES: &[&str] = &[
     "profile",
 ];
 
+/// Default relation types provided by the framework.
+const DEFAULT_RELATIONS: &[&str] = &[
+    "knows",
+    "prefers",
+    "related_to",
+    "caused_by",
+    "part_of",
+    "depends_on",
+    "tagged_with",
+];
+
 /// Graph-based memory hook owning LanceDB entity and relation storage.
 pub struct MemoryHook {
     pub(crate) lance: LanceStore,
-    pub(crate) allowed_types: Vec<String>,
+    pub(crate) allowed_entities: Vec<String>,
+    pub(crate) allowed_relations: Vec<String>,
+    pub(crate) connection_limit: usize,
 }
 
 impl MemoryHook {
     /// Create a new MemoryHook, opening or creating the LanceDB database.
-    ///
-    /// `extra_types` are additional entity types from daemon config, merged
-    /// with the framework defaults.
-    pub async fn open(
-        memory_dir: impl AsRef<Path>,
-        extra_types: Vec<String>,
-    ) -> anyhow::Result<Self> {
+    pub async fn open(memory_dir: impl AsRef<Path>, config: &MemoryConfig) -> anyhow::Result<Self> {
         let memory_dir = memory_dir.as_ref();
         tokio::fs::create_dir_all(memory_dir).await?;
         let lance_dir = memory_dir.join("lance");
         let lance = LanceStore::open(&lance_dir).await?;
 
-        let mut allowed_types: Vec<String> = DEFAULT_ENTITY_TYPES
-            .iter()
-            .map(|s| (*s).to_owned())
-            .collect();
-        for t in extra_types {
-            if !allowed_types.contains(&t) {
-                allowed_types.push(t);
-            }
-        }
+        let allowed_entities = merge_defaults(DEFAULT_ENTITIES, &config.entities);
+        let allowed_relations = merge_defaults(DEFAULT_RELATIONS, &config.relations);
+        let connection_limit = config.connection_limit.clamp(1, 100);
 
         Ok(Self {
             lance,
-            allowed_types,
+            allowed_entities,
+            allowed_relations,
+            connection_limit,
         })
     }
 
     /// Check if an entity type is allowed.
-    pub(crate) fn is_valid_type(&self, entity_type: &str) -> bool {
-        self.allowed_types.iter().any(|t| t == entity_type)
+    pub(crate) fn is_valid_entity(&self, entity_type: &str) -> bool {
+        self.allowed_entities.iter().any(|t| t == entity_type)
     }
+
+    /// Check if a relation type is allowed.
+    pub(crate) fn is_valid_relation(&self, relation: &str) -> bool {
+        self.allowed_relations.iter().any(|r| r == relation)
+    }
+}
+
+fn merge_defaults(defaults: &[&str], extras: &[String]) -> Vec<String> {
+    let mut merged: Vec<String> = defaults.iter().map(|s| (*s).to_owned()).collect();
+    for t in extras {
+        if !merged.contains(t) {
+            merged.push(t.clone());
+        }
+    }
+    merged
 }
 
 impl Hook for MemoryHook {
@@ -125,7 +144,7 @@ impl Hook for MemoryHook {
             name: "remember".into(),
             description: format!(
                 "Store a memory entity. Types: {}.",
-                self.allowed_types.join(", ")
+                self.allowed_entities.join(", ")
             ),
             parameters: schemars::schema_for!(RememberInput),
             strict: false,
@@ -138,7 +157,10 @@ impl Hook for MemoryHook {
         });
         tools.insert(Tool {
             name: "relate".into(),
-            description: "Create a directed relation between two entities by key.".into(),
+            description: format!(
+                "Create a directed relation between two entities by key. Relations: {}.",
+                self.allowed_relations.join(", ")
+            ),
             parameters: schemars::schema_for!(RelateInput),
             strict: false,
         });
@@ -200,6 +222,8 @@ pub(crate) struct ConnectionsInput {
     pub relation: Option<String>,
     /// Direction: "outgoing" (default), "incoming", or "both".
     pub direction: Option<String>,
+    /// Maximum number of results (default: config value, max: 100).
+    pub limit: Option<u32>,
 }
 
 /// Input for the `compact` tool (no parameters).

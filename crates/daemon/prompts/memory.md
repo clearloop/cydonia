@@ -26,12 +26,19 @@ the most relevant entities by full-text search.
 
 ### relate
 
-Create a directed relation between two entities by key. For example:
+Create a directed relation between two entities by key. Both entities must already exist (created via `remember`). Default relation types:
+- `knows` — person/entity awareness
+- `prefers` — preference link
+- `related_to` — general association
+- `caused_by` — causal link
+- `part_of` — membership or containment
+- `depends_on` — dependency
+- `tagged_with` — label or category
+
+Examples:
 - `relate("Alice", "knows", "Bob")` — Alice knows Bob
 - `relate("user", "prefers", "dark mode")` — user prefers dark mode
 - `relate("bug #42", "caused_by", "race condition")` — causal link
-
-Both entities must already exist (created via `remember`).
 
 ### connections
 
