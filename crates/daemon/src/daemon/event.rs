@@ -80,7 +80,7 @@ impl Daemon {
             let rt = runtime.read().await.clone();
             let result = rt
                 .hook
-                .dispatch_tool(&req.name, &req.args, &req.agent)
+                .dispatch_tool(&req.name, &req.args, &req.agent, req.task_id)
                 .await;
             let _ = req.reply.send(result);
         });

@@ -98,6 +98,20 @@ pub enum ClientMessage {
         /// Session ID to close.
         session: u64,
     },
+    /// List tasks in the task registry.
+    Tasks,
+    /// Kill (cancel) a task.
+    KillTask {
+        /// Task ID to cancel.
+        task_id: u64,
+    },
+    /// Approve a blocked task's inbox item.
+    Approve {
+        /// Task ID to approve.
+        task_id: u64,
+        /// Response to send to the blocked tool call.
+        response: String,
+    },
 }
 
 impl From<SendRequest> for ClientMessage {

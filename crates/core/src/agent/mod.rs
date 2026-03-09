@@ -115,6 +115,7 @@ impl<M: Model> Agent<M> {
             args: args.to_owned(),
             agent: self.config.name.to_string(),
             reply: reply_tx,
+            task_id: None,
         };
         if tx.send(req).is_err() {
             return format!("tool channel closed while calling '{name}'");

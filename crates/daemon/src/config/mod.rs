@@ -32,11 +32,50 @@ pub struct DaemonConfig {
     /// Memory configuration.
     #[serde(default)]
     pub memory: MemoryConfig,
+    /// Task executor pool configuration.
+    #[serde(default)]
+    pub tasks: TasksConfig,
     /// Optional symlink path for the workspace sandbox root (`~/.openwalrus/work/`).
     ///
     /// When set, a symlink is created at this path pointing to `~/.openwalrus/work/`.
     #[serde(default)]
     pub work_dir: Option<PathBuf>,
+}
+
+/// Task executor pool configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TasksConfig {
+    /// Maximum number of concurrently InProgress tasks (default 4).
+    #[serde(default = "default_max_concurrent")]
+    pub max_concurrent: usize,
+    /// Maximum number of tasks returned by queries (default 16).
+    #[serde(default = "default_viewable_window")]
+    pub viewable_window: usize,
+    /// Per-task execution timeout in seconds (default 300).
+    #[serde(default = "default_task_timeout")]
+    pub task_timeout: u64,
+}
+
+impl Default for TasksConfig {
+    fn default() -> Self {
+        Self {
+            max_concurrent: default_max_concurrent(),
+            viewable_window: default_viewable_window(),
+            task_timeout: default_task_timeout(),
+        }
+    }
+}
+
+fn default_max_concurrent() -> usize {
+    4
+}
+
+fn default_viewable_window() -> usize {
+    16
+}
+
+fn default_task_timeout() -> u64 {
+    300
 }
 
 /// Memory subsystem configuration.
