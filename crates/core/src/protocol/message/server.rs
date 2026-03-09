@@ -10,6 +10,8 @@ pub struct SendResponse {
     pub agent: CompactString,
     /// Response content.
     pub content: String,
+    /// Session ID used for this request.
+    pub session: u64,
 }
 
 /// Events emitted during a streamed agent response.
@@ -19,6 +21,8 @@ pub enum StreamEvent {
     Start {
         /// Source agent identifier.
         agent: CompactString,
+        /// Session ID used for this stream.
+        session: u64,
     },
     /// A chunk of streamed content.
     Chunk {
@@ -90,6 +94,21 @@ pub enum HubEvent {
     },
 }
 
+/// Summary of an active session.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionInfo {
+    /// Session identifier.
+    pub id: u64,
+    /// Agent this session is bound to.
+    pub agent: CompactString,
+    /// Origin of this session.
+    pub created_by: CompactString,
+    /// Number of messages in history.
+    pub message_count: usize,
+    /// Seconds since session was created.
+    pub alive_secs: u64,
+}
+
 /// Messages sent by the gateway to the client.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -111,6 +130,8 @@ pub enum ServerMessage {
     Pong,
     /// A hub install/uninstall event.
     Hub(HubEvent),
+    /// Active session list.
+    Sessions(Vec<SessionInfo>),
 }
 
 impl From<SendResponse> for ServerMessage {

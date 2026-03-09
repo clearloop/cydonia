@@ -12,10 +12,7 @@ use crate::{
 };
 use anyhow::Result;
 use model::ProviderManager;
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::{path::Path, sync::Arc};
 use tokio::sync::RwLock;
 use wcore::{Runtime, ToolRequest};
 
@@ -78,10 +75,12 @@ impl Daemon {
         {
             if let Some(entry) = model::local::registry::find(&config.model.default) {
                 let local = model::local::registry::build_local(entry);
-                manager.add_provider(config.model.default.clone(), model::Provider::Local(local));
+                manager
+                    .add_provider(config.model.default.clone(), model::Provider::Local(local))?;
             } else if let Some(entry) = model::local::registry::find_by_key(&config.model.default) {
                 let local = model::local::registry::build_local(entry);
-                manager.add_provider(config.model.default.clone(), model::Provider::Local(local));
+                manager
+                    .add_provider(config.model.default.clone(), model::Provider::Local(local))?;
             }
         }
 
@@ -92,7 +91,7 @@ impl Daemon {
 
         tracing::info!(
             "provider manager initialized — active model: {}",
-            manager.active_model()
+            manager.active_model_name().unwrap_or_default()
         );
         Ok(manager)
     }
@@ -106,7 +105,7 @@ impl Daemon {
         let skills_dir = config_dir.join(wcore::paths::SKILLS_DIR);
         let skills = hook::skill::SkillHandler::load(skills_dir).unwrap_or_else(|e| {
             tracing::warn!("failed to load skills: {e}");
-            hook::skill::SkillHandler::load(PathBuf::new()).expect("empty skill handler")
+            hook::skill::SkillHandler::default()
         });
 
         let mcp_servers = config.mcp_servers.values().cloned().collect::<Vec<_>>();
