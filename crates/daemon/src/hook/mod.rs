@@ -7,16 +7,14 @@
 
 use crate::hook::{
     mcp::{CallMcpToolInput, McpHandler, SearchMcpInput},
+    memory::MemoryHook,
     os::OsHook,
     skill::{LoadSkillInput, SearchSkillInput, SkillHandler, loader},
 };
-use memory::InMemory;
-use wcore::{
-    AgentConfig, AgentEvent, Hook, Memory, RecallInput, RecallOptions, RememberInput, ToolRegistry,
-    model::Tool,
-};
+use wcore::{AgentConfig, AgentEvent, Hook, ToolRegistry, model::Tool};
 
 pub mod mcp;
+pub mod memory;
 pub mod os;
 pub mod skill;
 
@@ -26,7 +24,7 @@ pub mod skill;
 /// self-registers its tools via `on_register_tools`. All tool dispatch
 /// is routed through `dispatch_tool`.
 pub struct DaemonHook {
-    pub memory: InMemory,
+    pub memory: MemoryHook,
     pub skills: SkillHandler,
     pub mcp: McpHandler,
     pub os: OsHook,
@@ -34,7 +32,7 @@ pub struct DaemonHook {
 
 impl DaemonHook {
     /// Create a new DaemonHook with the given backends.
-    pub fn new(memory: InMemory, skills: SkillHandler, mcp: McpHandler) -> Self {
+    pub fn new(memory: MemoryHook, skills: SkillHandler, mcp: McpHandler) -> Self {
         Self {
             memory,
             skills,
@@ -48,10 +46,15 @@ impl DaemonHook {
     /// This is the single dispatch entry point — `event.rs` calls this
     /// and never matches on tool names itself. Unrecognised names are
     /// forwarded to the MCP bridge after a warn-level log.
-    pub async fn dispatch_tool(&self, name: &str, args: &str) -> String {
+    pub async fn dispatch_tool(&self, name: &str, args: &str, agent: &str) -> String {
         match name {
-            "remember" => self.dispatch_remember(args).await,
-            "recall" => self.dispatch_recall(args).await,
+            "remember" => self.memory.dispatch_remember(args, agent).await,
+            "recall" => self.memory.dispatch_recall(args, agent).await,
+            "relate" => self.memory.dispatch_relate(args, agent).await,
+            "connections" => self.memory.dispatch_connections(args, agent).await,
+            "compact" => self.memory.dispatch_compact(agent).await,
+            "__journal__" => self.memory.dispatch_journal(args, agent).await,
+            "distill" => self.memory.dispatch_distill(args, agent).await,
             "search_mcp" => self.dispatch_search_mcp(args).await,
             "call_mcp_tool" => self.dispatch_call_mcp_tool(args).await,
             "search_skill" => self.dispatch_search_skill(args).await,
@@ -64,44 +67,6 @@ impl DaemonHook {
                 let bridge = self.mcp.bridge().await;
                 bridge.call(name, args).await
             }
-        }
-    }
-
-    // ── Memory tools ─────────────────────────────────────────────────
-
-    async fn dispatch_remember(&self, args: &str) -> String {
-        let input: RememberInput = match serde_json::from_str(args) {
-            Ok(v) => v,
-            Err(e) => return format!("invalid arguments: {e}"),
-        };
-        if input.key.is_empty() {
-            return "missing required field: key".to_owned();
-        }
-        let key = input.key.clone();
-        match self.memory.store(input.key, input.value).await {
-            Ok(()) => format!("remembered: {key}"),
-            Err(e) => format!("failed to store: {e}"),
-        }
-    }
-
-    async fn dispatch_recall(&self, args: &str) -> String {
-        let input: RecallInput = match serde_json::from_str(args) {
-            Ok(v) => v,
-            Err(e) => return format!("invalid arguments: {e}"),
-        };
-        let limit = input.limit.unwrap_or(10) as usize;
-        let options = RecallOptions {
-            limit,
-            ..Default::default()
-        };
-        match self.memory.recall(&input.query, options).await {
-            Ok(entries) if entries.is_empty() => "no memories found".to_owned(),
-            Ok(entries) => entries
-                .iter()
-                .map(|e| format!("{}: {}", e.key, e.value))
-                .collect::<Vec<_>>()
-                .join("\n"),
-            Err(e) => format!("recall failed: {e}"),
         }
     }
 
@@ -195,6 +160,10 @@ impl DaemonHook {
 impl Hook for DaemonHook {
     fn on_build_agent(&self, config: AgentConfig) -> AgentConfig {
         self.memory.on_build_agent(config)
+    }
+
+    fn on_compact(&self, prompt: &mut String) {
+        self.memory.on_compact(prompt);
     }
 
     async fn on_register_tools(&self, tools: &mut ToolRegistry) {

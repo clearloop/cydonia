@@ -161,6 +161,26 @@ impl Local {
         Ok(Self::from_model(model))
     }
 
+    /// Wait until the model finishes loading (or fails).
+    ///
+    /// Blocks the current task until state transitions away from `Loading`.
+    pub async fn wait_until_ready(&mut self) -> anyhow::Result<()> {
+        self.state
+            .wait_for(|s| !matches!(s, LocalState::Loading))
+            .await
+            .map_err(|_| anyhow::anyhow!("model loader dropped before completing"))?;
+        // Check if it failed.
+        let state = self.state.borrow();
+        match &*state {
+            LocalState::Ready(_) => Ok(()),
+            LocalState::Failed(e) => Err(anyhow::anyhow!(
+                "local model '{}' failed to load: {e}",
+                self.model_id
+            )),
+            LocalState::Loading => unreachable!(),
+        }
+    }
+
     /// Try to get the ready model. Returns an error describing current state
     /// if not ready.
     pub(crate) fn ready_model(&self) -> anyhow::Result<Arc<mistralrs::Model>> {

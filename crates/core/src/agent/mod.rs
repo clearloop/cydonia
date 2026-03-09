@@ -19,10 +19,12 @@ use tokio::sync::{mpsc, oneshot};
 use tool::{ToolRequest, ToolSender};
 
 pub use builder::AgentBuilder;
+pub use compact::COMPACT_SENTINEL;
 pub use config::AgentConfig;
 pub use parser::parse_agent_md;
 
 mod builder;
+mod compact;
 pub mod config;
 pub mod event;
 mod parser;
@@ -126,6 +128,7 @@ impl<M: Model> Agent<M> {
         let req = ToolRequest {
             name: name.to_owned(),
             args: args.to_owned(),
+            agent: self.config.name.to_string(),
             reply: reply_tx,
         };
         if tx.send(req).is_err() {
@@ -199,31 +202,35 @@ impl<M: Model> Agent<M> {
                 }
 
                 // Stream from the model, yielding text deltas as they arrive.
+                // Scoped so the pinned stream drops before we may borrow self
+                // mutably for compaction.
                 let mut builder = MessageBuilder::new(Role::Assistant);
                 let mut finish_reason = None;
                 let mut last_meta = CompletionMeta::default();
                 let mut last_usage = None;
                 let mut stream_error = None;
 
-                let mut chunk_stream = std::pin::pin!(self.model.stream(request));
-                while let Some(result) = chunk_stream.next().await {
-                    match result {
-                        Ok(chunk) => {
-                            if let Some(text) = chunk.content() {
-                                yield AgentEvent::TextDelta(text.to_owned());
+                {
+                    let mut chunk_stream = std::pin::pin!(self.model.stream(request));
+                    while let Some(result) = chunk_stream.next().await {
+                        match result {
+                            Ok(chunk) => {
+                                if let Some(text) = chunk.content() {
+                                    yield AgentEvent::TextDelta(text.to_owned());
+                                }
+                                if let Some(r) = chunk.reason() {
+                                    finish_reason = Some(*r);
+                                }
+                                last_meta = chunk.meta.clone();
+                                if chunk.usage.is_some() {
+                                    last_usage = chunk.usage.clone();
+                                }
+                                builder.accept(&chunk);
                             }
-                            if let Some(r) = chunk.reason() {
-                                finish_reason = Some(*r);
+                            Err(e) => {
+                                stream_error = Some(e.to_string());
+                                break;
                             }
-                            last_meta = chunk.meta.clone();
-                            if chunk.usage.is_some() {
-                                last_usage = chunk.usage.clone();
-                            }
-                            builder.accept(&chunk);
-                        }
-                        Err(e) => {
-                            stream_error = Some(e.to_string());
-                            break;
                         }
                     }
                 }
@@ -282,12 +289,16 @@ impl<M: Model> Agent<M> {
 
                 // Dispatch tool calls if any.
                 let mut tool_results = Vec::new();
+                let mut compact_triggered = false;
                 if has_tool_calls {
                     yield AgentEvent::ToolCallsStart(tool_calls.clone());
                     for tc in &tool_calls {
                         let result = self
                             .dispatch_tool(&tc.function.name, &tc.function.arguments)
                             .await;
+                        if result.starts_with(compact::COMPACT_SENTINEL) {
+                            compact_triggered = true;
+                        }
                         let msg = Message::tool(&result, tc.id.clone());
                         self.history.push(msg.clone());
                         tool_results.push(msg);
@@ -297,6 +308,21 @@ impl<M: Model> Agent<M> {
                         };
                     }
                     yield AgentEvent::ToolCallsComplete;
+                }
+
+                // Handle compaction: summarize history, store journal, replace.
+                if compact_triggered {
+                    if let Some(summary) = self.compact().await {
+                        // Store journal entry via internal tool dispatch.
+                        let _ = self.dispatch_tool("__journal__", &summary).await;
+                        // Replace history with the summary.
+                        self.history = vec![Message::user(&summary)];
+                        yield AgentEvent::TextDelta(
+                            "\n[context compacted]\n".to_owned(),
+                        );
+                    }
+                    // Continue the agent loop with compact context.
+                    continue;
                 }
 
                 let step = AgentStep {

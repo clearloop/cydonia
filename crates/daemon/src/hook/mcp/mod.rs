@@ -15,7 +15,7 @@ mod handler;
 
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct SearchMcpInput {
-    /// Keyword to match tool names and descriptions
+    /// Keyword to match tool names and descriptions. Leave empty to list all.
     pub query: String,
 }
 

@@ -11,19 +11,14 @@
 //! - Agent event types: [`AgentEvent`], [`AgentStep`], [`AgentResponse`], [`AgentStopReason`].
 
 pub use agent::{
-    Agent, AgentBuilder, AgentConfig,
+    Agent, AgentBuilder, AgentConfig, COMPACT_SENTINEL,
     event::{AgentEvent, AgentResponse, AgentStep, AgentStopReason},
     parse_agent_md,
     tool::{ToolRegistry, ToolRequest, ToolSender},
 };
-pub use memory::{
-    Embedder, Memory, MemoryEntry, RecallOptions,
-    tools::{RecallInput, RememberInput},
-};
 pub use runtime::{Runtime, hook::Hook};
 
 mod agent;
-pub mod memory;
 pub mod model;
 pub mod paths;
 pub mod protocol;

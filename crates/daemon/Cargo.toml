@@ -18,18 +18,24 @@ cuda = ["model/cuda"]
 
 [dependencies]
 channel.workspace = true
-memory.workspace = true
 model.workspace = true
 socket.workspace = true
 wcore.workspace = true
 
 # crates.io
 anyhow.workspace = true
+arrow-array.workspace = true
+arrow-schema.workspace = true
 async-stream.workspace = true
+chrono.workspace = true
 compact_str.workspace = true
 dirs.workspace = true
+fastembed.workspace = true
+futures.workspace = true
 futures-core.workspace = true
 futures-util.workspace = true
+lance-graph.workspace = true
+lancedb.workspace = true
 rmcp.workspace = true
 schemars.workspace = true
 serde.workspace = true

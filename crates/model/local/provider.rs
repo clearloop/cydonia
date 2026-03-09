@@ -140,9 +140,13 @@ impl ToolCallFilter {
             }
 
             // Partial match — hold the buffer, don't yield yet.
-            if TOOL_CALL_PREFIXES
-                .iter()
-                .any(|p| is_partial_prefix(&self.buffer, p))
+            // Only check when the buffer has at least 2 chars — no single
+            // character uniquely identifies a tool call prefix start, so
+            // short buffers flush immediately for responsive streaming.
+            if self.buffer.len() >= 2
+                && TOOL_CALL_PREFIXES
+                    .iter()
+                    .any(|p| is_partial_prefix(&self.buffer, p))
             {
                 tracing::trace!(buffer = %self.buffer, "tool_call_filter: partial prefix match, holding");
                 return out;

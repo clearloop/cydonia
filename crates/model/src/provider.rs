@@ -45,6 +45,18 @@ impl Provider {
             Self::Local(p) => p.context_length(_model),
         }
     }
+
+    /// Wait until the provider is ready.
+    ///
+    /// No-op for remote providers. For local providers, blocks until the
+    /// model finishes loading.
+    pub async fn wait_until_ready(&mut self) -> Result<()> {
+        match self {
+            Self::OpenAI(_) | Self::Claude(_) => Ok(()),
+            #[cfg(feature = "local")]
+            Self::Local(p) => p.wait_until_ready().await,
+        }
+    }
 }
 
 /// Construct a remote `Provider` from config and a shared HTTP client.

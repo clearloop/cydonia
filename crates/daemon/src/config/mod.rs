@@ -29,11 +29,32 @@ pub struct DaemonConfig {
     /// MCP server configurations.
     #[serde(default)]
     pub mcp_servers: BTreeMap<String, mcp::McpServerConfig>,
+    /// Memory configuration.
+    #[serde(default)]
+    pub memory: MemoryConfig,
     /// Optional symlink path for the workspace sandbox root (`~/.openwalrus/work/`).
     ///
     /// When set, a symlink is created at this path pointing to `~/.openwalrus/work/`.
     #[serde(default)]
     pub work_dir: Option<PathBuf>,
+}
+
+/// Memory subsystem configuration.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct MemoryConfig {
+    /// Additional entity types beyond the framework defaults.
+    #[serde(default)]
+    pub entities: Vec<String>,
+    /// Additional relation types beyond the framework defaults.
+    #[serde(default)]
+    pub relations: Vec<String>,
+    /// Default limit for `connections` traversal results (default: 20, max: 100).
+    #[serde(default = "default_connection_limit")]
+    pub connection_limit: usize,
+}
+
+fn default_connection_limit() -> usize {
+    20
 }
 
 impl DaemonConfig {

@@ -76,9 +76,12 @@ impl Daemon {
     fn handle_tool_call(&self, req: ToolRequest) {
         let runtime = self.runtime.clone();
         tokio::spawn(async move {
-            tracing::debug!(tool = %req.name, "tool dispatch");
+            tracing::debug!(tool = %req.name, agent = %req.agent, "tool dispatch");
             let rt = runtime.read().await.clone();
-            let result = rt.hook.dispatch_tool(&req.name, &req.args).await;
+            let result = rt
+                .hook
+                .dispatch_tool(&req.name, &req.args, &req.agent)
+                .await;
             let _ = req.reply.send(result);
         });
     }
