@@ -12,6 +12,7 @@ pub use {bridge::McpBridge, handler::McpHandler};
 
 mod bridge;
 mod handler;
+pub(crate) mod tool;
 
 #[derive(Deserialize, JsonSchema)]
 pub(crate) struct SearchMcpInput {

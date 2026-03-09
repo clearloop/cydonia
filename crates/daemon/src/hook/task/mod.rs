@@ -12,6 +12,7 @@ pub use registry::TaskRegistry;
 
 pub(crate) mod params;
 mod registry;
+pub(crate) mod tool;
 
 /// Task execution status.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
