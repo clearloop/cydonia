@@ -34,12 +34,12 @@ pub struct DaemonConfig {
     /// Task executor pool configuration.
     #[serde(default)]
     pub tasks: TasksConfig,
+    /// Per-agent heartbeat configuration.
+    #[serde(default)]
+    pub agents: AgentsConfig,
     /// Permission configuration: global defaults + per-agent overrides.
     #[serde(default)]
     pub permissions: PermissionConfig,
-    /// Heartbeat timer configuration.
-    #[serde(default)]
-    pub heartbeat: HeartbeatConfig,
 }
 
 /// Task executor pool configuration.
@@ -102,6 +102,77 @@ impl Default for HeartbeatConfig {
             interval: 1,
             prompt: String::new(),
         }
+    }
+}
+
+/// Per-agent override configuration.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AgentOverride {
+    /// Per-agent heartbeat override.
+    #[serde(default)]
+    pub heartbeat: Option<HeartbeatConfig>,
+}
+
+/// Per-agent heartbeat configuration: global defaults + per-agent overrides.
+///
+/// TOML layout:
+/// ```toml
+/// [agents.heartbeat]
+/// interval = 1
+/// prompt = ""
+///
+/// [agents.researcher.heartbeat]
+/// interval = 5
+/// prompt = "Check your research queue."
+/// ```
+///
+/// The `heartbeat` key is the global default. Other table keys are per-agent
+/// overrides containing a `heartbeat` sub-table.
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct AgentsConfig {
+    /// Global heartbeat defaults.
+    pub heartbeat: HeartbeatConfig,
+    /// Per-agent overrides (agent_name → config).
+    pub overrides: BTreeMap<String, AgentOverride>,
+}
+
+impl<'de> Deserialize<'de> for AgentsConfig {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let raw: BTreeMap<String, toml::Value> = BTreeMap::deserialize(deserializer)?;
+        let mut config = AgentsConfig::default();
+        for (key, value) in raw {
+            match key.as_str() {
+                "heartbeat" => {
+                    config.heartbeat =
+                        serde::Deserialize::deserialize(value).map_err(serde::de::Error::custom)?;
+                }
+                _ => {
+                    if let toml::Value::Table(_) = &value {
+                        let agent_override: AgentOverride = serde::Deserialize::deserialize(value)
+                            .map_err(serde::de::Error::custom)?;
+                        config.overrides.insert(key, agent_override);
+                    }
+                }
+            }
+        }
+        Ok(config)
+    }
+}
+
+impl AgentsConfig {
+    /// Resolve the effective heartbeat config for a given agent.
+    ///
+    /// Priority: agent override > global default.
+    pub fn resolve_heartbeat(&self, agent: &str) -> (u64, &str) {
+        if let Some(over) = self.overrides.get(agent)
+            && let Some(hb) = &over.heartbeat
+        {
+            return (hb.interval, &hb.prompt);
+        }
+        (self.heartbeat.interval, &self.heartbeat.prompt)
     }
 }
 

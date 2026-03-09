@@ -392,6 +392,21 @@ impl TaskRegistry {
         }
         groups
     }
+
+    /// Collect queued `create_task` entries for a single agent, capped at
+    /// `max_concurrent`.
+    pub fn queued_create_tasks_for(&self, agent: &str) -> Vec<(u64, String)> {
+        let mut entries = Vec::new();
+        for task in self.tasks.values() {
+            if task.status == TaskStatus::Queued && !task.spawned && task.agent == agent {
+                entries.push((task.id, task.description.clone()));
+                if entries.len() >= self.max_concurrent {
+                    break;
+                }
+            }
+        }
+        entries
+    }
 }
 
 /// Watcher task: awaits reply messages with timeout, closes session, completes task.
