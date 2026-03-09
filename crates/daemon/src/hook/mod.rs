@@ -12,10 +12,15 @@ use crate::{
         memory::MemoryHook,
         os::OsHook,
         skill::{LoadSkillInput, SearchSkillInput, SkillHandler, loader},
-        task::TaskRegistry,
+        task::{
+            TaskRegistry,
+            params::{
+                AskUserInput, AwaitTasksInput, CheckTasksInput, CreateTaskInput, SpawnTaskInput,
+                parse_task_status,
+            },
+        },
     },
 };
-use serde::Deserialize;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use wcore::{AgentConfig, AgentEvent, Hook, ToolRegistry, model::Tool};
@@ -382,64 +387,6 @@ impl DaemonHook {
             })
             .collect();
         serde_json::to_string(&results).unwrap_or_else(|e| format!("serialization error: {e}"))
-    }
-}
-
-/// Input for the `spawn_task` tool.
-#[derive(Deserialize, schemars::JsonSchema)]
-struct SpawnTaskInput {
-    /// Target agent name to delegate the task to.
-    agent: String,
-    /// Message/instruction for the target agent.
-    message: String,
-}
-
-/// Input for the `check_tasks` tool.
-#[derive(Deserialize, schemars::JsonSchema)]
-struct CheckTasksInput {
-    /// Filter by agent name.
-    #[serde(default)]
-    agent: Option<String>,
-    /// Filter by status (queued, in_progress, blocked, finished, failed).
-    #[serde(default)]
-    status: Option<String>,
-    /// Filter by parent task ID.
-    #[serde(default)]
-    parent_id: Option<u64>,
-}
-
-/// Input for the `create_task` tool.
-#[derive(Deserialize, schemars::JsonSchema)]
-struct CreateTaskInput {
-    /// Target agent name.
-    agent: String,
-    /// Human-readable task description.
-    description: String,
-}
-
-/// Input for the `ask_user` tool.
-#[derive(Deserialize, schemars::JsonSchema)]
-struct AskUserInput {
-    /// Question to ask the user.
-    question: String,
-}
-
-/// Input for the `await_tasks` tool.
-#[derive(Deserialize, schemars::JsonSchema)]
-struct AwaitTasksInput {
-    /// Task IDs to wait for.
-    task_ids: Vec<u64>,
-}
-
-/// Parse a status string into a `TaskStatus`.
-fn parse_task_status(s: &str) -> Option<task::TaskStatus> {
-    match s {
-        "queued" => Some(task::TaskStatus::Queued),
-        "in_progress" => Some(task::TaskStatus::InProgress),
-        "blocked" => Some(task::TaskStatus::Blocked),
-        "finished" => Some(task::TaskStatus::Finished),
-        "failed" => Some(task::TaskStatus::Failed),
-        _ => None,
     }
 }
 
