@@ -122,7 +122,19 @@ impl Daemon {
             event_tx.clone(),
         )));
 
-        Ok(DaemonHook::new(memory, skills, mcp_handler, tasks))
+        let sandboxed = detect_sandbox();
+        if sandboxed {
+            tracing::info!("sandbox mode active — OS tools bypass permission check");
+        }
+
+        Ok(DaemonHook::new(
+            memory,
+            skills,
+            mcp_handler,
+            tasks,
+            config.permissions.clone(),
+            sandboxed,
+        ))
     }
 
     /// Build a [`ToolSender`] that forwards [`ToolRequest`]s into the daemon
@@ -156,4 +168,12 @@ impl Daemon {
         }
         Ok(())
     }
+}
+
+/// Detect sandbox mode by checking if the current process is running as
+/// a user named `walrus`.
+fn detect_sandbox() -> bool {
+    std::env::var("USER")
+        .or_else(|_| std::env::var("LOGNAME"))
+        .is_ok_and(|u| u == "walrus")
 }

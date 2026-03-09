@@ -5,12 +5,15 @@
 //! delegates to all sub-hooks in sequence. `dispatch_tool` routes every
 //! agent tool call by name — the single entry point from `event.rs`.
 
-use crate::hook::{
-    mcp::{CallMcpToolInput, McpHandler, SearchMcpInput},
-    memory::MemoryHook,
-    os::OsHook,
-    skill::{LoadSkillInput, SearchSkillInput, SkillHandler, loader},
-    task::TaskRegistry,
+use crate::{
+    config::PermissionConfig,
+    hook::{
+        mcp::{CallMcpToolInput, McpHandler, SearchMcpInput},
+        memory::MemoryHook,
+        os::OsHook,
+        skill::{LoadSkillInput, SearchSkillInput, SkillHandler, loader},
+        task::TaskRegistry,
+    },
 };
 use serde::Deserialize;
 use std::sync::Arc;
@@ -34,7 +37,13 @@ pub struct DaemonHook {
     pub mcp: McpHandler,
     pub os: OsHook,
     pub tasks: Arc<Mutex<TaskRegistry>>,
+    pub permissions: PermissionConfig,
+    /// Whether the daemon is running as the `walrus` OS user (sandbox active).
+    pub sandboxed: bool,
 }
+
+/// OS tool names — bypass permission check when running in sandbox mode.
+const OS_TOOLS: &[&str] = &["read", "write", "bash"];
 
 impl DaemonHook {
     /// Create a new DaemonHook with the given backends.
@@ -43,13 +52,17 @@ impl DaemonHook {
         skills: SkillHandler,
         mcp: McpHandler,
         tasks: Arc<Mutex<TaskRegistry>>,
+        permissions: PermissionConfig,
+        sandboxed: bool,
     ) -> Self {
         Self {
             memory,
             skills,
             mcp,
-            os: OsHook::new(wcore::paths::CONFIG_DIR.join(wcore::paths::WORK_DIR)),
+            os: OsHook::new(),
             tasks,
+            permissions,
+            sandboxed,
         }
     }
 
@@ -65,6 +78,41 @@ impl DaemonHook {
         agent: &str,
         task_id: Option<u64>,
     ) -> String {
+        // Permission check — skip for OS tools when running in sandbox mode.
+        let skip_perm = self.sandboxed && OS_TOOLS.contains(&name);
+        if !skip_perm {
+            use crate::config::ToolPermission;
+            match self.permissions.resolve(agent, name) {
+                ToolPermission::Deny => {
+                    return format!("permission denied: {name}");
+                }
+                ToolPermission::Ask => {
+                    if let Some(tid) = task_id {
+                        // Truncate args for the question to avoid huge messages.
+                        let summary = if args.len() > 200 {
+                            format!("{}…", &args[..200])
+                        } else {
+                            args.to_string()
+                        };
+                        let question = format!("{name}: {summary}");
+                        let rx = self.tasks.lock().await.block(tid, question);
+                        if let Some(rx) = rx {
+                            match rx.await {
+                                Ok(resp) if resp == "denied" => {
+                                    return format!("permission denied: {name}");
+                                }
+                                Err(_) => {
+                                    return format!("permission denied: {name} (inbox dropped)");
+                                }
+                                _ => {} // approved or any other response → proceed
+                            }
+                        }
+                    }
+                    // No task_id → can't block, treat as Allow.
+                }
+                ToolPermission::Allow => {}
+            }
+        }
         match name {
             "remember" => self.memory.dispatch_remember(args, agent).await,
             "recall" => self.memory.dispatch_recall(args, agent).await,
