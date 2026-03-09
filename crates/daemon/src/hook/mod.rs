@@ -295,6 +295,7 @@ impl DaemonHook {
             agent.into(),
             None,
             task::TaskStatus::Queued,
+            false,
         );
         serde_json::json!({ "task_id": task_id, "status": "queued" }).to_string()
     }

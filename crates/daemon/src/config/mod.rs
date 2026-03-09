@@ -38,6 +38,9 @@ pub struct DaemonConfig {
     /// Permission configuration: global defaults + per-agent overrides.
     #[serde(default)]
     pub permissions: PermissionConfig,
+    /// Heartbeat timer configuration.
+    #[serde(default)]
+    pub heartbeat: HeartbeatConfig,
     /// Optional symlink path for the workspace sandbox root (`~/.openwalrus/work/`).
     ///
     /// When set, a symlink is created at this path pointing to `~/.openwalrus/work/`.
@@ -181,6 +184,30 @@ impl PermissionConfig {
         }
         self.defaults.get(tool).copied().unwrap_or_default()
     }
+}
+
+/// Heartbeat timer configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HeartbeatConfig {
+    /// Interval in seconds (default 60, 0 = disabled).
+    #[serde(default = "default_heartbeat_interval")]
+    pub interval: u64,
+    /// System prompt for heartbeat-triggered agent runs.
+    #[serde(default)]
+    pub prompt: String,
+}
+
+impl Default for HeartbeatConfig {
+    fn default() -> Self {
+        Self {
+            interval: default_heartbeat_interval(),
+            prompt: String::new(),
+        }
+    }
+}
+
+fn default_heartbeat_interval() -> u64 {
+    60
 }
 
 impl DaemonConfig {
