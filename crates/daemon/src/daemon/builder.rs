@@ -6,7 +6,7 @@
 //! in-place from disk without restarting transports.
 
 use crate::{
-    DaemonConfig,
+    Daemon, DaemonConfig,
     daemon::event::{DaemonEvent, DaemonEventSender},
     hook::{self, DaemonHook, task::TaskRegistry},
 };
@@ -15,8 +15,6 @@ use model::ProviderManager;
 use std::{path::Path, sync::Arc};
 use tokio::sync::{Mutex, RwLock};
 use wcore::{Runtime, ToolRequest};
-
-use super::Daemon;
 
 const SYSTEM_AGENT: &str = include_str!("../../prompts/system.md");
 
@@ -113,7 +111,7 @@ impl Daemon {
             hook::skill::SkillHandler::default()
         });
 
-        let mcp_servers = config.mcp_servers.values().cloned().collect::<Vec<_>>();
+        let mcp_servers = config.mcps.values().cloned().collect::<Vec<_>>();
         let mcp_handler = hook::mcp::McpHandler::load(&mcp_servers).await;
 
         let tasks = Arc::new(Mutex::new(TaskRegistry::new(

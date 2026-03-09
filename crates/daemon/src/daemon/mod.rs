@@ -6,7 +6,6 @@
 
 use crate::{
     DaemonConfig,
-    config::scaffold_work_dir,
     daemon::event::{DaemonEvent, DaemonEventSender},
     hook::DaemonHook,
 };
@@ -56,7 +55,6 @@ impl Daemon {
         let config = DaemonConfig::load(&config_path)?;
         tracing::info!("loaded configuration from {}", config_path.display());
 
-        scaffold_work_dir(&wcore::paths::CONFIG_DIR, config.work_dir.as_deref())?;
         let (event_tx, event_rx) = mpsc::unbounded_channel::<DaemonEvent>();
         let daemon = Daemon::build(&config, config_dir, event_tx.clone()).await?;
 
@@ -73,7 +71,8 @@ impl Daemon {
         if config.heartbeat.interval > 0 {
             let heartbeat_tx = event_tx.clone();
             let mut heartbeat_shutdown = shutdown_tx.subscribe();
-            let interval_secs = config.heartbeat.interval;
+            let interval_mins = config.heartbeat.interval;
+            let interval_secs = interval_mins * 60;
             tokio::spawn(async move {
                 let mut interval =
                     tokio::time::interval(std::time::Duration::from_secs(interval_secs));
@@ -89,7 +88,7 @@ impl Daemon {
                     }
                 }
             });
-            tracing::info!("heartbeat timer started (interval: {interval_secs}s)");
+            tracing::info!("heartbeat timer started (interval: {interval_mins}m)");
         }
 
         let d = daemon.clone();

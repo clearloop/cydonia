@@ -2,14 +2,11 @@
 
 pub use ::model::{ProviderConfig, ProviderManager};
 use anyhow::Result;
-pub use default::{scaffold_config_dir, scaffold_work_dir};
+pub use default::scaffold_config_dir;
 pub use perm::{PermissionConfig, ToolPermission};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::path::PathBuf;
-pub use wcore::paths::{
-    AGENTS_DIR, CONFIG_DIR, DATA_DIR, MEMORY_DB, SKILLS_DIR, SOCKET_PATH, WORK_DIR,
-};
+pub use wcore::paths::{AGENTS_DIR, CONFIG_DIR, DATA_DIR, MEMORY_DB, SKILLS_DIR, SOCKET_PATH};
 pub use {channel::ChannelConfig, mcp::McpServerConfig};
 pub use {loader::load_agents_dir, model::ModelConfig};
 
@@ -30,7 +27,7 @@ pub struct DaemonConfig {
     pub channel: ChannelConfig,
     /// MCP server configurations.
     #[serde(default)]
-    pub mcp_servers: BTreeMap<String, mcp::McpServerConfig>,
+    pub mcps: BTreeMap<String, mcp::McpServerConfig>,
     /// Memory configuration.
     #[serde(default)]
     pub memory: MemoryConfig,
@@ -43,89 +40,69 @@ pub struct DaemonConfig {
     /// Heartbeat timer configuration.
     #[serde(default)]
     pub heartbeat: HeartbeatConfig,
-    /// Optional symlink path for the workspace sandbox root (`~/.openwalrus/work/`).
-    ///
-    /// When set, a symlink is created at this path pointing to `~/.openwalrus/work/`.
-    #[serde(default)]
-    pub work_dir: Option<PathBuf>,
 }
 
 /// Task executor pool configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct TasksConfig {
     /// Maximum number of concurrently InProgress tasks (default 4).
-    #[serde(default = "default_max_concurrent")]
     pub max_concurrent: usize,
     /// Maximum number of tasks returned by queries (default 16).
-    #[serde(default = "default_viewable_window")]
     pub viewable_window: usize,
     /// Per-task execution timeout in seconds (default 300).
-    #[serde(default = "default_task_timeout")]
     pub task_timeout: u64,
 }
 
 impl Default for TasksConfig {
     fn default() -> Self {
         Self {
-            max_concurrent: default_max_concurrent(),
-            viewable_window: default_viewable_window(),
-            task_timeout: default_task_timeout(),
+            max_concurrent: 4,
+            viewable_window: 16,
+            task_timeout: 300,
         }
     }
 }
 
-fn default_max_concurrent() -> usize {
-    4
-}
-
-fn default_viewable_window() -> usize {
-    16
-}
-
-fn default_task_timeout() -> u64 {
-    300
-}
-
 /// Memory subsystem configuration.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct MemoryConfig {
     /// Additional entity types beyond the framework defaults.
-    #[serde(default)]
     pub entities: Vec<String>,
     /// Additional relation types beyond the framework defaults.
-    #[serde(default)]
     pub relations: Vec<String>,
     /// Default limit for `connections` traversal results (default: 20, max: 100).
-    #[serde(default = "default_connection_limit")]
-    pub connection_limit: usize,
+    pub connections: usize,
 }
 
-fn default_connection_limit() -> usize {
-    20
+impl Default for MemoryConfig {
+    fn default() -> Self {
+        Self {
+            entities: Vec::new(),
+            relations: Vec::new(),
+            connections: 20,
+        }
+    }
 }
 
 /// Heartbeat timer configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct HeartbeatConfig {
-    /// Interval in seconds (default 60, 0 = disabled).
-    #[serde(default = "default_heartbeat_interval")]
+    /// Interval in minutes (default 1, 0 = disabled).
     pub interval: u64,
     /// System prompt for heartbeat-triggered agent runs.
-    #[serde(default)]
     pub prompt: String,
 }
 
 impl Default for HeartbeatConfig {
     fn default() -> Self {
         Self {
-            interval: default_heartbeat_interval(),
+            interval: 1,
             prompt: String::new(),
         }
     }
-}
-
-fn default_heartbeat_interval() -> u64 {
-    60
 }
 
 impl DaemonConfig {
@@ -141,7 +118,7 @@ impl DaemonConfig {
                     provider.model = key.clone();
                 }
             });
-        config.mcp_servers.iter_mut().for_each(|(name, server)| {
+        config.mcps.iter_mut().for_each(|(name, server)| {
             if server.name.is_empty() {
                 server.name = name.clone().into();
             }

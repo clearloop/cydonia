@@ -63,7 +63,7 @@ impl MemoryHook {
 
         let allowed_entities = merge_defaults(DEFAULT_ENTITIES, &config.entities);
         let allowed_relations = merge_defaults(DEFAULT_RELATIONS, &config.relations);
-        let connection_limit = config.connection_limit.clamp(1, 100);
+        let connection_limit = config.connections.clamp(1, 100);
 
         Ok(Self {
             lance,

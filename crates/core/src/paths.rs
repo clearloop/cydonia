@@ -22,8 +22,6 @@ pub const AGENTS_DIR: &str = "agents";
 pub const SKILLS_DIR: &str = "skills";
 /// Data subdirectory.
 pub const DATA_DIR: &str = "data";
-/// Workspace sandbox subdirectory.
-pub const WORK_DIR: &str = "work";
 
 /// SQLite memory database filename.
 pub const MEMORY_DB: &str = "memory.db";

@@ -6,7 +6,6 @@
 use anyhow::{Context, Result};
 use async_stream::try_stream;
 use compact_str::CompactString;
-pub use manifest::{Manifest, Package, SkillResource};
 use std::path::Path;
 use tokio::process::Command;
 use wcore::paths::CONFIG_DIR;
@@ -171,10 +170,10 @@ fn merge_mcp_servers(manifest: &manifest::Manifest) -> Result<()> {
         .with_context(|| format!("invalid TOML in {}", config_path.display()))?;
 
     let table = doc
-        .entry("mcp_servers")
+        .entry("mcps")
         .or_insert(toml_edit::Item::Table(toml_edit::Table::new()))
         .as_table_mut()
-        .context("mcp_servers is not a table")?;
+        .context("mcps is not a table")?;
 
     for (key, cfg) in &manifest.mcp_servers {
         let doc = toml_edit::ser::to_document(cfg)
@@ -199,7 +198,7 @@ fn remove_mcp_servers(manifest: &manifest::Manifest) -> Result<()> {
         .parse()
         .with_context(|| format!("invalid TOML in {}", config_path.display()))?;
 
-    if let Some(table) = doc.get_mut("mcp_servers").and_then(|v| v.as_table_mut()) {
+    if let Some(table) = doc.get_mut("mcps").and_then(|v| v.as_table_mut()) {
         for key in manifest.mcp_servers.keys() {
             table.remove(key.as_str());
         }

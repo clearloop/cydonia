@@ -6,23 +6,28 @@ use std::collections::BTreeMap;
 
 /// MCP server configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct McpServerConfig {
     /// Server name. If empty, the name will be the command.
-    #[serde(default)]
     pub name: CompactString,
     /// Command to spawn.
     pub command: String,
     /// Command arguments.
-    #[serde(default)]
     pub args: Vec<String>,
     /// Environment variables.
-    #[serde(default)]
     pub env: BTreeMap<String, String>,
     /// Auto-restart on failure.
-    #[serde(default = "default_true")]
     pub auto_restart: bool,
 }
 
-fn default_true() -> bool {
-    true
+impl Default for McpServerConfig {
+    fn default() -> Self {
+        Self {
+            name: CompactString::default(),
+            command: String::new(),
+            args: Vec::new(),
+            env: BTreeMap::new(),
+            auto_restart: true,
+        }
+    }
 }
