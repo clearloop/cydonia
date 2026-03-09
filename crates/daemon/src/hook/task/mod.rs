@@ -12,7 +12,6 @@ pub use config::TasksConfig;
 pub use registry::TaskRegistry;
 
 pub mod config;
-pub(crate) mod params;
 mod registry;
 pub(crate) mod tool;
 

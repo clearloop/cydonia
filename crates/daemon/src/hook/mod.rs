@@ -6,10 +6,7 @@
 //! agent tool call by name — the single entry point from `event.rs`.
 
 use crate::hook::{
-    mcp::McpHandler,
-    memory::MemoryHook,
-    os::{OsHook, PermissionConfig},
-    skill::SkillHandler,
+    mcp::McpHandler, memory::MemoryHook, os::PermissionConfig, skill::SkillHandler,
     task::TaskRegistry,
 };
 use std::sync::Arc;
@@ -31,7 +28,6 @@ pub struct DaemonHook {
     pub memory: MemoryHook,
     pub skills: SkillHandler,
     pub mcp: McpHandler,
-    pub os: OsHook,
     pub tasks: Arc<Mutex<TaskRegistry>>,
     pub permissions: PermissionConfig,
     /// Whether the daemon is running as the `walrus` OS user (sandbox active).
@@ -55,7 +51,6 @@ impl DaemonHook {
             memory,
             skills,
             mcp,
-            os: OsHook::new(),
             tasks,
             permissions,
             sandboxed,
@@ -133,9 +128,9 @@ impl DaemonHook {
             "call_mcp_tool" => self.dispatch_call_mcp_tool(args).await,
             "search_skill" => self.dispatch_search_skill(args).await,
             "load_skill" => self.dispatch_load_skill(args).await,
-            "read" => self.os.dispatch_read(args).await,
-            "write" => self.os.dispatch_write(args).await,
-            "bash" => self.os.dispatch_bash(args).await,
+            "read" => self.dispatch_read(args).await,
+            "write" => self.dispatch_write(args).await,
+            "bash" => self.dispatch_bash(args).await,
             "spawn_task" => self.dispatch_spawn_task(args, agent, task_id).await,
             "check_tasks" => self.dispatch_check_tasks(args).await,
             "create_task" => self.dispatch_create_task(args, agent).await,
@@ -162,10 +157,9 @@ impl Hook for DaemonHook {
     async fn on_register_tools(&self, tools: &mut ToolRegistry) {
         self.memory.on_register_tools(tools).await;
         self.mcp.on_register_tools(tools).await;
-        self.os.on_register_tools(tools).await;
-        mcp::tool::register_tools(tools);
-        skill::tool::register_tools(tools);
-        task::tool::register_tools(tools);
+        tools.insert_all(os::tool::tools());
+        tools.insert_all(skill::tool::tools());
+        tools.insert_all(task::tool::tools());
     }
 
     fn on_event(&self, agent: &str, event: &AgentEvent) {

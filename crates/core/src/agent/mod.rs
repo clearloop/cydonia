@@ -13,16 +13,15 @@ use crate::model::{
 };
 use anyhow::Result;
 use async_stream::stream;
-use event::{AgentEvent, AgentResponse, AgentStep, AgentStopReason};
-use futures_core::Stream;
-use futures_util::StreamExt;
-use tokio::sync::{mpsc, oneshot};
-use tool::{ToolRequest, ToolSender};
-
 pub use builder::AgentBuilder;
 pub use compact::COMPACT_SENTINEL;
 pub use config::AgentConfig;
+use event::{AgentEvent, AgentResponse, AgentStep, AgentStopReason};
+use futures_core::Stream;
+use futures_util::StreamExt;
 pub use parser::parse_agent_md;
+use tokio::sync::{mpsc, oneshot};
+pub use tool::{AsTool, ToolDescription, ToolRequest, ToolSender};
 
 mod builder;
 mod compact;

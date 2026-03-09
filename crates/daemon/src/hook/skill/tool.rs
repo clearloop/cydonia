@@ -1,28 +1,40 @@
 //! Tool dispatch and schema registration for skill tools.
 
-use super::{LoadSkillInput, SearchSkillInput, loader};
-use crate::hook::DaemonHook;
-use wcore::{ToolRegistry, model::Tool};
+use crate::hook::{DaemonHook, skill::loader};
+use serde::Deserialize;
+use wcore::{
+    agent::{AsTool, ToolDescription},
+    model::Tool,
+};
 
-pub(crate) fn register_tools(tools: &mut ToolRegistry) {
-    tools.insert(Tool {
-        name: "search_skill".into(),
-        description: "Search available skills by keyword. Returns name and description only."
-            .into(),
-        parameters: schemars::schema_for!(SearchSkillInput),
-        strict: false,
-    });
-    tools.insert(Tool {
-        name: "load_skill".into(),
-        description: "Load a skill by name. Returns its instructions and the skill directory path for resolving relative file references.".into(),
-        parameters: schemars::schema_for!(LoadSkillInput),
-        strict: false,
-    });
+#[derive(Deserialize, schemars::JsonSchema)]
+pub(crate) struct SearchSkill {
+    /// Keyword to match skill names and descriptions. Leave empty to list all.
+    pub query: String,
+}
+
+impl ToolDescription for SearchSkill {
+    const DESCRIPTION: &'static str =
+        "Search available skills by keyword. Returns name and description only.";
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+pub(crate) struct LoadSkill {
+    /// Skill name
+    pub name: String,
+}
+
+impl ToolDescription for LoadSkill {
+    const DESCRIPTION: &'static str = "Load a skill by name. Returns its instructions and the skill directory path for resolving relative file references.";
+}
+
+pub(crate) fn tools() -> Vec<Tool> {
+    vec![SearchSkill::as_tool(), LoadSkill::as_tool()]
 }
 
 impl DaemonHook {
     pub(crate) async fn dispatch_search_skill(&self, args: &str) -> String {
-        let input: SearchSkillInput = match serde_json::from_str(args) {
+        let input: SearchSkill = match serde_json::from_str(args) {
             Ok(v) => v,
             Err(e) => return format!("invalid arguments: {e}"),
         };
@@ -45,7 +57,7 @@ impl DaemonHook {
     }
 
     pub(crate) async fn dispatch_load_skill(&self, args: &str) -> String {
-        let input: LoadSkillInput = match serde_json::from_str(args) {
+        let input: LoadSkill = match serde_json::from_str(args) {
             Ok(v) => v,
             Err(e) => return format!("invalid arguments: {e}"),
         };

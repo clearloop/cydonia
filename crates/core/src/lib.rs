@@ -19,7 +19,7 @@ pub use agent::{
 };
 pub use runtime::{Runtime, Session, hook::Hook};
 
-mod agent;
+pub mod agent;
 pub mod model;
 pub mod paths;
 pub mod protocol;

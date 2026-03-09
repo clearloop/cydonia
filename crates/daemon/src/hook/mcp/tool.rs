@@ -1,27 +1,35 @@
 //! Tool dispatch and schema registration for MCP tools.
 
-use super::{CallMcpToolInput, SearchMcpInput};
 use crate::hook::DaemonHook;
-use wcore::{ToolRegistry, model::Tool};
+use schemars::JsonSchema;
+use serde::Deserialize;
+use wcore::agent::ToolDescription;
 
-pub(crate) fn register_tools(tools: &mut ToolRegistry) {
-    tools.insert(Tool {
-        name: "search_mcp".into(),
-        description: "Search available MCP tools by keyword.".into(),
-        parameters: schemars::schema_for!(SearchMcpInput),
-        strict: false,
-    });
-    tools.insert(Tool {
-        name: "call_mcp_tool".into(),
-        description: "Call an MCP tool by name with JSON-encoded arguments.".into(),
-        parameters: schemars::schema_for!(CallMcpToolInput),
-        strict: false,
-    });
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct SearchMcp {
+    /// Keyword to match tool names and descriptions. Leave empty to list all.
+    pub query: String,
+}
+
+impl ToolDescription for SearchMcp {
+    const DESCRIPTION: &'static str = "Search available MCP tools by keyword.";
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct CallMcpTool {
+    /// Tool name
+    pub name: String,
+    /// JSON-encoded arguments string
+    pub args: Option<String>,
+}
+
+impl ToolDescription for CallMcpTool {
+    const DESCRIPTION: &'static str = "Call an MCP tool by name with JSON-encoded arguments.";
 }
 
 impl DaemonHook {
     pub(crate) async fn dispatch_search_mcp(&self, args: &str) -> String {
-        let input: SearchMcpInput = match serde_json::from_str(args) {
+        let input: SearchMcp = match serde_json::from_str(args) {
             Ok(v) => v,
             Err(e) => return format!("invalid arguments: {e}"),
         };
@@ -44,7 +52,7 @@ impl DaemonHook {
     }
 
     pub(crate) async fn dispatch_call_mcp_tool(&self, args: &str) -> String {
-        let input: CallMcpToolInput = match serde_json::from_str(args) {
+        let input: CallMcpTool = match serde_json::from_str(args) {
             Ok(v) => v,
             Err(e) => return format!("invalid arguments: {e}"),
         };

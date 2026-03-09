@@ -11,7 +11,7 @@ pub struct Tool {
     pub name: CompactString,
 
     /// The description of the tool
-    pub description: String,
+    pub description: CompactString,
 
     /// The parameters of the tool
     pub parameters: Schema,

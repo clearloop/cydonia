@@ -2,10 +2,10 @@
 
 use schemars::JsonSchema;
 use serde::Deserialize;
+use wcore::agent::ToolDescription;
 
-/// Input for the `remember` tool.
 #[derive(Deserialize, JsonSchema)]
-pub(crate) struct RememberInput {
+pub(crate) struct Remember {
     /// Entity type (e.g. "fact", "preference", "identity", "profile").
     pub entity_type: String,
     /// Human-readable key/name for the entity.
@@ -14,9 +14,12 @@ pub(crate) struct RememberInput {
     pub value: String,
 }
 
-/// Input for the `recall` tool.
+impl ToolDescription for Remember {
+    const DESCRIPTION: &'static str = "Store a memory entity.";
+}
+
 #[derive(Deserialize, JsonSchema)]
-pub(crate) struct RecallInput {
+pub(crate) struct Recall {
     /// Search query for relevant entities.
     pub query: String,
     /// Optional entity type filter.
@@ -25,9 +28,13 @@ pub(crate) struct RecallInput {
     pub limit: Option<u32>,
 }
 
-/// Input for the `relate` tool.
+impl ToolDescription for Recall {
+    const DESCRIPTION: &'static str =
+        "Search memory entities by query, optionally filtered by type.";
+}
+
 #[derive(Deserialize, JsonSchema)]
-pub(crate) struct RelateInput {
+pub(crate) struct Relate {
     /// Key of the source entity.
     pub source_key: String,
     /// Relation type (e.g. "knows", "prefers", "related_to", "caused_by").
@@ -36,9 +43,12 @@ pub(crate) struct RelateInput {
     pub target_key: String,
 }
 
-/// Input for the `connections` tool.
+impl ToolDescription for Relate {
+    const DESCRIPTION: &'static str = "Create a directed relation between two entities by key.";
+}
+
 #[derive(Deserialize, JsonSchema)]
-pub(crate) struct ConnectionsInput {
+pub(crate) struct Connections {
     /// Key of the entity to find connections for.
     pub key: String,
     /// Optional relation type filter.
@@ -49,15 +59,26 @@ pub(crate) struct ConnectionsInput {
     pub limit: Option<u32>,
 }
 
-/// Input for the `compact` tool (no parameters).
-#[derive(Deserialize, JsonSchema)]
-pub(crate) struct CompactInput {}
+impl ToolDescription for Connections {
+    const DESCRIPTION: &'static str =
+        "Find entities connected to a given entity (1-hop graph traversal).";
+}
 
-/// Input for the `distill` tool.
 #[derive(Deserialize, JsonSchema)]
-pub(crate) struct DistillInput {
+pub(crate) struct Compact {}
+
+impl ToolDescription for Compact {
+    const DESCRIPTION: &'static str = "Trigger context compaction. Summarizes the conversation, stores a journal entry, and replaces history with the summary.";
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub(crate) struct Distill {
     /// Semantic search query over journal entries.
     pub query: String,
     /// Maximum number of results (default: 5).
     pub limit: Option<u32>,
+}
+
+impl ToolDescription for Distill {
+    const DESCRIPTION: &'static str = "Search journal entries by semantic similarity. Returns past conversation summaries. Use `remember`/`relate` to extract durable facts.";
 }

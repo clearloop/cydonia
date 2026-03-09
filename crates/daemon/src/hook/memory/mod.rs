@@ -6,17 +6,14 @@
 pub use config::MemoryConfig;
 use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 use lance::LanceStore;
-use params::{
-    CompactInput, ConnectionsInput, DistillInput, RecallInput, RelateInput, RememberInput,
-};
 use std::path::Path;
 use std::sync::Mutex;
-use wcore::{AgentConfig, Hook, ToolRegistry, model::Tool};
+use wcore::{AgentConfig, Hook, ToolRegistry, agent::AsTool, model::Tool};
 
 pub mod config;
 pub(crate) mod dispatch;
 pub(crate) mod lance;
-mod params;
+pub(crate) mod tool;
 
 const MEMORY_PROMPT: &str = include_str!("../../../prompts/memory.md");
 
@@ -187,52 +184,26 @@ impl Hook for MemoryHook {
     }
 
     async fn on_register_tools(&self, tools: &mut ToolRegistry) {
+        // remember and relate have dynamic descriptions (inject allowed types).
         tools.insert(Tool {
-            name: "remember".into(),
             description: format!(
                 "Store a memory entity. Types: {}.",
                 self.allowed_entities.join(", ")
-            ),
-            parameters: schemars::schema_for!(RememberInput),
-            strict: false,
+            )
+            .into(),
+            ..tool::Remember::as_tool()
         });
+        tools.insert(tool::Recall::as_tool());
         tools.insert(Tool {
-            name: "recall".into(),
-            description: "Search memory entities by query, optionally filtered by type.".into(),
-            parameters: schemars::schema_for!(RecallInput),
-            strict: false,
-        });
-        tools.insert(Tool {
-            name: "relate".into(),
             description: format!(
                 "Create a directed relation between two entities by key. Relations: {}.",
                 self.allowed_relations.join(", ")
-            ),
-            parameters: schemars::schema_for!(RelateInput),
-            strict: false,
+            )
+            .into(),
+            ..tool::Relate::as_tool()
         });
-        tools.insert(Tool {
-            name: "connections".into(),
-            description: "Find entities connected to a given entity (1-hop graph traversal)."
-                .into(),
-            parameters: schemars::schema_for!(ConnectionsInput),
-            strict: false,
-        });
-        tools.insert(Tool {
-            name: "compact".into(),
-            description: "Trigger context compaction. Summarizes the conversation, stores a \
-                          journal entry, and replaces history with the summary."
-                .into(),
-            parameters: schemars::schema_for!(CompactInput),
-            strict: false,
-        });
-        tools.insert(Tool {
-            name: "distill".into(),
-            description: "Search journal entries by semantic similarity. Returns past \
-                          conversation summaries. Use `remember`/`relate` to extract durable facts."
-                .into(),
-            parameters: schemars::schema_for!(DistillInput),
-            strict: false,
-        });
+        tools.insert(tool::Connections::as_tool());
+        tools.insert(tool::Compact::as_tool());
+        tools.insert(tool::Distill::as_tool());
     }
 }
