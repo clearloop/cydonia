@@ -8,9 +8,10 @@
 
 use schemars::JsonSchema;
 use serde::Deserialize;
-pub use {bridge::McpBridge, handler::McpHandler};
+pub use {bridge::McpBridge, config::McpServerConfig, handler::McpHandler};
 
 mod bridge;
+pub mod config;
 mod handler;
 pub(crate) mod tool;
 

@@ -1,6 +1,6 @@
 //! walrus hub manifest
 
-use crate::config::McpServerConfig;
+use crate::hook::mcp::McpServerConfig;
 use compact_str::CompactString;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;

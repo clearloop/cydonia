@@ -67,19 +67,18 @@ impl Daemon {
     /// and any remote providers from config. Only one local model is active
     /// at a time to avoid memory pressure.
     async fn build_providers(config: &DaemonConfig) -> Result<ProviderManager> {
-        let manager = ProviderManager::new(config.model.default.clone());
+        let active_model = config.walrus.model.clone();
+        let manager = ProviderManager::new(active_model.clone());
 
         // Add the single default local model from the registry.
         #[cfg(feature = "local")]
         {
-            if let Some(entry) = model::local::registry::find(&config.model.default) {
+            if let Some(entry) = model::local::registry::find(&active_model) {
                 let local = model::local::registry::build_local(entry);
-                manager
-                    .add_provider(config.model.default.clone(), model::Provider::Local(local))?;
-            } else if let Some(entry) = model::local::registry::find_by_key(&config.model.default) {
+                manager.add_provider(active_model.clone(), model::Provider::Local(local))?;
+            } else if let Some(entry) = model::local::registry::find_by_key(&active_model) {
                 let local = model::local::registry::build_local(entry);
-                manager
-                    .add_provider(config.model.default.clone(), model::Provider::Local(local))?;
+                manager.add_provider(active_model.clone(), model::Provider::Local(local))?;
             }
         }
 

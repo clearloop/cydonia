@@ -6,7 +6,7 @@
 
 use crate::{
     DaemonConfig,
-    config::AgentsConfig,
+    config::AgentConfig,
     daemon::event::{DaemonEvent, DaemonEventSender},
     hook::DaemonHook,
 };
@@ -14,6 +14,7 @@ use ::socket::server::accept_loop;
 use anyhow::Result;
 use model::ProviderManager;
 use std::{
+    collections::BTreeMap,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -40,8 +41,8 @@ pub struct Daemon {
     /// so agents can dispatch tool calls. Stored here so [`Daemon::reload`] can
     /// pass a fresh clone into the rebuilt runtime.
     pub(crate) event_tx: DaemonEventSender,
-    /// Per-agent heartbeat configuration.
-    pub(crate) agents_config: AgentsConfig,
+    /// Per-agent configurations (name → config).
+    pub(crate) agents_config: BTreeMap<String, AgentConfig>,
 }
 
 impl Daemon {
@@ -68,41 +69,37 @@ impl Daemon {
             let _ = shutdown_event_tx.send(DaemonEvent::Shutdown);
         });
 
-        // Per-agent heartbeat timers.
-        {
-            let rt = daemon.runtime.read().await;
-            for agent_cfg in rt.agents() {
-                let (interval_mins, _) = config.agents.resolve_heartbeat(&agent_cfg.name);
-                if interval_mins == 0 {
-                    continue;
-                }
-                let agent_name = compact_str::CompactString::from(agent_cfg.name.as_str());
-                let heartbeat_tx = event_tx.clone();
-                let mut heartbeat_shutdown = shutdown_tx.subscribe();
-                let interval_secs = interval_mins * 60;
-                tokio::spawn(async move {
-                    let mut tick =
-                        tokio::time::interval(std::time::Duration::from_secs(interval_secs));
-                    tick.tick().await; // skip the immediate first tick
-                    loop {
-                        tokio::select! {
-                            _ = tick.tick() => {
-                                let event = DaemonEvent::Heartbeat {
-                                    agent: agent_name.clone(),
-                                };
-                                if heartbeat_tx.send(event).is_err() {
-                                    break;
-                                }
-                            }
-                            _ = heartbeat_shutdown.recv() => break,
-                        }
-                    }
-                });
-                tracing::info!(
-                    "heartbeat timer started for '{}' (interval: {interval_mins}m)",
-                    agent_cfg.name
-                );
+        // Per-agent heartbeat timers — only agents with interval > 0 run.
+        for (name, agent) in &config.agents {
+            if agent.heartbeat.interval == 0 {
+                continue;
             }
+            let agent_name = compact_str::CompactString::from(name.as_str());
+            let heartbeat_tx = event_tx.clone();
+            let mut heartbeat_shutdown = shutdown_tx.subscribe();
+            let interval_secs = agent.heartbeat.interval * 60;
+            tokio::spawn(async move {
+                let mut tick = tokio::time::interval(std::time::Duration::from_secs(interval_secs));
+                tick.tick().await; // skip the immediate first tick
+                loop {
+                    tokio::select! {
+                        _ = tick.tick() => {
+                            let event = DaemonEvent::Heartbeat {
+                                agent: agent_name.clone(),
+                            };
+                            if heartbeat_tx.send(event).is_err() {
+                                break;
+                            }
+                        }
+                        _ = heartbeat_shutdown.recv() => break,
+                    }
+                }
+            });
+            tracing::info!(
+                "heartbeat timer started for '{}' (interval: {}m)",
+                name,
+                agent.heartbeat.interval,
+            );
         }
 
         let d = daemon.clone();

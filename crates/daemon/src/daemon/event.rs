@@ -98,7 +98,11 @@ impl Daemon {
                     .collect::<Vec<_>>()
                     .join("\n");
 
-                let (_, prompt) = daemon.agents_config.resolve_heartbeat(&agent);
+                let prompt = daemon
+                    .agents_config
+                    .get(agent.as_str())
+                    .map(|a| a.heartbeat.prompt.as_str())
+                    .unwrap_or("");
                 let content = if prompt.is_empty() {
                     format!("You have pending tasks:\n{task_context}")
                 } else {

@@ -3,7 +3,7 @@
 //! `compact`, and `distill` tool schemas. Journals store compaction summaries
 //! with vector embeddings for semantic search via fastembed.
 
-use crate::config::MemoryConfig;
+pub use config::MemoryConfig;
 use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 use lance::LanceStore;
 use params::{
@@ -13,6 +13,7 @@ use std::path::Path;
 use std::sync::Mutex;
 use wcore::{AgentConfig, Hook, ToolRegistry, model::Tool};
 
+pub mod config;
 pub(crate) mod dispatch;
 pub(crate) mod lance;
 mod params;

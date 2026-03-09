@@ -4,10 +4,13 @@
 //! async dispatch methods. Access control is handled by the permission layer
 //! in `dispatch_tool` — these tools dispatch directly without path validation.
 
+pub use config::{PermissionConfig, ToolPermission};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use wcore::{ToolRegistry, model::Tool};
+
+pub mod config;
 
 /// OS hook providing filesystem and shell tools.
 #[derive(Default)]

@@ -5,11 +5,12 @@
 //! delegates to all sub-hooks in sequence. `dispatch_tool` routes every
 //! agent tool call by name — the single entry point from `event.rs`.
 
-use crate::{
-    config::PermissionConfig,
-    hook::{
-        mcp::McpHandler, memory::MemoryHook, os::OsHook, skill::SkillHandler, task::TaskRegistry,
-    },
+use crate::hook::{
+    mcp::McpHandler,
+    memory::MemoryHook,
+    os::{OsHook, PermissionConfig},
+    skill::SkillHandler,
+    task::TaskRegistry,
 };
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -74,7 +75,7 @@ impl DaemonHook {
         if self.sandboxed && OS_TOOLS.contains(&name) {
             return None;
         }
-        use crate::config::ToolPermission;
+        use crate::hook::os::ToolPermission;
         match self.permissions.resolve(agent, name) {
             ToolPermission::Deny => Some(format!("permission denied: {name}")),
             ToolPermission::Ask => {
