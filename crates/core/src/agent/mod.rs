@@ -28,6 +28,16 @@ pub mod config;
 pub mod event;
 pub mod tool;
 
+/// Extract sender from the last user message in history.
+fn last_sender(history: &[Message]) -> compact_str::CompactString {
+    history
+        .iter()
+        .rev()
+        .find(|m| m.role == Role::User)
+        .map(|m| m.sender.clone())
+        .unwrap_or_default()
+}
+
 /// An immutable agent definition.
 ///
 /// Generic over `M: Model` — stores the model provider alongside config,
@@ -82,9 +92,10 @@ impl<M: Model> Agent<M> {
 
         let mut tool_results = Vec::new();
         if !tool_calls.is_empty() {
+            let sender = last_sender(history);
             for tc in &tool_calls {
                 let result = self
-                    .dispatch_tool(&tc.function.name, &tc.function.arguments)
+                    .dispatch_tool(&tc.function.name, &tc.function.arguments, &sender)
                     .await;
                 let msg = Message::tool(&result, tc.id.clone());
                 history.push(msg.clone());
@@ -103,7 +114,7 @@ impl<M: Model> Agent<M> {
     ///
     /// Returns the result string. If no sender is configured, returns an error
     /// message without panicking.
-    async fn dispatch_tool(&self, name: &str, args: &str) -> String {
+    async fn dispatch_tool(&self, name: &str, args: &str, sender: &str) -> String {
         let Some(tx) = &self.tool_tx else {
             return format!("tool '{name}' called but no tool sender configured");
         };
@@ -114,6 +125,7 @@ impl<M: Model> Agent<M> {
             agent: self.config.name.to_string(),
             reply: reply_tx,
             task_id: None,
+            sender: sender.into(),
         };
         if tx.send(req).is_err() {
             return format!("tool channel closed while calling '{name}'");
@@ -284,10 +296,11 @@ impl<M: Model> Agent<M> {
                 let mut tool_results = Vec::new();
                 let mut compact_triggered = false;
                 if has_tool_calls {
+                    let sender = last_sender(history);
                     yield AgentEvent::ToolCallsStart(tool_calls.clone());
                     for tc in &tool_calls {
                         let result = self
-                            .dispatch_tool(&tc.function.name, &tc.function.arguments)
+                            .dispatch_tool(&tc.function.name, &tc.function.arguments, &sender)
                             .await;
                         if result.starts_with(compact::COMPACT_SENTINEL) {
                             compact_triggered = true;
@@ -307,7 +320,7 @@ impl<M: Model> Agent<M> {
                 if compact_triggered {
                     if let Some(summary) = self.compact(history).await {
                         // Store journal entry via internal tool dispatch.
-                        let _ = self.dispatch_tool("__journal__", &summary).await;
+                        let _ = self.dispatch_tool("__journal__", &summary, "").await;
                         // Replace history with the summary.
                         *history = vec![Message::user(&summary)];
                         yield AgentEvent::TextDelta(

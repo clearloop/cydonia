@@ -168,6 +168,7 @@ impl DaemonHook {
         args: &str,
         agent: &str,
         task_id: Option<u64>,
+        sender: &str,
     ) -> String {
         if let Some(denied) = self.check_perm(name, args, agent, task_id).await {
             return denied;
@@ -180,10 +181,10 @@ impl DaemonHook {
             return format!("tool not available: {name}");
         }
         match name {
-            "remember" => self.memory.dispatch_remember(args, agent).await,
-            "recall" => self.memory.dispatch_recall(args, agent).await,
-            "relate" => self.memory.dispatch_relate(args, agent).await,
-            "connections" => self.memory.dispatch_connections(args, agent).await,
+            "remember" => self.memory.dispatch_remember(args, agent, sender).await,
+            "recall" => self.memory.dispatch_recall(args, agent, sender).await,
+            "relate" => self.memory.dispatch_relate(args, agent, sender).await,
+            "connections" => self.memory.dispatch_connections(args, agent, sender).await,
             "compact" => self.memory.dispatch_compact(agent).await,
             "__journal__" => self.memory.dispatch_journal(args, agent).await,
             "distill" => self.memory.dispatch_distill(args, agent).await,

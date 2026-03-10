@@ -48,6 +48,7 @@ impl Runner {
                 agent: CompactString::from(agent),
                 content: content.to_string(),
                 session: None,
+                sender: None,
             })
             .await?;
         Ok(resp.content)
@@ -65,6 +66,7 @@ impl Runner {
                 agent: CompactString::from(agent),
                 content: content.to_string(),
                 session: None,
+                sender: None,
             })
             .filter_map(|result| async {
                 match result {

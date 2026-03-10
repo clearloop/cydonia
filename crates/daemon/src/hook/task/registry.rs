@@ -179,6 +179,7 @@ impl TaskRegistry {
             agent,
             content: message,
             session: None,
+            sender: None,
         };
         let _ = self.event_tx.send(DaemonEvent::Message {
             msg,

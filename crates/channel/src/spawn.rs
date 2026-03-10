@@ -118,6 +118,7 @@ async fn telegram_loop<C, CFut>(
     while let Some(msg) = rx.recv().await {
         let chat_id = msg.chat_id;
         let content = msg.content.clone();
+        let sender: CompactString = format!("tg:{}", msg.sender_id).into();
 
         tracing::info!(%agent, chat_id, "telegram dispatch");
 
@@ -148,6 +149,7 @@ async fn telegram_loop<C, CFut>(
             agent: agent.clone(),
             content: content.clone(),
             session,
+            sender: Some(sender.clone()),
         };
         let mut reply_rx = on_message(client_msg).await;
         let mut retry = false;
@@ -177,6 +179,7 @@ async fn telegram_loop<C, CFut>(
                 agent: agent.clone(),
                 content,
                 session: None,
+                sender: Some(sender),
             };
             let mut reply_rx = on_message(client_msg).await;
             while let Some(server_msg) = reply_rx.recv().await {
@@ -218,6 +221,7 @@ async fn discord_loop<C, CFut>(
         let chat_id = msg.chat_id;
         let channel_id = ChannelId::new(chat_id as u64);
         let content = msg.content.clone();
+        let sender: CompactString = format!("dc:{}", msg.sender_id).into();
 
         tracing::info!(%agent, chat_id, "discord dispatch");
 
@@ -246,6 +250,7 @@ async fn discord_loop<C, CFut>(
             agent: agent.clone(),
             content: content.clone(),
             session,
+            sender: Some(sender.clone()),
         };
         let mut reply_rx = on_message(client_msg).await;
         let mut retry = false;
@@ -273,6 +278,7 @@ async fn discord_loop<C, CFut>(
                 agent: agent.clone(),
                 content,
                 session: None,
+                sender: Some(sender),
             };
             let mut reply_rx = on_message(client_msg).await;
             while let Some(server_msg) = reply_rx.recv().await {

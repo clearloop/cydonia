@@ -23,6 +23,9 @@ pub struct SendRequest {
     /// Session to reuse. `None` creates a new session.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session: Option<u64>,
+    /// Sender identity (e.g. `"tg:12345"`, `"dc:67890"`). `None` = local.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sender: Option<CompactString>,
 }
 
 /// Send a message to an agent and receive a streamed response.
@@ -35,6 +38,9 @@ pub struct StreamRequest {
     /// Session to reuse. `None` creates a new session.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session: Option<u64>,
+    /// Sender identity (e.g. `"tg:12345"`, `"dc:67890"`). `None` = local.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sender: Option<CompactString>,
 }
 
 /// Request download of a model's files with progress reporting.
@@ -66,6 +72,9 @@ pub enum ClientMessage {
         /// Session to reuse. `None` creates a new session.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         session: Option<u64>,
+        /// Sender identity. `None` = local.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        sender: Option<CompactString>,
     },
     /// Send a message to an agent and receive a streamed response.
     Stream {
@@ -76,6 +85,9 @@ pub enum ClientMessage {
         /// Session to reuse. `None` creates a new session.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         session: Option<u64>,
+        /// Sender identity. `None` = local.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        sender: Option<CompactString>,
     },
     /// Request download of a model's files with progress reporting.
     Download {
@@ -120,6 +132,7 @@ impl From<SendRequest> for ClientMessage {
             agent: r.agent,
             content: r.content,
             session: r.session,
+            sender: r.sender,
         }
     }
 }
@@ -130,6 +143,7 @@ impl From<StreamRequest> for ClientMessage {
             agent: r.agent,
             content: r.content,
             session: r.session,
+            sender: r.sender,
         }
     }
 }
