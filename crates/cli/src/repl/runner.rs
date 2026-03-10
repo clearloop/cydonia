@@ -13,6 +13,16 @@ use wcore::protocol::message::{
     server::{ServerMessage, SessionInfo},
 };
 
+/// A typed chunk from the streaming response.
+pub enum OutputChunk {
+    /// Regular text content.
+    Text(String),
+    /// Thinking/reasoning content (displayed dimmed).
+    Thinking(String),
+    /// Status message (tool calls, etc.).
+    Status(String),
+}
+
 /// Runs agents via a walrusd Unix domain socket connection.
 pub struct Runner {
     connection: Connection,
@@ -43,12 +53,12 @@ impl Runner {
         Ok(resp.content)
     }
 
-    /// Stream a response, yielding content text chunks.
+    /// Stream a response, yielding typed output chunks.
     pub fn stream<'a>(
         &'a mut self,
         agent: &'a str,
         content: &'a str,
-    ) -> impl Stream<Item = Result<String>> + Send + 'a {
+    ) -> impl Stream<Item = Result<OutputChunk>> + Send + 'a {
         use wcore::protocol::api::Client;
         self.connection
             .stream(StreamRequest {
@@ -58,14 +68,21 @@ impl Runner {
             })
             .filter_map(|result| async {
                 match result {
-                    Ok(StreamEvent::Chunk { content }) => Some(Ok(content)),
-                    Ok(StreamEvent::Thinking { content }) => Some(Ok(content)),
+                    Ok(StreamEvent::Chunk { content }) => Some(Ok(OutputChunk::Text(content))),
+                    Ok(StreamEvent::Thinking { content }) => {
+                        Some(Ok(OutputChunk::Thinking(content)))
+                    }
                     Ok(StreamEvent::ToolStart { calls }) => {
                         let names: Vec<_> = calls.iter().map(|c| c.name.as_str()).collect();
-                        Some(Ok(format!("\n[calling {}...]\n", names.join(", "))))
+                        Some(Ok(OutputChunk::Status(format!(
+                            "\n[calling {}...]\n",
+                            names.join(", ")
+                        ))))
                     }
                     Ok(StreamEvent::ToolResult { .. }) => None,
-                    Ok(StreamEvent::ToolsComplete) => Some(Ok("[done]\n".to_string())),
+                    Ok(StreamEvent::ToolsComplete) => {
+                        Some(Ok(OutputChunk::Status("[done]\n".to_string())))
+                    }
                     Ok(StreamEvent::Start { .. }) => None,
                     Ok(StreamEvent::End { .. }) => None,
                     Err(e) => Some(Err(e)),
