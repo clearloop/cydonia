@@ -42,7 +42,7 @@ pub fn all() -> &'static [ModelEntry] {
 /// more headroom → less aggressive quantization → better quality.
 /// GGUF models select the quantized file variant based on headroom.
 pub fn build_local(entry: &ModelEntry) -> crate::local::Local {
-    let headroom = crate::local::system_memory().saturating_sub(entry.memory.bytes());
+    let headroom = crate::local::available_memory().saturating_sub(entry.memory.bytes());
     let (isq, gguf_file) = match entry.loader {
         crate::config::Loader::Gguf => (None, recommend_gguf_file(entry, headroom)),
         _ => (recommend_isq(headroom), None),

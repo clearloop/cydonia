@@ -35,7 +35,7 @@ tags = ["0.6b", "1.7b", "4b", "8b", "14b", "32b"]
 
 [models.qwen3-vl]
 loader = "vision"
-tags = ["4b", "32b"]
+tags = ["2b", "4b", "8b", "32b"]
 
 # [models.gemma-3-vision]
 # loader = "vision"

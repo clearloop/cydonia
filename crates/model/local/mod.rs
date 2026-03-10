@@ -27,6 +27,16 @@ pub fn system_memory() -> u64 {
     *SYSTEM_MEMORY
 }
 
+/// Return available (free) system RAM in bytes.
+///
+/// Unlike `system_memory()` which returns total RAM, this returns what's
+/// currently unused — giving a realistic picture for model loading.
+pub fn available_memory() -> u64 {
+    use sysinfo::System;
+    let sys = System::new_all();
+    sys.available_memory()
+}
+
 /// Internal state of a lazy-loaded local model.
 #[derive(Clone)]
 enum LocalState {
