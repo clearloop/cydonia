@@ -6,32 +6,21 @@
 //! `on_register_tools` registers only tool schemas — dispatch is handled
 //! statically by the daemon event loop via [`McpBridge::call`].
 
-use schemars::JsonSchema;
-use serde::Deserialize;
-pub use {bridge::McpBridge, handler::McpHandler};
+use wcore::agent::AsTool;
+pub use {bridge::McpBridge, config::McpServerConfig, handler::McpHandler};
 
 mod bridge;
+pub mod config;
 mod handler;
-
-#[derive(Deserialize, JsonSchema)]
-pub(crate) struct SearchMcpInput {
-    /// Keyword to match tool names and descriptions. Leave empty to list all.
-    pub query: String,
-}
-
-#[derive(Deserialize, JsonSchema)]
-pub(crate) struct CallMcpToolInput {
-    /// Tool name
-    pub name: String,
-    /// JSON-encoded arguments string
-    pub args: Option<String>,
-}
+pub(crate) mod tool;
 
 impl wcore::Hook for McpHandler {
     fn on_register_tools(
         &self,
         registry: &mut wcore::ToolRegistry,
     ) -> impl std::future::Future<Output = ()> + Send {
+        registry.insert(tool::SearchMcp::as_tool());
+        registry.insert(tool::CallMcpTool::as_tool());
         let bridge = self.try_bridge();
         async move {
             let Some(bridge) = bridge else { return };

@@ -58,12 +58,8 @@ pub fn build_local(entry: &ModelEntry) -> crate::local::Local {
 
 /// Pick GGUF filename based on memory headroom.
 ///
-/// If `gguf_file` is set (explicit override), returns it directly.
-/// Otherwise constructs `{stem}-{quant}.gguf` using headroom tiers.
+/// Constructs `{stem}-{quant}.gguf` using headroom tiers.
 fn recommend_gguf_file(entry: &ModelEntry, headroom: u64) -> Option<String> {
-    if let Some(file) = entry.gguf_file {
-        return Some(file.to_string());
-    }
     let stem = entry.gguf_stem?;
     let quant = if headroom >= 16 * GB {
         "Q8_0"
@@ -81,29 +77,9 @@ fn recommend_gguf_file(entry: &ModelEntry, headroom: u64) -> Option<String> {
 ///
 /// Platform-specific: Metal uses AFQ variants, CUDA and CPU use Q/K variants.
 /// More headroom → higher-bit quantization → better quality.
-#[cfg(feature = "metal")]
-fn recommend_isq(headroom: u64) -> Option<mistralrs::IsqType> {
-    Some(if headroom >= 16 * GB {
-        mistralrs::IsqType::AFQ8
-    } else if headroom >= 8 * GB {
-        mistralrs::IsqType::AFQ6
-    } else {
-        mistralrs::IsqType::AFQ4
-    })
-}
-
-#[cfg(feature = "cuda")]
-fn recommend_isq(headroom: u64) -> Option<mistralrs::IsqType> {
-    Some(if headroom >= 16 * GB {
-        mistralrs::IsqType::Q8K
-    } else if headroom >= 8 * GB {
-        mistralrs::IsqType::Q6K
-    } else {
-        mistralrs::IsqType::Q4K
-    })
-}
-
-#[cfg(not(any(feature = "metal", feature = "cuda")))]
+///
+/// NOTE: AFQ is still buggy on metal atm in mistralrs so we using Q/K variants
+/// for all platforms.
 fn recommend_isq(headroom: u64) -> Option<mistralrs::IsqType> {
     Some(if headroom >= 16 * GB {
         mistralrs::IsqType::Q8K

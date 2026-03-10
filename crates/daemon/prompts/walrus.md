@@ -1,5 +1,5 @@
 ---
-name: System
+name: Walrus
 description: The system agent is the default agent that is used to interact with the user.
 ---
 

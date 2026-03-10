@@ -192,7 +192,8 @@ fn convert_tool(mcp_tool: &rmcp::model::Tool) -> Tool {
             .description
             .as_ref()
             .map(|d| d.to_string())
-            .unwrap_or_default(),
+            .unwrap_or_default()
+            .into(),
         parameters,
         strict: false,
     }

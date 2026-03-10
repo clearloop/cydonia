@@ -274,7 +274,7 @@ fn build_request(request: &wcore::model::Request) -> mistralrs::RequestBuilder {
                 mistralrs::Tool {
                     tp: mistralrs::ToolType::Function,
                     function: mistralrs::Function {
-                        description: Some(t.description.clone()),
+                        description: Some(t.description.to_string()),
                         name: t.name.to_string(),
                         parameters: Some(params),
                     },

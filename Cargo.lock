@@ -11061,6 +11061,7 @@ dependencies = [
  "dirs",
  "futures-core",
  "futures-util",
+ "heck",
  "schemars 1.2.1",
  "serde",
  "serde_json",

@@ -1,15 +1,16 @@
 //! Tool dispatch handlers for memory tools.
 
 use crate::hook::memory::{
-    ConnectionsInput, DistillInput, MemoryHook, RecallInput, RelateInput, RememberInput,
+    MemoryHook,
     lance::{Direction, EntityRow, RelationRow},
+    tool::{Connections, Distill, Recall, Relate, Remember},
 };
 use wcore::COMPACT_SENTINEL;
 
 impl MemoryHook {
     /// Dispatch the `remember` tool call.
     pub(crate) async fn dispatch_remember(&self, args: &str, agent: &str) -> String {
-        let input: RememberInput = match serde_json::from_str(args) {
+        let input: Remember = match serde_json::from_str(args) {
             Ok(v) => v,
             Err(e) => return format!("invalid arguments: {e}"),
         };
@@ -43,7 +44,7 @@ impl MemoryHook {
 
     /// Dispatch the `recall` tool call.
     pub(crate) async fn dispatch_recall(&self, args: &str, agent: &str) -> String {
-        let input: RecallInput = match serde_json::from_str(args) {
+        let input: Recall = match serde_json::from_str(args) {
             Ok(v) => v,
             Err(e) => return format!("invalid arguments: {e}"),
         };
@@ -69,7 +70,7 @@ impl MemoryHook {
 
     /// Dispatch the `relate` tool call.
     pub(crate) async fn dispatch_relate(&self, args: &str, agent: &str) -> String {
-        let input: RelateInput = match serde_json::from_str(args) {
+        let input: Relate = match serde_json::from_str(args) {
             Ok(v) => v,
             Err(e) => return format!("invalid arguments: {e}"),
         };
@@ -126,7 +127,7 @@ impl MemoryHook {
 
     /// Dispatch the `connections` tool call.
     pub(crate) async fn dispatch_connections(&self, args: &str, agent: &str) -> String {
-        let input: ConnectionsInput = match serde_json::from_str(args) {
+        let input: Connections = match serde_json::from_str(args) {
             Ok(v) => v,
             Err(e) => return format!("invalid arguments: {e}"),
         };
@@ -222,7 +223,7 @@ impl MemoryHook {
 
     /// Dispatch the `distill` tool call — semantic search over journal entries.
     pub(crate) async fn dispatch_distill(&self, args: &str, agent: &str) -> String {
-        let input: DistillInput = match serde_json::from_str(args) {
+        let input: Distill = match serde_json::from_str(args) {
             Ok(v) => v,
             Err(e) => return format!("invalid arguments: {e}"),
         };

@@ -31,8 +31,8 @@ pub enum DaemonEvent {
     },
     /// A tool call from an agent, routed through `DaemonHook::dispatch_tool`.
     ToolCall(ToolRequest),
-    /// Periodic heartbeat tick.
-    Heartbeat,
+    /// Periodic heartbeat tick for a specific agent.
+    Heartbeat { agent: CompactString },
     /// Graceful shutdown request.
     Shutdown,
 }
@@ -52,7 +52,7 @@ impl Daemon {
             match event {
                 DaemonEvent::Message { msg, reply } => self.handle_message(msg, reply),
                 DaemonEvent::ToolCall(req) => self.handle_tool_call(req),
-                DaemonEvent::Heartbeat => self.handle_heartbeat(),
+                DaemonEvent::Heartbeat { agent } => self.handle_heartbeat(agent),
                 DaemonEvent::Shutdown => {
                     tracing::info!("event loop shutting down");
                     break;
@@ -76,51 +76,49 @@ impl Daemon {
         });
     }
 
-    /// Handle a heartbeat tick: deliver queued create_task entries and promote spawn_task entries.
-    fn handle_heartbeat(&self) {
+    /// Handle a heartbeat tick for a specific agent: deliver queued create_task
+    /// entries and promote spawn_task entries.
+    fn handle_heartbeat(&self, agent: CompactString) {
         let daemon = self.clone();
         tokio::spawn(async move {
-            tracing::debug!("heartbeat tick");
+            tracing::debug!(agent = %agent, "heartbeat tick");
             let rt = daemon.runtime.read().await.clone();
             let tasks_arc = rt.hook.tasks.clone();
 
-            // Step 1: Gather queued create_task entries grouped by agent.
-            let groups = {
+            // Gather queued create_task entries for this agent.
+            let task_entries = {
                 let registry = tasks_arc.lock().await;
-                registry.queued_create_tasks()
+                registry.queued_create_tasks_for(&agent)
             };
 
-            // For each agent group: format task list, send as message.
-            for (agent, task_entries) in &groups {
-                if task_entries.is_empty() {
-                    continue;
-                }
+            if !task_entries.is_empty() {
                 let task_context: String = task_entries
                     .iter()
                     .map(|(id, desc)| format!("- Task #{id}: {desc}"))
                     .collect::<Vec<_>>()
                     .join("\n");
 
-                let content = if daemon.heartbeat_prompt.is_empty() {
+                let prompt = daemon
+                    .agents_config
+                    .get(agent.as_str())
+                    .map(|a| a.heartbeat.prompt.as_str())
+                    .unwrap_or("");
+                let content = if prompt.is_empty() {
                     format!("You have pending tasks:\n{task_context}")
                 } else {
-                    format!(
-                        "{}\n\nPending tasks:\n{task_context}",
-                        daemon.heartbeat_prompt
-                    )
+                    format!("{prompt}\n\nPending tasks:\n{task_context}")
                 };
 
                 // Mark tasks InProgress.
                 {
                     let mut registry = tasks_arc.lock().await;
-                    for (id, _) in task_entries {
+                    for (id, _) in &task_entries {
                         registry.set_status(*id, crate::hook::task::TaskStatus::InProgress);
                     }
                 }
 
-                // Dispatch via event channel with created_by: "heartbeat".
                 let msg = ClientMessage::Send {
-                    agent: CompactString::from(agent.as_str()),
+                    agent: agent.clone(),
                     content,
                     session: None,
                 };
@@ -131,7 +129,7 @@ impl Daemon {
                 });
             }
 
-            // Step 2: Promote queued spawn_task entries.
+            // Promote queued spawn_task entries.
             {
                 let reg = tasks_arc.clone();
                 tasks_arc.lock().await.promote_next(reg);

@@ -3,17 +3,17 @@
 //! `compact`, and `distill` tool schemas. Journals store compaction summaries
 //! with vector embeddings for semantic search via fastembed.
 
-use crate::config::MemoryConfig;
+pub use config::MemoryConfig;
 use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 use lance::LanceStore;
-use schemars::JsonSchema;
-use serde::Deserialize;
 use std::path::Path;
 use std::sync::Mutex;
-use wcore::{AgentConfig, Hook, ToolRegistry, model::Tool};
+use wcore::{AgentConfig, Hook, ToolRegistry, agent::AsTool, model::Tool};
 
+pub mod config;
 pub(crate) mod dispatch;
 pub(crate) mod lance;
+pub(crate) mod tool;
 
 const MEMORY_PROMPT: &str = include_str!("../../../prompts/memory.md");
 
@@ -63,7 +63,7 @@ impl MemoryHook {
 
         let allowed_entities = merge_defaults(DEFAULT_ENTITIES, &config.entities);
         let allowed_relations = merge_defaults(DEFAULT_RELATIONS, &config.relations);
-        let connection_limit = config.connection_limit.clamp(1, 100);
+        let connection_limit = config.connections.clamp(1, 100);
 
         Ok(Self {
             lance,
@@ -184,111 +184,26 @@ impl Hook for MemoryHook {
     }
 
     async fn on_register_tools(&self, tools: &mut ToolRegistry) {
+        // remember and relate have dynamic descriptions (inject allowed types).
         tools.insert(Tool {
-            name: "remember".into(),
             description: format!(
                 "Store a memory entity. Types: {}.",
                 self.allowed_entities.join(", ")
-            ),
-            parameters: schemars::schema_for!(RememberInput),
-            strict: false,
+            )
+            .into(),
+            ..tool::Remember::as_tool()
         });
+        tools.insert(tool::Recall::as_tool());
         tools.insert(Tool {
-            name: "recall".into(),
-            description: "Search memory entities by query, optionally filtered by type.".into(),
-            parameters: schemars::schema_for!(RecallInput),
-            strict: false,
-        });
-        tools.insert(Tool {
-            name: "relate".into(),
             description: format!(
                 "Create a directed relation between two entities by key. Relations: {}.",
                 self.allowed_relations.join(", ")
-            ),
-            parameters: schemars::schema_for!(RelateInput),
-            strict: false,
+            )
+            .into(),
+            ..tool::Relate::as_tool()
         });
-        tools.insert(Tool {
-            name: "connections".into(),
-            description: "Find entities connected to a given entity (1-hop graph traversal)."
-                .into(),
-            parameters: schemars::schema_for!(ConnectionsInput),
-            strict: false,
-        });
-        tools.insert(Tool {
-            name: "compact".into(),
-            description: "Trigger context compaction. Summarizes the conversation, stores a \
-                          journal entry, and replaces history with the summary."
-                .into(),
-            parameters: schemars::schema_for!(CompactInput),
-            strict: false,
-        });
-        tools.insert(Tool {
-            name: "distill".into(),
-            description: "Search journal entries by semantic similarity. Returns past \
-                          conversation summaries. Use `remember`/`relate` to extract durable facts."
-                .into(),
-            parameters: schemars::schema_for!(DistillInput),
-            strict: false,
-        });
+        tools.insert(tool::Connections::as_tool());
+        tools.insert(tool::Compact::as_tool());
+        tools.insert(tool::Distill::as_tool());
     }
-}
-
-/// Input for the `remember` tool.
-#[derive(Deserialize, JsonSchema)]
-pub(crate) struct RememberInput {
-    /// Entity type (e.g. "fact", "preference", "identity", "profile").
-    pub entity_type: String,
-    /// Human-readable key/name for the entity.
-    pub key: String,
-    /// Value/content to store.
-    pub value: String,
-}
-
-/// Input for the `recall` tool.
-#[derive(Deserialize, JsonSchema)]
-pub(crate) struct RecallInput {
-    /// Search query for relevant entities.
-    pub query: String,
-    /// Optional entity type filter.
-    pub entity_type: Option<String>,
-    /// Maximum number of results (default: 10).
-    pub limit: Option<u32>,
-}
-
-/// Input for the `relate` tool.
-#[derive(Deserialize, JsonSchema)]
-pub(crate) struct RelateInput {
-    /// Key of the source entity.
-    pub source_key: String,
-    /// Relation type (e.g. "knows", "prefers", "related_to", "caused_by").
-    pub relation: String,
-    /// Key of the target entity.
-    pub target_key: String,
-}
-
-/// Input for the `connections` tool.
-#[derive(Deserialize, JsonSchema)]
-pub(crate) struct ConnectionsInput {
-    /// Key of the entity to find connections for.
-    pub key: String,
-    /// Optional relation type filter.
-    pub relation: Option<String>,
-    /// Direction: "outgoing" (default), "incoming", or "both".
-    pub direction: Option<String>,
-    /// Maximum number of results (default: config value, max: 100).
-    pub limit: Option<u32>,
-}
-
-/// Input for the `compact` tool (no parameters).
-#[derive(Deserialize, JsonSchema)]
-pub(crate) struct CompactInput {}
-
-/// Input for the `distill` tool.
-#[derive(Deserialize, JsonSchema)]
-pub(crate) struct DistillInput {
-    /// Semantic search query over journal entries.
-    pub query: String,
-    /// Maximum number of results (default: 5).
-    pub limit: Option<u32>,
 }

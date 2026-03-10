@@ -17,7 +17,7 @@ pub mod remote;
 #[path = "../local/mod.rs"]
 pub mod local;
 
-pub use config::{ApiStandard, ProviderConfig};
+pub use config::{ApiStandard, HfModelConfig, ModelConfig, ProviderConfig};
 pub use manager::ProviderManager;
 pub use provider::{Provider, build_provider};
 pub use reqwest::Client;

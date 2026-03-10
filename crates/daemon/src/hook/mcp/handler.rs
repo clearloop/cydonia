@@ -1,6 +1,6 @@
 //! Walrus MCP handler — initial load and read access.
 
-use crate::{config::McpServerConfig, hook::mcp::McpBridge};
+use crate::hook::mcp::{McpBridge, config::McpServerConfig};
 use compact_str::CompactString;
 use std::sync::Arc;
 use tokio::sync::RwLock;

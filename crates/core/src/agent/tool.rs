@@ -6,8 +6,17 @@
 
 use crate::model::Tool;
 use compact_str::CompactString;
+use heck::ToSnakeCase;
+use schemars::JsonSchema;
 use std::collections::BTreeMap;
 use tokio::sync::{mpsc, oneshot};
+
+/// Sender half of the agent tool channel.
+///
+/// Captured by `Agent` at construction. When the model returns tool calls,
+/// the agent sends one `ToolRequest` per call and awaits each reply.
+/// `None` means no tools are available (e.g. CLI path without a daemon).
+pub type ToolSender = mpsc::UnboundedSender<ToolRequest>;
 
 /// A single tool call request sent by the agent to the runtime's tool handler.
 pub struct ToolRequest {
@@ -23,13 +32,6 @@ pub struct ToolRequest {
     /// Set by the daemon when dispatching task-bound tool calls.
     pub task_id: Option<u64>,
 }
-
-/// Sender half of the agent tool channel.
-///
-/// Captured by `Agent` at construction. When the model returns tool calls,
-/// the agent sends one `ToolRequest` per call and awaits each reply.
-/// `None` means no tools are available (e.g. CLI path without a daemon).
-pub type ToolSender = mpsc::UnboundedSender<ToolRequest>;
 
 /// Schema-only registry of named tools.
 ///
@@ -50,6 +52,13 @@ impl ToolRegistry {
     /// Insert a tool schema.
     pub fn insert(&mut self, tool: Tool) {
         self.tools.insert(tool.name.clone(), tool);
+    }
+
+    /// Insert multiple tool schemas.
+    pub fn insert_all(&mut self, tools: Vec<Tool>) {
+        for tool in tools {
+            self.insert(tool);
+        }
     }
 
     /// Remove a tool by name. Returns `true` if it existed.
@@ -90,5 +99,31 @@ impl ToolRegistry {
             .filter(|(k, _)| names.iter().any(|n| n == *k))
             .map(|(_, v)| v.clone())
             .collect()
+    }
+}
+
+/// Trait to provide a description for a tool.
+pub trait ToolDescription {
+    /// The description of the tool.
+    const DESCRIPTION: &'static str;
+}
+
+/// Trait to convert a type into a tool.
+pub trait AsTool: ToolDescription {
+    /// Convert the type into a tool.
+    fn as_tool() -> Tool;
+}
+
+impl<T> AsTool for T
+where
+    T: JsonSchema + ToolDescription,
+{
+    fn as_tool() -> Tool {
+        Tool {
+            name: T::schema_name().to_snake_case().into(),
+            description: Self::DESCRIPTION.into(),
+            parameters: schemars::schema_for!(T),
+            strict: true,
+        }
     }
 }

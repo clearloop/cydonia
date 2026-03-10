@@ -6,7 +6,7 @@
 //! in-place from disk without restarting transports.
 
 use crate::{
-    DaemonConfig,
+    Daemon, DaemonConfig,
     daemon::event::{DaemonEvent, DaemonEventSender},
     hook::{self, DaemonHook, task::TaskRegistry},
 };
@@ -16,9 +16,7 @@ use std::{path::Path, sync::Arc};
 use tokio::sync::{Mutex, RwLock};
 use wcore::{Runtime, ToolRequest};
 
-use super::Daemon;
-
-const SYSTEM_AGENT: &str = include_str!("../../prompts/system.md");
+const SYSTEM_AGENT: &str = include_str!("../../prompts/walrus.md");
 
 impl Daemon {
     /// Build a fully-configured [`Daemon`] from the given config, config
@@ -33,7 +31,7 @@ impl Daemon {
             runtime: Arc::new(RwLock::new(Arc::new(runtime))),
             config_dir: config_dir.to_path_buf(),
             event_tx,
-            heartbeat_prompt: config.heartbeat.prompt.clone(),
+            agents_config: config.agents.clone(),
         })
     }
 
@@ -69,19 +67,27 @@ impl Daemon {
     /// and any remote providers from config. Only one local model is active
     /// at a time to avoid memory pressure.
     async fn build_providers(config: &DaemonConfig) -> Result<ProviderManager> {
-        let manager = ProviderManager::new(config.model.default.clone());
+        let active_model = config.walrus.model.clone();
+        let manager = ProviderManager::new(active_model.clone());
 
-        // Add the single default local model from the registry.
+        // Add the active local model — try registry first, then custom config.
         #[cfg(feature = "local")]
         {
-            if let Some(entry) = model::local::registry::find(&config.model.default) {
+            if let Some(entry) = model::local::registry::find(&active_model) {
                 let local = model::local::registry::build_local(entry);
-                manager
-                    .add_provider(config.model.default.clone(), model::Provider::Local(local))?;
-            } else if let Some(entry) = model::local::registry::find_by_key(&config.model.default) {
+                manager.add_provider(active_model.clone(), model::Provider::Local(local))?;
+            } else if let Some(entry) = model::local::registry::find_by_key(&active_model) {
                 let local = model::local::registry::build_local(entry);
-                manager
-                    .add_provider(config.model.default.clone(), model::Provider::Local(local))?;
+                manager.add_provider(active_model.clone(), model::Provider::Local(local))?;
+            } else if let Some(hf) = config.model.models.get(active_model.as_str()) {
+                let local = model::local::Local::lazy(
+                    &hf.model_id,
+                    hf.loader,
+                    None,
+                    hf.chat_template.clone(),
+                    hf.gguf_file.as_deref(),
+                );
+                manager.add_provider(active_model.clone(), model::Provider::Local(local))?;
             }
         }
 
@@ -113,7 +119,7 @@ impl Daemon {
             hook::skill::SkillHandler::default()
         });
 
-        let mcp_servers = config.mcp_servers.values().cloned().collect::<Vec<_>>();
+        let mcp_servers = config.mcps.values().cloned().collect::<Vec<_>>();
         let mcp_handler = hook::mcp::McpHandler::load(&mcp_servers).await;
 
         let tasks = Arc::new(Mutex::new(TaskRegistry::new(

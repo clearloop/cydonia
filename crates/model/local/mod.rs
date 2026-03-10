@@ -229,7 +229,9 @@ impl Local {
         chat_template: Option<&str>,
     ) -> anyhow::Result<mistralrs::Model> {
         let files: Vec<String> = gguf_file.into_iter().map(String::from).collect();
-        let mut builder = mistralrs::GgufModelBuilder::new(model_id, files).with_logging();
+        let mut builder = mistralrs::GgufModelBuilder::new(model_id, files)
+            .with_logging()
+            .with_device_mapping(mistralrs::DeviceMapSetting::dummy());
         if let Some(template) = chat_template {
             builder = builder.with_chat_template(template);
         }
