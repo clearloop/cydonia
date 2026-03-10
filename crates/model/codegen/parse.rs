@@ -3,35 +3,28 @@
 use serde::Deserialize;
 use std::{collections::BTreeMap, fs, path::Path};
 
-/// Platform configuration parsed from `{platform}.toml`.
-///
-/// Each platform TOML is self-contained: defaults and the full model
-/// list for that platform.
+/// Registry configuration parsed from `models.toml`.
 #[derive(Debug, Deserialize)]
-pub struct PlatformFile {
-    pub defaults: PlatformDefaults,
-    pub models: BTreeMap<String, ModelEntry>,
+pub struct RegistryFile {
+    pub defaults: RegistryDefaults,
+    pub models: BTreeMap<String, FamilyEntry>,
 }
 
-/// Default model key for a platform.
+/// Default model specifier (e.g. `"qwen3-vl:4b"`).
 #[derive(Debug, Deserialize)]
-pub struct PlatformDefaults {
+pub struct RegistryDefaults {
     pub text: String,
 }
 
-/// A single model entry within a platform TOML.
+/// A model family with a shared loader and multiple tags.
 #[derive(Debug, Deserialize)]
-pub struct ModelEntry {
-    pub name: String,
-    pub memory: String,
-    pub model_id: String,
+pub struct FamilyEntry {
     pub loader: String,
-    pub gguf_stem: Option<String>,
-    pub gguf_file: Option<String>,
+    pub tags: Vec<String>,
 }
 
-/// Load and parse a platform TOML file.
-pub fn load_platform(path: &Path) -> PlatformFile {
+/// Load and parse the registry TOML file.
+pub fn load_registry(path: &Path) -> RegistryFile {
     let content = fs::read_to_string(path)
         .unwrap_or_else(|e| panic!("failed to read {}: {e}", path.display()));
     toml::from_str(&content).unwrap_or_else(|e| panic!("failed to parse {}: {e}", path.display()))
