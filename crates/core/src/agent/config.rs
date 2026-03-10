@@ -44,6 +44,15 @@ pub struct AgentConfig {
     /// Agents this agent can delegate to via spawn_task. Empty = no delegation.
     #[serde(default)]
     pub members: Vec<String>,
+    /// Skill names this agent can access. Empty = all skills (walrus default).
+    #[serde(default)]
+    pub skills: Vec<String>,
+    /// MCP server names this agent can access. Empty = all MCPs (walrus default).
+    #[serde(default)]
+    pub mcps: Vec<String>,
+    /// Computed tool whitelist. Empty = all tools. Not serialized.
+    #[serde(skip)]
+    pub tools: Vec<CompactString>,
 }
 
 fn default_max_iterations() -> usize {
@@ -62,6 +71,9 @@ impl Default for AgentConfig {
             thinking: false,
             heartbeat: HeartbeatConfig::default(),
             members: Vec::new(),
+            skills: Vec::new(),
+            mcps: Vec::new(),
+            tools: Vec::new(),
         }
     }
 }

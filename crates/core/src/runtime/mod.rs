@@ -87,7 +87,7 @@ impl<M: Model + Send + Sync + Clone + 'static, H: Hook + 'static> Runtime<M, H> 
     pub fn add_agent(&mut self, config: AgentConfig) {
         let config = self.hook.on_build_agent(config);
         let name = config.name.clone();
-        let tools = self.tools.tools();
+        let tools = self.tools.filtered_snapshot(&config.tools);
         let mut builder = AgentBuilder::new(self.model.clone())
             .config(config)
             .tools(tools);

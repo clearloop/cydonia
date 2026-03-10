@@ -213,6 +213,13 @@ impl Daemon {
             runtime.add_agent(agent);
         }
 
+        // Populate per-agent scope maps for dispatch enforcement.
+        for agent_config in runtime.agents() {
+            runtime
+                .hook
+                .register_scope(agent_config.name.clone(), &agent_config);
+        }
+
         Ok(())
     }
 }

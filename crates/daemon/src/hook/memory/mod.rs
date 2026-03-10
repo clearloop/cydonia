@@ -119,9 +119,17 @@ impl Hook for MemoryHook {
         let agent_name = config.name.to_string();
         let lance = &self.lance;
 
+        // Inject <self> block — agent's static birth identity from config.
+        let mut self_block = String::from("\n\n<self>\n");
+        self_block.push_str(&format!("name: {}\n", config.name));
+        if !config.description.is_empty() {
+            self_block.push_str(&format!("description: {}\n", config.description));
+        }
+        self_block.push_str("</self>");
+
         let extra = tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
-                let mut buf = String::new();
+                let mut buf = self_block;
 
                 // Inject identity entities.
                 if let Ok(identities) = lance.query_by_type(&agent_name, "identity", 50).await
@@ -177,10 +185,10 @@ impl Hook for MemoryHook {
     }
 
     fn on_compact(&self, _prompt: &mut String) {
-        // Profile/identity entities are already in the system prompt via
-        // on_build_agent. The compaction LLM sees them in context, so no
-        // additional injection is needed here. Agent-scoped queries require
-        // the agent name, which on_compact does not receive.
+        // This hook is unused. Identity context is passed directly in
+        // Agent::compact() which inserts the agent's system_prompt (containing
+        // <self>, <identity>, <profile>, <journal> blocks) as a user message
+        // before conversation history.
     }
 
     async fn on_register_tools(&self, tools: &mut ToolRegistry) {
