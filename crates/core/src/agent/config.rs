@@ -28,6 +28,9 @@ pub struct AgentConfig {
     pub max_iterations: usize,
     /// Controls which tool the model calls.
     pub tool_choice: ToolChoice,
+    /// Whether to enable thinking/reasoning mode.
+    #[serde(default)]
+    pub think: bool,
 }
 
 impl Default for AgentConfig {
@@ -39,6 +42,7 @@ impl Default for AgentConfig {
             model: None,
             max_iterations: DEFAULT_MAX_ITERATIONS,
             tool_choice: ToolChoice::Auto,
+            think: false,
         }
     }
 }
@@ -67,6 +71,12 @@ impl AgentConfig {
     /// Set the model to use from the registry.
     pub fn model(mut self, name: impl Into<CompactString>) -> Self {
         self.model = Some(name.into());
+        self
+    }
+
+    /// Enable or disable thinking/reasoning mode.
+    pub fn think(mut self, enabled: bool) -> Self {
+        self.think = enabled;
         self
     }
 }

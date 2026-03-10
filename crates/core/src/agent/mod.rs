@@ -69,7 +69,8 @@ impl<M: Model> Agent<M> {
 
         let mut request = Request::new(model_name)
             .with_messages(messages)
-            .with_tool_choice(self.config.tool_choice.clone());
+            .with_tool_choice(self.config.tool_choice.clone())
+            .with_think(self.config.think);
         if !self.tools.is_empty() {
             request = request.with_tools(self.tools.clone());
         }
@@ -188,7 +189,8 @@ impl<M: Model> Agent<M> {
 
                 let mut request = Request::new(model_name)
                     .with_messages(messages)
-                    .with_tool_choice(self.config.tool_choice.clone());
+                    .with_tool_choice(self.config.tool_choice.clone())
+                    .with_think(self.config.think);
                 if !self.tools.is_empty() {
                     request = request.with_tools(self.tools.clone());
                 }

@@ -57,7 +57,7 @@ impl Daemon {
         let hook = Self::build_hook(config, config_dir, event_tx).await?;
         let tool_tx = Self::build_tool_sender(event_tx);
         let mut runtime = Runtime::new(manager, hook, Some(tool_tx)).await;
-        Self::load_agents(&mut runtime, config_dir)?;
+        Self::load_agents(&mut runtime, config_dir, config)?;
         Ok(runtime)
     }
 
@@ -163,14 +163,26 @@ impl Daemon {
     }
 
     /// Load agents from markdown files and add them to the runtime.
+    ///
+    /// Per-agent `thinking` overrides from `walrus.toml` are applied on top of
+    /// the daemon-wide default (`[walrus].thinking`).
     fn load_agents(
         runtime: &mut Runtime<ProviderManager, DaemonHook>,
         config_dir: &Path,
+        config: &DaemonConfig,
     ) -> Result<()> {
         let agents = crate::config::load_agents_dir(&config_dir.join(wcore::paths::AGENTS_DIR))?;
+        let default_think = config.walrus.thinking;
+
         runtime.add_agent(wcore::parse_agent_md(SYSTEM_AGENT)?);
-        for agent in agents {
-            tracing::info!("registered agent '{}'", agent.name);
+        for mut agent in agents {
+            let think = config
+                .agents
+                .get(agent.name.as_str())
+                .map(|a| a.thinking)
+                .unwrap_or(default_think);
+            agent.think = think;
+            tracing::info!("registered agent '{}' (think={})", agent.name, think);
             runtime.add_agent(agent);
         }
         Ok(())

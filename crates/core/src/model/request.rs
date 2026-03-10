@@ -63,6 +63,12 @@ impl Request {
         self.tool_choice = Some(tool_choice);
         self
     }
+
+    /// Enable or disable thinking/reasoning mode.
+    pub fn with_think(mut self, think: bool) -> Self {
+        self.think = think;
+        self
+    }
 }
 
 impl Default for Request {

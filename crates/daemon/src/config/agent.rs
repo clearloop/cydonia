@@ -26,12 +26,15 @@ pub struct HeartbeatConfig {
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
-    /// Model ID for this agent. For `[walrus]` this is the daemon-wide default.
-    #[serde(default)]
-    pub model: CompactString,
     /// Heartbeat configuration. Interval 0 (the default) means no heartbeat.
     #[serde(default)]
     pub heartbeat: HeartbeatConfig,
+    /// Model ID for this agent. For `[walrus]` this is the daemon-wide default.
+    #[serde(default)]
+    pub model: CompactString,
+    /// Whether to enable thinking.
+    #[serde(default)]
+    pub thinking: bool,
 }
 
 #[cfg(not(feature = "local"))]
@@ -40,6 +43,7 @@ impl Default for AgentConfig {
         Self {
             model: "deepseek-chat".into(),
             heartbeat: HeartbeatConfig::default(),
+            thinking: false,
         }
     }
 }
@@ -50,6 +54,7 @@ impl Default for AgentConfig {
         Self {
             model: CompactString::from(::model::local::registry::default_model().model_id),
             heartbeat: HeartbeatConfig::default(),
+            thinking: false,
         }
     }
 }
