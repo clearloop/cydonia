@@ -16,7 +16,7 @@ use std::{path::Path, sync::Arc};
 use tokio::sync::{Mutex, RwLock};
 use wcore::{Runtime, ToolRequest};
 
-const SYSTEM_AGENT: &str = include_str!("../../prompts/system.md");
+const SYSTEM_AGENT: &str = include_str!("../../prompts/walrus.md");
 
 impl Daemon {
     /// Build a fully-configured [`Daemon`] from the given config, config
