@@ -59,6 +59,13 @@ impl Runner {
             .filter_map(|result| async {
                 match result {
                     Ok(StreamEvent::Chunk { content }) => Some(Ok(content)),
+                    Ok(StreamEvent::Thinking { content }) => Some(Ok(content)),
+                    Ok(StreamEvent::ToolStart { calls }) => {
+                        let names: Vec<_> = calls.iter().map(|c| c.name.as_str()).collect();
+                        Some(Ok(format!("\n[calling {}...]\n", names.join(", "))))
+                    }
+                    Ok(StreamEvent::ToolResult { .. }) => None,
+                    Ok(StreamEvent::ToolsComplete) => Some(Ok("[done]\n".to_string())),
                     Ok(StreamEvent::Start { .. }) => None,
                     Ok(StreamEvent::End { .. }) => None,
                     Err(e) => Some(Err(e)),

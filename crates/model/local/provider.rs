@@ -27,16 +27,20 @@ impl Model for Local {
         try_stream! {
             let model = model_result?;
             let mr_request = build_request(&request);
+            tracing::debug!("local: sending stream_chat_request");
             let mut stream = model.stream_chat_request(mr_request).await?;
+            tracing::debug!("local: stream_chat_request returned, reading chunks");
             let mut filter = ToolCallFilter::new();
             while let Some(resp) = stream.next().await {
                 match resp {
                     mistralrs::Response::Chunk(chunk) => {
+                        tracing::trace!("local: received chunk");
                         for sc in filter.accept(chunk) {
                             yield sc;
                         }
                     }
                     mistralrs::Response::Done(done) => {
+                        tracing::debug!("local: received Done");
                         for sc in filter.finish(done) {
                             yield sc;
                         }
@@ -49,9 +53,12 @@ impl Model for Local {
                     mistralrs::Response::ModelError(msg, _) => {
                         Err(anyhow::anyhow!("model error: {msg}"))?;
                     }
-                    _ => {}
+                    _ => {
+                        tracing::debug!("local: unhandled response variant");
+                    }
                 }
             }
+            tracing::debug!("local: stream loop exited");
         }
     }
 
@@ -224,6 +231,9 @@ fn is_partial_prefix(text: &str, pattern: &str) -> bool {
 /// Build a mistralrs `RequestBuilder` from a walrus `Request`.
 fn build_request(request: &wcore::model::Request) -> mistralrs::RequestBuilder {
     let mut builder = mistralrs::RequestBuilder::new();
+    if request.think {
+        builder = builder.enable_thinking(true);
+    }
 
     for msg in &request.messages {
         match msg.role {

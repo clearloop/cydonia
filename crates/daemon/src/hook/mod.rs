@@ -167,6 +167,9 @@ impl Hook for DaemonHook {
             AgentEvent::TextDelta(text) => {
                 tracing::trace!(%agent, text_len = text.len(), "agent text delta");
             }
+            AgentEvent::ThinkingDelta(text) => {
+                tracing::trace!(%agent, text_len = text.len(), "agent thinking delta");
+            }
             AgentEvent::ToolCallsStart(calls) => {
                 tracing::debug!(%agent, count = calls.len(), "agent tool calls started");
             }

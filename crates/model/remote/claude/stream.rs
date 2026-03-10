@@ -69,15 +69,20 @@ pub enum ContentBlock {
         id: CompactString,
         name: CompactString,
     },
+    #[serde(rename = "thinking")]
+    Thinking { thinking: String },
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type")]
+#[allow(clippy::enum_variant_names)]
 pub enum BlockDelta {
     #[serde(rename = "text_delta")]
     TextDelta { text: String },
     #[serde(rename = "input_json_delta")]
     InputJsonDelta { partial_json: String },
+    #[serde(rename = "thinking_delta")]
+    ThinkingDelta { thinking: String },
 }
 
 #[derive(Debug, Deserialize)]
@@ -124,6 +129,25 @@ impl Event {
                 }
             }
             Self::ContentBlockStart {
+                content_block: ContentBlock::Thinking { thinking },
+                ..
+            } => {
+                if thinking.is_empty() {
+                    None
+                } else {
+                    Some(StreamChunk {
+                        choices: vec![Choice {
+                            delta: Delta {
+                                reasoning_content: Some(thinking),
+                                ..Default::default()
+                            },
+                            ..Default::default()
+                        }],
+                        ..Default::default()
+                    })
+                }
+            }
+            Self::ContentBlockStart {
                 index,
                 content_block: ContentBlock::ToolUse { id, name },
             } => Some(StreamChunk {
@@ -151,6 +175,19 @@ impl Event {
                 choices: vec![Choice {
                     delta: Delta {
                         content: Some(text),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }),
+            Self::ContentBlockDelta {
+                delta: BlockDelta::ThinkingDelta { thinking },
+                ..
+            } => Some(StreamChunk {
+                choices: vec![Choice {
+                    delta: Delta {
+                        reasoning_content: Some(thinking),
                         ..Default::default()
                     },
                     ..Default::default()

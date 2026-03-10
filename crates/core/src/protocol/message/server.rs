@@ -14,6 +14,15 @@ pub struct SendResponse {
     pub session: u64,
 }
 
+/// Lightweight tool call info for streaming events.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCallInfo {
+    /// Tool name.
+    pub name: CompactString,
+    /// Tool arguments (JSON string).
+    pub arguments: String,
+}
+
 /// Events emitted during a streamed agent response.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum StreamEvent {
@@ -29,6 +38,25 @@ pub enum StreamEvent {
         /// Chunk content.
         content: String,
     },
+    /// A chunk of thinking/reasoning content.
+    Thinking {
+        /// Thinking content.
+        content: String,
+    },
+    /// Agent started executing tool calls.
+    ToolStart {
+        /// Tool calls being executed.
+        calls: Vec<ToolCallInfo>,
+    },
+    /// A single tool call completed.
+    ToolResult {
+        /// The tool call ID.
+        call_id: CompactString,
+        /// Tool output.
+        output: String,
+    },
+    /// All tool calls completed.
+    ToolsComplete,
     /// Stream has ended.
     End {
         /// Source agent identifier.

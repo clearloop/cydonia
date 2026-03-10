@@ -11,7 +11,7 @@ use wcore::protocol::{
     message::{
         DownloadEvent, DownloadRequest, HubAction, HubEvent, SendRequest, SendResponse,
         StreamEvent, StreamRequest,
-        server::{SessionInfo, TaskInfo},
+        server::{SessionInfo, TaskInfo, ToolCallInfo},
     },
 };
 
@@ -57,6 +57,23 @@ impl Server for Daemon {
                     AgentEvent::TextDelta(text) => {
                         yield StreamEvent::Chunk { content: text };
                     }
+                    AgentEvent::ThinkingDelta(text) => {
+                        yield StreamEvent::Thinking { content: text };
+                    }
+                    AgentEvent::ToolCallsStart(calls) => {
+                        yield StreamEvent::ToolStart {
+                            calls: calls.into_iter().map(|c| ToolCallInfo {
+                                name: CompactString::from(c.function.name.as_str()),
+                                arguments: c.function.arguments,
+                            }).collect(),
+                        };
+                    }
+                    AgentEvent::ToolResult { call_id, output } => {
+                        yield StreamEvent::ToolResult { call_id, output };
+                    }
+                    AgentEvent::ToolCallsComplete => {
+                        yield StreamEvent::ToolsComplete;
+                    }
                     AgentEvent::Done(resp) => {
                         if let wcore::AgentStopReason::Error(e) = &resp.stop_reason {
                             if is_new {
@@ -66,7 +83,6 @@ impl Server for Daemon {
                         }
                         break;
                     }
-                    _ => {}
                 }
             }
             if is_new {

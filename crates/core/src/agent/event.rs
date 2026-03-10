@@ -17,6 +17,8 @@ use compact_str::CompactString;
 pub enum AgentEvent {
     /// Text content delta from the model.
     TextDelta(String),
+    /// Thinking/reasoning content delta from the model.
+    ThinkingDelta(String),
     /// Model is calling tools (with the tool calls).
     ToolCallsStart(Vec<ToolCall>),
     /// A single tool completed execution.

@@ -208,6 +208,9 @@ impl<M: Model> Agent<M> {
                                 if let Some(text) = chunk.content() {
                                     yield AgentEvent::TextDelta(text.to_owned());
                                 }
+                                if let Some(reason) = chunk.reasoning_content() {
+                                    yield AgentEvent::ThinkingDelta(reason.to_owned());
+                                }
                                 if let Some(r) = chunk.reason() {
                                     finish_reason = Some(*r);
                                 }
