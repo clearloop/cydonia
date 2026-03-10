@@ -70,7 +70,7 @@ impl Daemon {
         let active_model = config.walrus.model.clone();
         let manager = ProviderManager::new(active_model.clone());
 
-        // Add the single default local model from the registry.
+        // Add the active local model — try registry first, then custom config.
         #[cfg(feature = "local")]
         {
             if let Some(entry) = model::local::registry::find(&active_model) {
@@ -78,6 +78,15 @@ impl Daemon {
                 manager.add_provider(active_model.clone(), model::Provider::Local(local))?;
             } else if let Some(entry) = model::local::registry::find_by_key(&active_model) {
                 let local = model::local::registry::build_local(entry);
+                manager.add_provider(active_model.clone(), model::Provider::Local(local))?;
+            } else if let Some(hf) = config.model.models.get(active_model.as_str()) {
+                let local = model::local::Local::lazy(
+                    &hf.model_id,
+                    hf.loader,
+                    None,
+                    hf.chat_template.clone(),
+                    hf.gguf_file.as_deref(),
+                );
                 manager.add_provider(active_model.clone(), model::Provider::Local(local))?;
             }
         }
