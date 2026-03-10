@@ -93,7 +93,7 @@ fn recommend_isq(headroom: u64) -> Option<mistralrs::IsqType> {
 impl ModelEntry {
     /// Check if this model fits in the system's available RAM.
     pub fn fits(&self) -> bool {
-        crate::local::system_memory() >= self.memory.bytes()
+        crate::local::available_memory() >= self.memory.bytes()
     }
 
     /// Return a human-readable string describing the memory requirement.

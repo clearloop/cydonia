@@ -8,29 +8,14 @@
 //! directory is controlled by env vars (`HF_HOME`, `HF_ENDPOINT`).
 
 use compact_str::CompactString;
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 use tokio::sync::watch;
 
 pub mod download;
 mod provider;
 pub mod registry;
 
-/// Total system RAM in bytes, captured once on first access.
-static SYSTEM_MEMORY: LazyLock<u64> = LazyLock::new(|| {
-    use sysinfo::System;
-    let sys = System::new_all();
-    sys.total_memory()
-});
-
-/// Return total system RAM in bytes.
-pub fn system_memory() -> u64 {
-    *SYSTEM_MEMORY
-}
-
 /// Return available (free) system RAM in bytes.
-///
-/// Unlike `system_memory()` which returns total RAM, this returns what's
-/// currently unused — giving a realistic picture for model loading.
 pub fn available_memory() -> u64 {
     use sysinfo::System;
     let sys = System::new_all();
