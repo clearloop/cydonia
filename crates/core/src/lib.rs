@@ -13,8 +13,8 @@
 
 pub use agent::{
     Agent, AgentBuilder, AgentConfig, COMPACT_SENTINEL,
+    config::HeartbeatConfig,
     event::{AgentEvent, AgentResponse, AgentStep, AgentStopReason},
-    parse_agent_md,
     tool::{ToolRegistry, ToolRequest, ToolSender},
 };
 pub use runtime::{Runtime, Session, hook::Hook};

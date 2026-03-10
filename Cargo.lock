@@ -11065,7 +11065,6 @@ dependencies = [
  "schemars 1.2.1",
  "serde",
  "serde_json",
- "serde_yaml",
  "smallvec 1.15.1",
  "tokio",
  "tracing",

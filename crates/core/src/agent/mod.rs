@@ -19,7 +19,6 @@ pub use config::AgentConfig;
 use event::{AgentEvent, AgentResponse, AgentStep, AgentStopReason};
 use futures_core::Stream;
 use futures_util::StreamExt;
-pub use parser::parse_agent_md;
 use tokio::sync::{mpsc, oneshot};
 pub use tool::{AsTool, ToolDescription, ToolRequest, ToolSender};
 
@@ -27,7 +26,6 @@ mod builder;
 mod compact;
 pub mod config;
 pub mod event;
-mod parser;
 pub mod tool;
 
 /// An immutable agent definition.
@@ -70,7 +68,7 @@ impl<M: Model> Agent<M> {
         let mut request = Request::new(model_name)
             .with_messages(messages)
             .with_tool_choice(self.config.tool_choice.clone())
-            .with_think(self.config.think);
+            .with_think(self.config.thinking);
         if !self.tools.is_empty() {
             request = request.with_tools(self.tools.clone());
         }
@@ -190,7 +188,7 @@ impl<M: Model> Agent<M> {
                 let mut request = Request::new(model_name)
                     .with_messages(messages)
                     .with_tool_choice(self.config.tool_choice.clone())
-                    .with_think(self.config.think);
+                    .with_think(self.config.thinking);
                 if !self.tools.is_empty() {
                     request = request.with_tools(self.tools.clone());
                 }
