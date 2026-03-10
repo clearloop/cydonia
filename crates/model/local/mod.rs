@@ -8,18 +8,23 @@
 //! directory is controlled by env vars (`HF_HOME`, `HF_ENDPOINT`).
 
 use compact_str::CompactString;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use tokio::sync::watch;
 
 pub mod download;
 mod provider;
 pub mod registry;
 
-/// Return available (free) system RAM in bytes.
-pub fn available_memory() -> u64 {
+/// Total system RAM in bytes, captured once on first access.
+static SYSTEM_MEMORY: LazyLock<u64> = LazyLock::new(|| {
     use sysinfo::System;
     let sys = System::new_all();
-    sys.available_memory()
+    sys.total_memory()
+});
+
+/// Return total system RAM in bytes.
+pub fn system_memory() -> u64 {
+    *SYSTEM_MEMORY
 }
 
 /// Internal state of a lazy-loaded local model.
@@ -224,7 +229,9 @@ impl Local {
         chat_template: Option<&str>,
     ) -> anyhow::Result<mistralrs::Model> {
         let files: Vec<String> = gguf_file.into_iter().map(String::from).collect();
-        let mut builder = mistralrs::GgufModelBuilder::new(model_id, files).with_logging();
+        let mut builder = mistralrs::GgufModelBuilder::new(model_id, files)
+            .with_logging()
+            .with_device_mapping(mistralrs::DeviceMapSetting::dummy());
         if let Some(template) = chat_template {
             builder = builder.with_chat_template(template);
         }
