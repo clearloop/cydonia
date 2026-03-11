@@ -1,3 +1,7 @@
+> [!NOTE]
+>
+> This repo is now public archive. The project is now called [openwalrus/walrus](https://github.com/openwalrus/walrus).
+
 # Walrus
 
 [![Crates.io](https://img.shields.io/crates/v/openwalrus.svg)](https://crates.io/crates/openwalrus)
