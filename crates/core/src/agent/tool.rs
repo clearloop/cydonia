@@ -31,6 +31,9 @@ pub struct ToolRequest {
     /// Task ID of the calling task, if running within a task context.
     /// Set by the daemon when dispatching task-bound tool calls.
     pub task_id: Option<u64>,
+    /// Sender identity of the user who triggered this agent run.
+    /// Empty for local/owner sessions.
+    pub sender: CompactString,
 }
 
 /// Schema-only registry of named tools.

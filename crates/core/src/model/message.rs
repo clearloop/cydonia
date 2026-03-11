@@ -27,6 +27,13 @@ pub struct Message {
     /// The tool calls
     #[serde(skip_serializing_if = "SmallVec::is_empty")]
     pub tool_calls: SmallVec<[ToolCall; 4]>,
+
+    /// The sender identity (runtime-only, never serialized to providers).
+    ///
+    /// Convention: empty = local/owner, `"tg:12345"` = Telegram user,
+    /// `"dc:67890"` = Discord user.
+    #[serde(skip)]
+    pub sender: CompactString,
 }
 
 impl Message {
@@ -44,6 +51,16 @@ impl Message {
         Self {
             role: Role::User,
             content: content.into(),
+            ..Default::default()
+        }
+    }
+
+    /// Create a new user message with sender identity.
+    pub fn user_with_sender(content: impl Into<String>, sender: impl Into<CompactString>) -> Self {
+        Self {
+            role: Role::User,
+            content: content.into(),
+            sender: sender.into(),
             ..Default::default()
         }
     }

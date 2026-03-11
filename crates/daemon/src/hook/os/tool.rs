@@ -32,6 +32,20 @@ impl ToolDescription for Write {
 }
 
 #[derive(Deserialize, JsonSchema)]
+pub(crate) struct Edit {
+    /// Path to the file to edit.
+    pub path: String,
+    /// Exact text to find (must appear exactly once in the file).
+    pub old_string: String,
+    /// Replacement text.
+    pub new_string: String,
+}
+
+impl ToolDescription for Edit {
+    const DESCRIPTION: &'static str = "Replace a unique occurrence of old_string with new_string in a file. Fails if old_string is not found or appears more than once.";
+}
+
+#[derive(Deserialize, JsonSchema)]
 pub(crate) struct Bash {
     /// Executable to run (e.g. `"ls"`, `"python3"`).
     pub command: String,
@@ -48,7 +62,12 @@ impl ToolDescription for Bash {
 }
 
 pub(crate) fn tools() -> Vec<Tool> {
-    vec![Read::as_tool(), Write::as_tool(), Bash::as_tool()]
+    vec![
+        Read::as_tool(),
+        Write::as_tool(),
+        Edit::as_tool(),
+        Bash::as_tool(),
+    ]
 }
 
 impl crate::hook::DaemonHook {
@@ -79,6 +98,30 @@ impl crate::hook::DaemonHook {
         match tokio::fs::write(path, &input.content).await {
             Ok(()) => format!("written: {}", input.path),
             Err(e) => format!("write failed: {e}"),
+        }
+    }
+
+    /// Dispatch an `edit` tool call — replace a unique string occurrence in a file.
+    pub(crate) async fn dispatch_edit(&self, args: &str) -> String {
+        let input: Edit = match serde_json::from_str(args) {
+            Ok(v) => v,
+            Err(e) => return format!("invalid arguments: {e}"),
+        };
+        let content = match tokio::fs::read_to_string(&input.path).await {
+            Ok(c) => c,
+            Err(e) => return format!("edit failed: {e}"),
+        };
+        let count = content.matches(&input.old_string).count();
+        if count == 0 {
+            return "edit failed: old_string not found in file".to_owned();
+        }
+        if count > 1 {
+            return format!("edit failed: old_string found {count} times (must be unique)");
+        }
+        let new_content = content.replacen(&input.old_string, &input.new_string, 1);
+        match tokio::fs::write(&input.path, &new_content).await {
+            Ok(()) => format!("edited: {}", input.path),
+            Err(e) => format!("edit failed: {e}"),
         }
     }
 

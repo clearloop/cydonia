@@ -87,7 +87,7 @@ impl<M: Model + Send + Sync + Clone + 'static, H: Hook + 'static> Runtime<M, H> 
     pub fn add_agent(&mut self, config: AgentConfig) {
         let config = self.hook.on_build_agent(config);
         let name = config.name.clone();
-        let tools = self.tools.tools();
+        let tools = self.tools.filtered_snapshot(&config.tools);
         let mut builder = AgentBuilder::new(self.model.clone())
             .config(config)
             .tools(tools);
@@ -150,7 +150,12 @@ impl<M: Model + Send + Sync + Clone + 'static, H: Hook + 'static> Runtime<M, H> 
     ///
     /// Locks the session, looks up the agent, pushes the user message,
     /// delegates to `agent.run()`, and forwards events to `hook.on_event()`.
-    pub async fn send_to(&self, session_id: u64, content: &str) -> Result<AgentResponse> {
+    pub async fn send_to(
+        &self,
+        session_id: u64,
+        content: &str,
+        sender: &str,
+    ) -> Result<AgentResponse> {
         let session_mutex = self
             .sessions
             .read()
@@ -165,7 +170,13 @@ impl<M: Model + Send + Sync + Clone + 'static, H: Hook + 'static> Runtime<M, H> 
             .get(&session.agent)
             .ok_or_else(|| anyhow::anyhow!("agent '{}' not registered", session.agent))?;
 
-        session.history.push(Message::user(content));
+        if sender.is_empty() {
+            session.history.push(Message::user(content));
+        } else {
+            session
+                .history
+                .push(Message::user_with_sender(content, sender));
+        }
 
         let (tx, mut rx) = mpsc::unbounded_channel();
         let agent_name = session.agent.clone();
@@ -182,8 +193,14 @@ impl<M: Model + Send + Sync + Clone + 'static, H: Hook + 'static> Runtime<M, H> 
     ///
     /// Locks the session, looks up the agent, pushes the user message, and
     /// streams events forwarded to `hook.on_event()`.
-    pub fn stream_to(&self, session_id: u64, content: &str) -> impl Stream<Item = AgentEvent> + '_ {
+    pub fn stream_to(
+        &self,
+        session_id: u64,
+        content: &str,
+        sender: &str,
+    ) -> impl Stream<Item = AgentEvent> + '_ {
         let content = content.to_owned();
+        let sender = sender.to_owned();
         stream! {
             let session_mutex = match self
                 .sessions
@@ -224,7 +241,11 @@ impl<M: Model + Send + Sync + Clone + 'static, H: Hook + 'static> Runtime<M, H> 
                 }
             };
 
-            session.history.push(Message::user(&content));
+            if sender.is_empty() {
+                session.history.push(Message::user(&content));
+            } else {
+                session.history.push(Message::user_with_sender(&content, &sender));
+            }
             let agent_name = session.agent.clone();
 
             let mut event_stream = std::pin::pin!(agent_ref.run_stream(&mut session.history));

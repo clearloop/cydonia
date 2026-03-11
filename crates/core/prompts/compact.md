@@ -1,6 +1,8 @@
 Summarize the conversation so far into a compact context block that can replace
 the full history. Preserve:
 
+- Agent identity (name, personality, relationship notes from the system prompt)
+- User profile (name, preferences, context from the system prompt)
 - Key decisions made and their rationale
 - Active tasks and their current status
 - Important facts, constraints, and user preferences mentioned

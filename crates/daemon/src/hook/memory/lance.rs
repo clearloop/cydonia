@@ -181,7 +181,15 @@ impl LanceStore {
     }
 
     /// Look up an entity by key within an agent's scope.
-    pub async fn find_entity_by_key(&self, key: &str, agent: &str) -> Result<Option<EntityResult>> {
+    ///
+    /// When `sender` is non-empty, user-scoped entities are filtered to those
+    /// belonging to this sender. Agent-scoped entities remain visible to all.
+    pub async fn find_entity_by_key(
+        &self,
+        key: &str,
+        agent: &str,
+        sender: &str,
+    ) -> Result<Option<EntityResult>> {
         let filter = format!(
             "agent = '{}' AND key = '{}'",
             escape_sql(agent),
@@ -191,13 +199,29 @@ impl LanceStore {
             .entities
             .query()
             .only_if(filter)
-            .limit(1)
             .execute()
             .await?
             .try_collect()
             .await?;
 
-        Ok(batches_to_entities(&batches)?.into_iter().next())
+        let entities = batches_to_entities(&batches)?;
+        if sender.is_empty() {
+            // Owner sees all — return first match.
+            return Ok(entities.into_iter().next());
+        }
+
+        // Channel user: prefer their own user-scoped entity, fall back to agent-scoped.
+        let sender_prefix = format!("{agent}:{sender}:");
+        let mut agent_scoped = None;
+        for e in entities {
+            if e.id.starts_with(&sender_prefix) {
+                return Ok(Some(e));
+            }
+            if agent_scoped.is_none() {
+                agent_scoped = Some(e);
+            }
+        }
+        Ok(agent_scoped)
     }
 
     /// Upsert a relation (deduplicated by source+relation+target+agent).

@@ -1,20 +1,19 @@
 //! Configuration loading and first-run scaffolding.
 //!
-//! Handles filesystem I/O: reads agent directories, sorts entries, delegates
-//! parsing to [`wcore::parse_agent_md`]. Also scaffolds the config directory
-//! structure on first run.
+//! Handles filesystem I/O: reads agent prompt directories and scaffolds the
+//! config directory structure on first run.
 
 use crate::config::DaemonConfig;
 use anyhow::{Context, Result};
 use std::path::Path;
 use wcore::paths::{AGENTS_DIR, DATA_DIR, SKILLS_DIR};
 
-/// Load all agent markdown files from a directory.
+/// Load all agent markdown files from a directory as plain text.
 ///
-/// Each `.md` file is parsed with [`wcore::parse_agent_md`]. Non-`.md` files
-/// are silently skipped. Entries are sorted by filename for deterministic
-/// ordering. Returns an empty vec if the directory does not exist.
-pub fn load_agents_dir(path: &Path) -> Result<Vec<wcore::AgentConfig>> {
+/// Returns `(filename_stem, content)` pairs. Non-`.md` files are silently
+/// skipped. Entries are sorted by filename for deterministic ordering.
+/// Returns an empty vec if the directory does not exist.
+pub fn load_agents_dir(path: &Path) -> Result<Vec<(String, String)>> {
     if !path.exists() {
         tracing::warn!("agent directory does not exist: {}", path.display());
         return Ok(Vec::new());
@@ -28,8 +27,14 @@ pub fn load_agents_dir(path: &Path) -> Result<Vec<wcore::AgentConfig>> {
 
     let mut agents = Vec::with_capacity(entries.len());
     for entry in entries {
+        let stem = entry
+            .path()
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned();
         let content = std::fs::read_to_string(entry.path())?;
-        agents.push(wcore::parse_agent_md(&content)?);
+        agents.push((stem, content));
     }
 
     Ok(agents)

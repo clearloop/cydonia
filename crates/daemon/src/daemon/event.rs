@@ -121,6 +121,7 @@ impl Daemon {
                     agent: agent.clone(),
                     content,
                     session: None,
+                    sender: None,
                 };
                 let (reply_tx, _reply_rx) = mpsc::unbounded_channel();
                 let _ = daemon.event_tx.send(DaemonEvent::Message {
@@ -145,7 +146,7 @@ impl Daemon {
             let rt = runtime.read().await.clone();
             let result = rt
                 .hook
-                .dispatch_tool(&req.name, &req.args, &req.agent, req.task_id)
+                .dispatch_tool(&req.name, &req.args, &req.agent, req.task_id, &req.sender)
                 .await;
             let _ = req.reply.send(result);
         });

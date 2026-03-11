@@ -11,10 +11,11 @@ use crate::{
     hook::{self, DaemonHook, task::TaskRegistry},
 };
 use anyhow::Result;
+use compact_str::CompactString;
 use model::ProviderManager;
 use std::{path::Path, sync::Arc};
 use tokio::sync::{Mutex, RwLock};
-use wcore::{Runtime, ToolRequest};
+use wcore::{AgentConfig, Runtime, ToolRequest};
 
 const SYSTEM_AGENT: &str = include_str!("../../prompts/walrus.md");
 
@@ -57,7 +58,7 @@ impl Daemon {
         let hook = Self::build_hook(config, config_dir, event_tx).await?;
         let tool_tx = Self::build_tool_sender(event_tx);
         let mut runtime = Runtime::new(manager, hook, Some(tool_tx)).await;
-        Self::load_agents(&mut runtime, config_dir)?;
+        Self::load_agents(&mut runtime, config_dir, config)?;
         Ok(runtime)
     }
 
@@ -67,7 +68,11 @@ impl Daemon {
     /// and any remote providers from config. Only one local model is active
     /// at a time to avoid memory pressure.
     async fn build_providers(config: &DaemonConfig) -> Result<ProviderManager> {
-        let active_model = config.walrus.model.clone();
+        let active_model = config
+            .walrus
+            .model
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("walrus.model is required in walrus.toml"))?;
         let manager = ProviderManager::new(active_model.clone());
 
         // Add the active local model — try registry first, then custom config.
@@ -162,17 +167,59 @@ impl Daemon {
         tool_tx
     }
 
-    /// Load agents from markdown files and add them to the runtime.
+    /// Load agents and add them to the runtime.
+    ///
+    /// The built-in walrus agent is always registered first. Sub-agents are
+    /// loaded by iterating TOML `[agents.*]` entries and matching each to a
+    /// `.md` prompt file from the agents directory.
     fn load_agents(
         runtime: &mut Runtime<ProviderManager, DaemonHook>,
         config_dir: &Path,
+        config: &DaemonConfig,
     ) -> Result<()> {
-        let agents = crate::config::load_agents_dir(&config_dir.join(wcore::paths::AGENTS_DIR))?;
-        runtime.add_agent(wcore::parse_agent_md(SYSTEM_AGENT)?);
-        for agent in agents {
-            tracing::info!("registered agent '{}'", agent.name);
+        // Load prompt files from disk: (filename_stem, text).
+        let prompts = crate::config::load_agents_dir(&config_dir.join(wcore::paths::AGENTS_DIR))?;
+        let prompt_map: std::collections::BTreeMap<String, String> = prompts.into_iter().collect();
+
+        // Built-in walrus agent.
+        let mut walrus_config = config.walrus.clone();
+        walrus_config.name = CompactString::from("walrus");
+        walrus_config.system_prompt = SYSTEM_AGENT.to_owned();
+        runtime.add_agent(walrus_config);
+
+        // Sub-agents from TOML — each must have a matching .md file.
+        for (name, agent_config) in &config.agents {
+            let Some(prompt) = prompt_map.get(name) else {
+                tracing::warn!("agent '{name}' in TOML has no matching .md file, skipping");
+                continue;
+            };
+            let mut agent = agent_config.clone();
+            agent.name = CompactString::from(name.as_str());
+            agent.system_prompt = prompt.clone();
+            tracing::info!("registered agent '{name}' (thinking={})", agent.thinking);
             runtime.add_agent(agent);
         }
+
+        // Also register agents that have .md files but no TOML entry (defaults).
+        let default_think = config.walrus.thinking;
+        for (stem, prompt) in &prompt_map {
+            if config.agents.contains_key(stem) {
+                continue;
+            }
+            let mut agent = AgentConfig::new(stem.as_str());
+            agent.system_prompt = prompt.clone();
+            agent.thinking = default_think;
+            tracing::info!("registered agent '{stem}' (defaults, thinking={default_think})");
+            runtime.add_agent(agent);
+        }
+
+        // Populate per-agent scope maps for dispatch enforcement.
+        for agent_config in runtime.agents() {
+            runtime
+                .hook
+                .register_scope(agent_config.name.clone(), &agent_config);
+        }
+
         Ok(())
     }
 }

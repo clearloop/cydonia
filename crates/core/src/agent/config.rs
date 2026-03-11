@@ -13,21 +13,50 @@ const DEFAULT_MAX_ITERATIONS: usize = 16;
 /// Serializable agent configuration.
 ///
 /// Contains all parameters for an agent: identity, system prompt, model,
-/// and iteration limits. All registered tools are available to every agent.
+/// iteration limits, heartbeat, and delegation scope. Used both as the
+/// TOML deserialization target and the runtime agent definition.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
-    /// Agent identifier.
+    /// Agent identifier. Derived from TOML key, not stored in TOML.
+    #[serde(skip)]
     pub name: CompactString,
     /// Human-readable description.
+    #[serde(default)]
     pub description: CompactString,
-    /// System prompt sent before each LLM request.
+    /// System prompt sent before each LLM request. Loaded from .md file.
+    #[serde(skip)]
     pub system_prompt: String,
     /// Model to use from the registry. None = registry's active/default.
+    #[serde(default)]
     pub model: Option<CompactString>,
     /// Maximum iterations before stopping.
+    #[serde(default = "default_max_iterations")]
     pub max_iterations: usize,
     /// Controls which tool the model calls.
+    #[serde(skip)]
     pub tool_choice: ToolChoice,
+    /// Whether to enable thinking/reasoning mode.
+    #[serde(default)]
+    pub thinking: bool,
+    /// Heartbeat configuration. Interval 0 (the default) means no heartbeat.
+    #[serde(default)]
+    pub heartbeat: HeartbeatConfig,
+    /// Agents this agent can delegate to via spawn_task. Empty = no delegation.
+    #[serde(default)]
+    pub members: Vec<String>,
+    /// Skill names this agent can access. Empty = all skills (walrus default).
+    #[serde(default)]
+    pub skills: Vec<String>,
+    /// MCP server names this agent can access. Empty = all MCPs (walrus default).
+    #[serde(default)]
+    pub mcps: Vec<String>,
+    /// Computed tool whitelist. Empty = all tools. Not serialized.
+    #[serde(skip)]
+    pub tools: Vec<CompactString>,
+}
+
+fn default_max_iterations() -> usize {
+    DEFAULT_MAX_ITERATIONS
 }
 
 impl Default for AgentConfig {
@@ -39,6 +68,12 @@ impl Default for AgentConfig {
             model: None,
             max_iterations: DEFAULT_MAX_ITERATIONS,
             tool_choice: ToolChoice::Auto,
+            thinking: false,
+            heartbeat: HeartbeatConfig::default(),
+            members: Vec::new(),
+            skills: Vec::new(),
+            mcps: Vec::new(),
+            tools: Vec::new(),
         }
     }
 }
@@ -69,4 +104,21 @@ impl AgentConfig {
         self.model = Some(name.into());
         self
     }
+
+    /// Enable or disable thinking/reasoning mode.
+    pub fn thinking(mut self, enabled: bool) -> Self {
+        self.thinking = enabled;
+        self
+    }
+}
+
+/// Heartbeat timer configuration. Interval 0 = disabled.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct HeartbeatConfig {
+    /// Interval in minutes (0 = disabled).
+    #[serde(default)]
+    pub interval: u64,
+    /// System prompt for heartbeat-triggered agent runs.
+    #[serde(default)]
+    pub prompt: String,
 }

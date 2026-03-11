@@ -6,7 +6,6 @@
 
 use crate::{
     DaemonConfig,
-    config::AgentConfig,
     daemon::event::{DaemonEvent, DaemonEventSender},
     hook::DaemonHook,
 };
@@ -19,6 +18,7 @@ use std::{
     sync::Arc,
 };
 use tokio::sync::{RwLock, broadcast, mpsc, oneshot};
+use wcore::AgentConfig;
 use wcore::Runtime;
 use wcore::protocol::message::client::ClientMessage;
 
@@ -207,7 +207,7 @@ pub async fn setup_channels(config: &DaemonConfig, event_tx: &DaemonEventSender)
     let default_agent = crate::config::load_agents_dir(&agents_dir)
         .ok()
         .and_then(|agents| agents.into_iter().next())
-        .map(|a| a.name)
+        .map(|(stem, _)| compact_str::CompactString::from(stem))
         .unwrap_or_else(|| compact_str::CompactString::from("assistant"));
     channel::spawn_channels(&config.channel, default_agent, on_message).await;
 }

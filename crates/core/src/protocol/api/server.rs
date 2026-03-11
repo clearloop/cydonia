@@ -68,11 +68,11 @@ pub trait Server: Sync {
     fn dispatch(&self, msg: ClientMessage) -> impl Stream<Item = ServerMessage> + Send + '_ {
         async_stream::stream! {
             match msg {
-                ClientMessage::Send { agent, content, session } => {
-                    yield result_to_msg(self.send(SendRequest { agent, content, session }).await);
+                ClientMessage::Send { agent, content, session, sender } => {
+                    yield result_to_msg(self.send(SendRequest { agent, content, session, sender }).await);
                 }
-                ClientMessage::Stream { agent, content, session } => {
-                    let s = self.stream(StreamRequest { agent, content, session });
+                ClientMessage::Stream { agent, content, session, sender } => {
+                    let s = self.stream(StreamRequest { agent, content, session, sender });
                     tokio::pin!(s);
                     while let Some(result) = s.next().await {
                         yield result_to_msg(result);

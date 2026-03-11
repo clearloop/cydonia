@@ -18,6 +18,13 @@ impl DaemonHook {
             Ok(v) => v,
             Err(e) => return format!("invalid arguments: {e}"),
         };
+        // Enforce members scope — reject if caller has a members list and target is not in it.
+        if let Some(scope) = self.scopes.get(agent)
+            && !scope.members.is_empty()
+            && !scope.members.iter().any(|m| m == &input.agent)
+        {
+            return format!("agent '{}' is not in your members list", input.agent);
+        }
         let registry = self.tasks.clone();
         let (task_id, status) = registry.lock().await.submit(
             input.agent.into(),

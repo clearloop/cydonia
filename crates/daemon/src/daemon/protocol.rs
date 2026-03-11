@@ -11,18 +11,20 @@ use wcore::protocol::{
     message::{
         DownloadEvent, DownloadRequest, HubAction, HubEvent, SendRequest, SendResponse,
         StreamEvent, StreamRequest,
-        server::{SessionInfo, TaskInfo},
+        server::{SessionInfo, TaskInfo, ToolCallInfo},
     },
 };
 
 impl Server for Daemon {
     async fn send(&self, req: SendRequest) -> Result<SendResponse> {
         let rt: Arc<_> = self.runtime.read().await.clone();
+        let sender = req.sender.as_deref().unwrap_or("");
+        let created_by = if sender.is_empty() { "user" } else { sender };
         let (session_id, is_new) = match req.session {
             Some(id) => (id, false),
-            None => (rt.create_session(&req.agent, "user").await?, true),
+            None => (rt.create_session(&req.agent, created_by).await?, true),
         };
-        let response = rt.send_to(session_id, &req.content).await?;
+        let response = rt.send_to(session_id, &req.content, sender).await?;
         if is_new {
             rt.close_session(session_id).await;
         }
@@ -41,21 +43,40 @@ impl Server for Daemon {
         let agent = req.agent;
         let content = req.content;
         let req_session = req.session;
+        let sender = req.sender.unwrap_or_default();
         async_stream::try_stream! {
             let rt: Arc<_> = runtime.read().await.clone();
+            let created_by = if sender.is_empty() { "user".into() } else { sender.clone() };
             let (session_id, is_new) = match req_session {
                 Some(id) => (id, false),
-                None => (rt.create_session(&agent, "user").await?, true),
+                None => (rt.create_session(&agent, created_by.as_str()).await?, true),
             };
 
             yield StreamEvent::Start { agent: agent.clone(), session: session_id };
 
-            let stream = rt.stream_to(session_id, &content);
+            let stream = rt.stream_to(session_id, &content, &sender);
             pin_mut!(stream);
             while let Some(event) = stream.next().await {
                 match event {
                     AgentEvent::TextDelta(text) => {
                         yield StreamEvent::Chunk { content: text };
+                    }
+                    AgentEvent::ThinkingDelta(text) => {
+                        yield StreamEvent::Thinking { content: text };
+                    }
+                    AgentEvent::ToolCallsStart(calls) => {
+                        yield StreamEvent::ToolStart {
+                            calls: calls.into_iter().map(|c| ToolCallInfo {
+                                name: CompactString::from(c.function.name.as_str()),
+                                arguments: c.function.arguments,
+                            }).collect(),
+                        };
+                    }
+                    AgentEvent::ToolResult { call_id, output } => {
+                        yield StreamEvent::ToolResult { call_id, output };
+                    }
+                    AgentEvent::ToolCallsComplete => {
+                        yield StreamEvent::ToolsComplete;
                     }
                     AgentEvent::Done(resp) => {
                         if let wcore::AgentStopReason::Error(e) = &resp.stop_reason {
@@ -66,7 +87,6 @@ impl Server for Daemon {
                         }
                         break;
                     }
-                    _ => {}
                 }
             }
             if is_new {

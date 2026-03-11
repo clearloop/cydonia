@@ -2,7 +2,7 @@
 
 use crate::repl::{
     command::{ReplHelper, handle_slash},
-    runner::Runner,
+    runner::{OutputChunk, Runner},
 };
 use anyhow::Result;
 use compact_str::CompactString;
@@ -84,21 +84,51 @@ fn history_file_path() -> Option<PathBuf> {
     Some(wcore::paths::CONFIG_DIR.join("history"))
 }
 
-/// Consume a stream of content chunks and print them to stdout in real time.
+/// ANSI escape: dim (gray) text.
+const DIM: &str = "\x1b[2m";
+/// ANSI escape: reset all attributes.
+const RESET: &str = "\x1b[0m";
+
+/// Consume a stream of output chunks and print them to stdout in real time.
 ///
+/// Thinking chunks are rendered in dim/gray text.
 /// Handles Ctrl+C cancellation via `tokio::signal::ctrl_c()`.
-async fn stream_to_terminal(stream: impl Stream<Item = Result<String>>) -> Result<()> {
+async fn stream_to_terminal(stream: impl Stream<Item = Result<OutputChunk>>) -> Result<()> {
     let mut stream = pin!(stream);
+    let mut in_thinking = false;
 
     loop {
         tokio::select! {
             chunk = stream.next() => {
                 match chunk {
-                    Some(Ok(text)) => {
+                    Some(Ok(OutputChunk::Text(text))) => {
+                        if in_thinking {
+                            print!("{RESET}");
+                            in_thinking = false;
+                        }
+                        print!("{text}");
+                        std::io::stdout().flush().ok();
+                    }
+                    Some(Ok(OutputChunk::Thinking(text))) => {
+                        if !in_thinking {
+                            print!("{DIM}");
+                            in_thinking = true;
+                        }
+                        print!("{text}");
+                        std::io::stdout().flush().ok();
+                    }
+                    Some(Ok(OutputChunk::Status(text))) => {
+                        if in_thinking {
+                            print!("{RESET}");
+                            in_thinking = false;
+                        }
                         print!("{text}");
                         std::io::stdout().flush().ok();
                     }
                     Some(Err(e)) => {
+                        if in_thinking {
+                            print!("{RESET}");
+                        }
                         eprintln!("\nError: {e}");
                         break;
                     }
@@ -106,12 +136,18 @@ async fn stream_to_terminal(stream: impl Stream<Item = Result<String>>) -> Resul
                 }
             }
             _ = tokio::signal::ctrl_c() => {
+                if in_thinking {
+                    print!("{RESET}");
+                }
                 println!();
                 break;
             }
         }
     }
 
+    if in_thinking {
+        print!("{RESET}");
+    }
     println!();
     Ok(())
 }

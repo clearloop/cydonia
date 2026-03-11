@@ -33,17 +33,26 @@ pub(crate) fn tools() -> Vec<Tool> {
 }
 
 impl DaemonHook {
-    pub(crate) async fn dispatch_search_skill(&self, args: &str) -> String {
+    pub(crate) async fn dispatch_search_skill(&self, args: &str, agent: &str) -> String {
         let input: SearchSkill = match serde_json::from_str(args) {
             Ok(v) => v,
             Err(e) => return format!("invalid arguments: {e}"),
         };
         let query = input.query.to_lowercase();
+        // Get agent's allowed skills for filtering.
+        let allowed = self.scopes.get(agent).map(|s| &s.skills);
         let registry = self.skills.registry.lock().await;
         let matches: Vec<String> = registry
             .skills()
             .into_iter()
             .filter(|s| {
+                // Filter by agent's skills scope if non-empty.
+                if let Some(allowed) = allowed
+                    && !allowed.is_empty()
+                    && !allowed.iter().any(|a| a == s.name.as_str())
+                {
+                    return false;
+                }
                 s.name.to_lowercase().contains(&query)
                     || s.description.to_lowercase().contains(&query)
             })
@@ -56,12 +65,19 @@ impl DaemonHook {
         }
     }
 
-    pub(crate) async fn dispatch_load_skill(&self, args: &str) -> String {
+    pub(crate) async fn dispatch_load_skill(&self, args: &str, agent: &str) -> String {
         let input: LoadSkill = match serde_json::from_str(args) {
             Ok(v) => v,
             Err(e) => return format!("invalid arguments: {e}"),
         };
         let name = &input.name;
+        // Enforce skill scope.
+        if let Some(scope) = self.scopes.get(agent)
+            && !scope.skills.is_empty()
+            && !scope.skills.iter().any(|s| s == name)
+        {
+            return format!("skill not available: {name}");
+        }
         // Guard against path traversal in the skill name.
         if name.contains("..") || name.contains('/') || name.contains('\\') {
             return format!("invalid skill name: {name}");

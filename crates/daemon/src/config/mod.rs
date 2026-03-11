@@ -1,17 +1,22 @@
 //! Daemon configuration loaded from TOML.
 
-pub use crate::hook::mcp::McpServerConfig;
-pub use crate::hook::os::{PermissionConfig, ToolPermission};
+pub use crate::hook::{
+    mcp::McpServerConfig,
+    memory::MemoryConfig,
+    os::{PermissionConfig, ToolPermission},
+    task::TasksConfig,
+};
 pub use ::model::{ModelConfig, ProviderConfig, ProviderManager};
-pub use agent::{AgentConfig, HeartbeatConfig};
 use anyhow::Result;
 pub use channel::ChannelConfig;
 pub use loader::{load_agents_dir, scaffold_config_dir};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-pub use wcore::paths::{AGENTS_DIR, CONFIG_DIR, DATA_DIR, MEMORY_DB, SKILLS_DIR, SOCKET_PATH};
+pub use wcore::{
+    AgentConfig, HeartbeatConfig,
+    paths::{AGENTS_DIR, CONFIG_DIR, DATA_DIR, MEMORY_DB, SKILLS_DIR, SOCKET_PATH},
+};
 
-mod agent;
 mod loader;
 
 /// Top-level daemon configuration.
@@ -43,9 +48,6 @@ pub struct DaemonConfig {
     pub permissions: PermissionConfig,
 }
 
-pub use crate::hook::memory::MemoryConfig;
-pub use crate::hook::task::TasksConfig;
-
 impl DaemonConfig {
     /// Parse a TOML string into a `DaemonConfig`.
     pub fn from_toml(toml_str: &str) -> Result<Self> {
@@ -64,6 +66,9 @@ impl DaemonConfig {
                 server.name = name.clone().into();
             }
         });
+        if config.walrus.model.is_none() {
+            config.walrus.model = Some(::model::default_model().into());
+        }
         Ok(config)
     }
 
